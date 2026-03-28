@@ -1,73 +1,78 @@
-# Scrcpy over WebRTC
+# Scrcpy over WebRTC (CloudPhone)
 
-基于 WebRTC 和 Scrcpy 的高性能云手机/云桌面解决方案。
-采用极简的 Fat Agent 架构，实现端到端的秒级直连体验。
+基于 WebRTC 和 Scrcpy 的高性能、低延迟云手机/云桌面解决方案，无需客户端，可以通过网页直接连接。
+采用 **Fat Agent (直连模式)** 架构，结合 **硬件级 PTS 透传** 技术，实现媲美原生 Scrcpy 的丝滑体验。
 
-## 目录结构说明
+## 核心特性
 
-发布包中包含以下组件：
+- **极致流畅 (Phase 22)**: 引入硬件级时钟透传 (HW-PTS Passthrough)，WebRTC Jitter Buffer 接近 0ms，彻底消除画面抖动。
+- **性能卓越**: 采用零扫描流解析 (Zero-Search Parsing)，极大降低 Agent 端 CPU 占用。
+- **秒级直连**: 绕过中转服务器，实现浏览器与 Android 容器/物理机的 P2P 高速通信。
+- **全能交互**: 支持触控、物理按键模拟、WebADB 终端、实时快照与仪表盘管理。
+- **一键部署**: 支持 WebUSB/WebADB 浏览器直连部署，无需本地安装 ADB 环境。
 
-- `server/`: 信令服务器 (Signaling Server) 与 Web 前端静态资源。包含多种系统架构的预编译版本。
-- `agentd/`: 安卓端代理服务 (CloudPhone Agent)。包含部署脚本、Agent 程序及 Scrcpy 依赖。
+## 目录结构说明 (V5.0+)
+
+发布包经过资源去重优化，结构如下：
+
+- `start_server.sh`: **【推荐】** 根目录智能启动脚本，自动识别系统架构并启动服务。
+- `bin/`: 存放各平台（Linux/macOS/Windows）的信令服务器二进制文件。
+- `assets/`: 中央资源库，包含 V1 (默认) 和 V2 (新版) 两个版本的 Web 前端。
+- `agentd/`: 安卓端代理服务。包含部署脚本 `run.sh`、Agent 程序及 `scrcpy-server.jar`。
 
 ## 快速使用
 
 ### 1. 启动信令服务器与 Web 前端
-进入 `server` 目录，找到对应您操作系统的文件夹（例如 macOS 苹果芯片使用 `darwin_arm64`，Linux 使用 `linux_amd64`，Windows 使用 `windows_amd64`）。
 
-- **Windows**: 双击运行 `run.bat`
-- **Linux / macOS**: 在终端执行 `./run.sh`
+在发布包根目录下，根据您的需求选择 UI 版本启动：
 
-启动后，在浏览器中访问仪表盘：`http://127.0.0.1:8443`（如果部署在云端，请使用服务器的局域网或公网 IP）。
+- **启动默认 UI (V1)**: 
+  ```bash
+  ./start_server.sh
+  ```
+- **启动新版 UI (V2)**: 
+  ```bash
+  ./start_server.sh v2
+  ```
 
-### 2. 在 Android 端启动 Agent
+*Windows 用户请进入 `bin/windows_amd64/` 运行 `run.bat` (V1) 或 `run_v2.bat` (V2)。*
 
-#### 方式一：网页一键部署（推荐）
+启动后访问：`http://127.0.0.1:8443`。
 
-打开仪表盘页面，进入 **部署** 页面，通过 USB 数据线将 Android 设备连接到电脑，按页面提示即可完成一键部署。
+### 2. 在 Android 端部署 Agent
 
-浏览器会通过 WebUSB 直接与手机通信，自动完成架构探测、文件推送和服务启动，无需安装任何命令行工具。
+#### 方式一：网页一键部署（最简单）
+1. 在浏览器打开仪表盘，点击 **“部署新设备”**。
+2. 通过 USB 线连接手机，点击“连接设备”并授权。
+3. 点击“一键部署”，系统将自动探测架构并启动服务。
 
-> **注意**: 此方式需要使用支持 WebUSB 的浏览器（Chrome / Edge），且必须通过 **USB 数据线** 连接设备，暂不支持无线 ADB。首次连接时请在手机屏幕上确认 USB 调试授权。
-
-#### 方式二：命令行脚本部署
-
-发布包在 `agentd` 目录下提供了一个自动化的 `run.sh` 脚本，它会自动探测设备架构、推送文件并启动 Agent。
-
+#### 方式二：命令行脚本部署 (CLI)
+适用于已有 ADB 环境或远程物理机。
 ```bash
 cd agentd
-
-# 使用默认在线设备启动 (将 192.168.x.x 替换为信令服务器的实际 IP)
-./run.sh -id my-device-01 -signaling ws://192.168.x.x:8443
-
-# 如果有多个 adb 设备，可以指定 Serial Number
-./run.sh emulator-5554 -id my-device-01 -signaling ws://192.168.x.x:8443
+# 自动探测架构并推送 (将 IP 替换为服务器实际 IP)
+./run.sh -id phone-01 -signaling ws://192.168.x.x:8443
 ```
 
-#### 方式三：Docker / Redroid 容器环境 (NAT 网络穿透)
+#### 方式三：Docker / Redroid 容器 (支持 NAT 穿透)
+如果 Agent 运行在隔离容器内，需映射 UDP 端口（默认 50000）并指定外部 IP。
+```bash
+./run.sh -id redroid-01 \
+  -signaling ws://<服务器IP>:8443 \
+  -external-addr <宿主机公网/局域网IP> \
+  -webrtc-port 50000
+```
 
-如果您的 Agent 运行在 Docker 容器（如 redroid）中，且**前端无法直接访问容器的私有 IP**，则需要映射 UDP 端口并指定外部 IP。
+## 技术参数说明 (高级调优)
 
-1. **容器启动时映射 UDP 端口**
-   在启动 redroid 容器时，必须增加 `-p 50000:50000/udp` 将容器内的 WebRTC 端口暴露到宿主机。
-   *(每个容器需要分配不同的外部 UDP 端口，例如 `-p 50001:50001/udp` 等)*
+在启动 Agent 时，可以通过参数进一步优化体验：
 
-2. **使用脚本启动 Agent，带上网络穿透参数**
-   ```bash
-   cd agentd
-   ./run.sh -id my-redroid-01 \
-     -signaling ws://<信令服务器IP>:8443 \
-     -external-addr <宿主机的公网/局域网IP> \
-     -webrtc-port 50000 \
-     -bitrate 8000000
-   ```
+- `-bitrate`: 视频码率（默认 4000000 bps）。
+- `-max-fps`: 限制最高帧率（默认不限制，建议 60）。
+- `-video-codec-options`: 编码器底层调优。
+  - *默认推荐*: `"intra-refresh-period=30,i-frame-interval=0"` (启用渐进式刷新，消除 UDP 丢包导致的卡顿)。
+- `-snapshot-interval`: 仪表盘快照更新频率（默认 10 秒）。
+- `-root`: 强制以 Root 权限启动服务（解决部分 ROM 权限限制）。
 
-> **参数说明**:
-> - `-id`: 设定当前云手机的唯一标识。如果不填将自动使用设备型号+序列号。
-> - `-signaling`: 填写第一步中启动的信令服务器的 IP 地址与端口。
-> - `-bitrate`: 视频流码率（默认 4000000）。
-> - `-root`: (可选) 如果在部分系统上遇到没有截屏或触摸权限的问题，加入此参数通过 `su` 特权启动 scrcpy。
-> - `-external-addr`: (仅容器需要) 指定宿主机对外的 IP，用于 WebRTC NAT 穿透。
-> - `-webrtc-port`: (仅容器需要) 强制指定 Agent 内部监听的 UDP 端口（默认 50000），配合 `-external-addr` 使用。
-
-启动成功后，回到浏览器的仪表盘网页，即可看到新注册上线的云手机，点击它即可进入毫秒级低延迟的 WebRTC 桌面体验！
+---
+*本项目持续迭代中

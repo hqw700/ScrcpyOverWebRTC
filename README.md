@@ -1,83 +1,126 @@
 # Scrcpy over WebRTC (CloudPhone)
 
 基于 WebRTC 和 Scrcpy 的高性能、低延迟云手机/云桌面解决方案，无需客户端，可以通过网页直接连接。
-采用 **Fat Agent (直连模式)** 架构，结合 **硬件级 PTS 透传** 技术，实现媲美原生 Scrcpy 的丝滑体验。
 
-## 核心特性
+## 快速开始
 
-- **极致流畅 (Phase 22)**: 引入硬件级时钟透传 (HW-PTS Passthrough)，WebRTC Jitter Buffer 接近 0ms，彻底消除画面抖动。
-- **性能卓越**: 采用零扫描流解析 (Zero-Search Parsing)，极大降低 Agent 端 CPU 占用。
-- **秒级直连 (Phase 26)**: 集成 UPnP 与自动公网探测，实现浏览器与 Android 端无需配置路由器的 P2P 高速直连。
-- **公网增强**: 原生支持 IPv6 直连，彻底绕过运营商 CGNAT 封锁，显著提升移动网络下的打洞成功率。
-- **全能交互**: 支持触控、物理按键模拟、WebADB 终端、实时快照与仪表盘管理。
-- **一键部署**: 支持 WebUSB/WebADB 浏览器直连部署，无需本地安装 ADB 环境。
+### 1. 启动服务器
 
-## 目录结构说明 (V5.0+)
+```bash
+./start_server.sh
+```
 
-发布包经过资源去重优化，结构如下：
+启动后访问：`http://127.0.0.1:8443`
 
-- `start_server.sh`: **【推荐】** 根目录智能启动脚本，自动识别系统架构并启动服务。
-- `bin/`: 存放各平台（Linux/macOS/Windows）的信令服务器二进制文件。
-- `assets/`: 中央资源库，包含 V1 (默认) 和 V2 (新版) 两个版本的 Web 前端。
-- `agentd/`: 安卓端代理服务。包含部署脚本 `run.sh`、Agent 程序及 `scrcpy-server.jar`。
+### 2. 部署 Agent 到 Android
 
-## 快速使用
-
-### 1. 启动信令服务器与 Web 前端
-
-在发布包根目录下，根据您的需求选择 UI 版本启动：
-
-- **启动默认 UI (V1)**: 
-  ```bash
-  ./start_server.sh
-  ```
-- **启动新版 UI (V2)**: 
-  ```bash
-  ./start_server.sh v2
-  ```
-
-*Windows 用户请进入 `bin/windows_amd64/` 运行 `run.bat` (V1) 或 `run_v2.bat` (V2)。*
-
-启动后访问：`http://127.0.0.1:8443`。
-
-### 2. 在 Android 端部署 Agent
-
-#### 方式一：网页一键部署（最简单）
-1. 在浏览器打开仪表盘，点击 **“部署新设备”**。
-2. 通过 USB 线连接手机，点击“连接设备”并授权。
-3. 点击“一键部署”，系统将自动探测架构并启动服务。
-
-#### 方式二：命令行脚本部署 (CLI)
-适用于已有 ADB 环境或远程物理机。
 ```bash
 cd agentd
-# 自动探测架构并推送 (将 IP 替换为服务器实际 IP)
-./run.sh -id phone-01 -signaling ws://192.168.x.x:8443
+./run.sh -id my-phone -signaling ws://<服务器IP>:8443
 ```
 
-#### 方式三：Docker / Redroid 容器 (支持自动公网穿透)
-Agent 运行在隔离容器内时，建议开启 UPnP 并映射端口。
+## 目录结构
+
+```
+ScrcpyOverWebRTC/
+├── web-app/              # 前端源代码 (开源)
+├── bin/                  # 信令服务器 (各平台)
+│   ├── linux_amd64/
+│   ├── linux_arm64/
+│   ├── darwin_amd64/
+│   ├── darwin_arm64/
+│   ├── windows_amd64/
+│   └── windows_arm64/
+├── agentd/               # Android Agent
+│   ├── cloudphone-agent-arm64
+│   ├── cloudphone-agent-amd64
+│   ├── scrcpy-server.jar
+│   └── run.sh
+├── start_server.sh      # 启动脚本
+├── build.sh             # 编译脚本
+└── README.md
+```
+
+## 前端开发 (web-app)
+
+### 快速构建
 ```bash
-./run.sh -id redroid-01 \
-  -signaling ws://<服务器IP>:8443 \
-  -upnp true \
-  -webrtc-port 50000
+./build.sh
 ```
 
-## 技术参数说明 (高级调优)
+### 技术栈
+- Vue 3 + Composition API
+- Vite 构建工具
+- Pinia 状态管理
+- WebRTC 视频流传输
 
-在启动 Agent 时，可以通过参数进一步优化体验：
+### 本地开发
+```bash
+cd web-app
+npm install
+npm run dev
+```
 
-- `-ice-servers`: 自定义 STUN/TURN 服务器（逗号分隔）。支持 `turn:user:pass@host:port` 格式。
-- `-upnp`: 是否启用 UPnP 自动端口映射与公网 IP 探测（默认 true）。
-- `-external-addr`: 手动指定公网 IP（若 UPnP 失败可手动指定）。
-- `-bitrate`: 视频码率（默认 4000000 bps）。
-- `-max-fps`: 限制最高帧率（默认不限制，建议 60）。
-- `-max-size`: 限制视频最长边（默认不限制）。
-- `-video-codec-options`: 编码器底层调优。
-  - *默认推荐*: `"intra-refresh-period=30,i-frame-interval=0"` (启用渐进式刷新，消除 UDP 丢包导致的卡顿)。
-- `-snapshot-interval`: 仪表盘快照更新频率（默认 10 秒）。
-- `-root`: 强制以 Root 权限启动服务（解决部分 ROM 权限限制）。
+### 构建
+```bash
+npm run build
+```
 
----
-*本项目持续迭代中，更多细节请参考 `docs/` 目录下的架构文档。*
+### 功能特性
+- **设备列表**: 实时显示在线设备
+- **远程控制**: WebRTC 视频流 + 触摸/按键控制
+- **WebADB**: 浏览器内 ADB 终端
+- **一键部署**: WebUSB 自动部署 Agent
+
+### 响应式设计
+- **PC 端**: 悬浮面板 + 可调整大小
+- **移动端**: 全屏模式，横屏视频自动旋转
+
+## Agent 部署参数
+
+```bash
+./run.sh -id <设备ID> -signaling ws://<服务器IP>:8443 [其他参数]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-id` | 设备唯一标识 | 必填 |
+| `-signaling` | 信令服务器地址 | 必填 |
+| `-upnp` | 启用 UPnP 自动端口映射 | true |
+| `-external-addr` | 手动指定公网 IP | 自动检测 |
+| `-webrtc-port` | WebRTC 端口 | 随机 |
+| `-bitrate` | 视频码率 | 4000000 |
+| `-max-fps` | 最高帧率 | 不限制 |
+| `-max-size` | 视频最长边 | 不限制 |
+
+## 协议说明
+
+前端暴露的协议信息，方便第三方开发：
+
+### 信令协议
+- WebSocket 路径: `/connect_client`
+- 消息类型: `offer`, `answer`, `ice_candidate`, `device_list`, `device_quit`
+
+### WebRTC DataChannel
+- `video`: 视频流
+- `input`: 触摸/按键输入
+- `adb`: ADB 数据透传
+
+### 触摸协议
+```json
+{"type":"touch", "id":0, "action":0, "x":100, "y":200, "w":1080, "h":1920}
+```
+- action: 0=DOWN, 1=UP, 2=MOVE
+
+## 第三方开发
+
+基于本项目，你可以：
+- 定制 UI 样式和布局
+- 开发 iOS/Android 原生客户端
+- 使用其他框架重写前端 (React, Angular 等)
+
+## License
+
+MIT License - 前端源代码开源
+
+Agent 和信令服务器二进制文件仅供学习和个人使用。

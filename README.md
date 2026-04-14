@@ -7,17 +7,39 @@
 ### 1. 启动服务器
 
 ```bash
+# 默认启动 (IPv4)
 ./start_server.sh
+
+# 开启 IPv6/双栈支持 (推荐)
+# Windows 用户请进入 bin/ 运行 run.bat
+./bin/linux_amd64/webrtc-signaling -host :: -assets ./assets/v1
 ```
 
-启动后访问：`http://127.0.0.1:8443`
+启动后访问：`http://localhost:8443` 或 `http://[您的IPv6地址]:8443/`
 
 ### 2. 部署 Agent 到 Android
 
 ```bash
 cd agentd
+# IPv6也可以只填写ipv4地址
 ./run.sh -id my-phone -signaling ws://<服务器IP>:8443
 ```
+
+#### 3. Docker / Redroid 容器 (暂不支持自动公网穿透)
+Agent 运行在隔离容器内时，需要-external-addr host地址, 使用 -p 50000:50000/udp转发端口
+```bash
+./run.sh -id redroid-01 \
+  -signaling ws://<服务器IP>:8443 \
+  -external-addr <host ip> \
+  -webrtc-port 50000
+```
+
+
+## IPv6 使用注意事项 (重要)
+
+- **双端公网**: 真正的 IPv6 P2P 直连要求**手机端**和**浏览器端**都拥有公网 IPv6 地址。
+- **防火墙**: 需在路由器中放行 TCP **8443** (信令) 和 UDP **50000** (WebRTC) 端口。
+- **混合探测**: Agent 具备自动感知 IPv6 变化的能力，优先协商公网链路。
 
 ## 目录结构
 
@@ -71,6 +93,7 @@ npm run build
 - **远程控制**: WebRTC 视频流 + 触摸/按键控制
 - **WebADB**: 浏览器内 ADB 终端
 - **一键部署**: WebUSB 自动部署 Agent
+- **IPv6 支持**: 全自动双栈协商，绕过 CGNAT
 
 ### 响应式设计
 - **PC 端**: 悬浮面板 + 可调整大小
@@ -86,9 +109,8 @@ npm run build
 |------|------|--------|
 | `-id` | 设备唯一标识 | 必填 |
 | `-signaling` | 信令服务器地址 | 必填 |
-| `-upnp` | 启用 UPnP 自动端口映射 | true |
 | `-external-addr` | 手动指定公网 IP | 自动检测 |
-| `-webrtc-port` | WebRTC 端口 | 随机 |
+| `-webrtc-port` | WebRTC 端口 | 50000 |
 | `-bitrate` | 视频码率 | 4000000 |
 | `-max-fps` | 最高帧率 | 不限制 |
 | `-max-size` | 视频最长边 | 不限制 |

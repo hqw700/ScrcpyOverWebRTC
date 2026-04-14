@@ -13,7 +13,7 @@ fi
 BIN_PATH="./bin/${OS}_${ARCH}/webrtc-signaling"
 if [ -f "$BIN_PATH" ]; then
     echo "Starting Signaling Server for $OS/$ARCH using UI: $UI_VER..."
-    $BIN_PATH -port 8443 -assets ./assets/$UI_VER
+    $BIN_PATH -host "[::]" -port 8443 -assets ./assets/$UI_VER
 else
     echo "Error: Binary not found for $OS/$ARCH at $BIN_PATH"
 fi

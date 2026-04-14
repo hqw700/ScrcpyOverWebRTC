@@ -23,6 +23,21 @@
         @resize="onVideoResize"
       />
 
+      <!-- 视频流状态面板 (左上角) -->
+      <div v-if="videoStats" class="stats-badge">
+        <span class="stat-fps">{{ videoStats.fps }}fps</span>
+        <span class="stat-delimiter">|</span>
+        <span class="stat-delay">JB {{ videoStats.jbDelay }}ms</span>
+        <span class="stat-delimiter">|</span>
+        <span class="stat-bitrate">{{ videoStats.bitrate }}kbps</span>
+        <span class="stat-delimiter">|</span>
+        <span :class="['stat-pli', { 'stat-warn': videoStats.pliCount > 0 }]">PLI {{ videoStats.pliCount }}</span>
+        <span class="stat-delimiter">|</span>
+        <span :class="['stat-pause', { 'stat-warn': videoStats.pauseCount > 0 }]">Pause {{ videoStats.pauseCount }}</span>
+        <span class="stat-delimiter">|</span>
+        <span :class="['stat-lost', { 'stat-warn': videoStats.lostCount > 0 }]">Lost {{ videoStats.lostCount }}</span>
+      </div>
+
       <!-- 加载/错误覆盖层 -->
       <div v-if="showOverlay" class="panel-overlay">
         <div class="overlay-box">
@@ -144,6 +159,10 @@ const consoleRef = ref(null)
 const adbTermContainer = ref(null)
 const activeTab = ref('shell') // 'shell' | 'adb'
 
+// 视频流统计信息
+const videoStats = ref(null)
+let statsInterval = null
+
 let webrtc = useWebRTC(currentId.value)
 const { isAdbConnected, initAdb, closeAdb } = useAdb(webrtc)
 
@@ -190,6 +209,15 @@ function setupWebRTC() {
     })
     scrollToBottom()
   })
+
+  // 启动视频流统计轮询
+  videoStats.value = null
+  webrtc.resetStats()
+  if (statsInterval) clearInterval(statsInterval)
+  statsInterval = setInterval(async () => {
+    const stats = await webrtc.getVideoStats()
+    if (stats) videoStats.value = stats
+  }, 1000)
 }
 
 onMounted(() => {
@@ -207,6 +235,7 @@ onUnmounted(() => {
   webrtc.disconnect()
   closeAdb()
   if (layoutInterval) clearInterval(layoutInterval)
+  if (statsInterval) clearInterval(statsInterval)
   window.removeEventListener('resize', updateMobileState)
 })
 
@@ -386,24 +415,24 @@ let mouseDown = false
 function onMouseDown(e) { 
   const coord = rotateCoords(e.clientX, e.clientY)
   mouseDown = true; 
-  webrtc.sendTouch(0, e.clientX, e.clientY, -1, coord)
+  webrtc.sendTouch(0, e.clientX, e.clientY, 0, coord)
 }
 function onMouseMove(e) { 
   if (mouseDown) {
     const coord = rotateCoords(e.clientX, e.clientY)
-    webrtc.sendTouch(2, e.clientX, e.clientY, -1, coord)
+    webrtc.sendTouch(2, e.clientX, e.clientY, 0, coord)
   }
 }
 function onMouseUp(e) { 
   const coord = rotateCoords(e.clientX, e.clientY)
   mouseDown = false; 
-  webrtc.sendTouch(1, e.clientX, e.clientY, -1, coord)
+  webrtc.sendTouch(1, e.clientX, e.clientY, 0, coord)
 }
 function onMouseLeave(e) { 
   if (mouseDown) { 
     const coord = rotateCoords(e.clientX, e.clientY)
     mouseDown = false; 
-    webrtc.sendTouch(1, e.clientX, e.clientY, -1, coord)
+    webrtc.sendTouch(1, e.clientX, e.clientY, 0, coord)
   }
 }
 
@@ -461,6 +490,26 @@ function onTouchEnd(e) {
 }
 
 .fullscreen-fab:hover { background: rgba(0, 0, 0, 0.8); transform: scale(1.1); }
+
+.stats-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  color: #0f0;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  z-index: 100;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.stat-delimiter { color: #555; margin: 0 2px; }
+.stat-warn { color: #f85149; }
 
 .video-wrapper {
   flex: 1;

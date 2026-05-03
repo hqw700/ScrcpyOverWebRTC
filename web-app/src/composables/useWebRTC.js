@@ -278,6 +278,56 @@ function handleDeviceMessage(payload) {
     }
   }
 
+  // --- 统计监控逻辑 ---
+  let prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
+  let pauseCount = 0
+  let wasPaused = false
+
+  async function getVideoStats() {
+    if (!pc) return null
+    try {
+      const stats = await pc.getStats()
+      for (const report of stats.values()) {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          const now = report.timestamp
+          const dt = prevStats.timestamp ? (now - prevStats.timestamp) / 1000 : 0
+
+          const newFrames = report.framesDecoded - prevStats.framesDecoded
+          const fps = dt > 0 ? (newFrames / dt).toFixed(0) : 0
+
+          if (dt > 0 && newFrames === 0 && !wasPaused && status.value === 'connected') {
+            pauseCount++
+            wasPaused = true
+          } else if (newFrames > 0) {
+            wasPaused = false
+          }
+
+          const bitrate = dt > 0 ? ((report.bytesReceived - prevStats.bytesReceived) * 8 / dt / 1000).toFixed(0) : 0
+          const jbDelay = (report.jitterBufferDelay / (report.jitterBufferEmittedCount || 1) * 1000).toFixed(0)
+          const pliCount = report.pliCount || 0
+          const lostCount = report.packetsLost || 0
+
+          prevStats = {
+            timestamp: now,
+            bytesReceived: report.bytesReceived,
+            framesDecoded: report.framesDecoded
+          }
+
+          return { fps, bitrate, jbDelay, pliCount, pauseCount, lostCount }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null
+  }
+
+  function resetStats() {
+    prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
+    pauseCount = 0
+    wasPaused = false
+  }
+
   function sendForward(payload) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -451,65 +501,6 @@ function handleDeviceMessage(payload) {
   // 设置获取视频元素的函数 (由组件调用)
   function setVideoGetter(getter) {
     videoElementGetter = getter
-  }
-
-  // 上一次 stats 快照，用于计算增量指标
-  let prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
-  let pauseCount = 0  // 累计暂停次数（连续 0 帧的轮询区间只计一次）
-  let wasPaused = false
-
-  // 获取视频流关键统计信息
-  async function getVideoStats() {
-    if (!pc) return null
-    try {
-      const stats = await pc.getStats()
-      for (const report of stats.values()) {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          const now = report.timestamp
-          const dt = prevStats.timestamp ? (now - prevStats.timestamp) / 1000 : 0
-
-          // FPS: framesDecoded 增量 / 时间差
-          const newFrames = report.framesDecoded - prevStats.framesDecoded
-          const fps = dt > 0 ? (newFrames / dt).toFixed(0) : null
-
-          // 暂停检测：本轮 0 新帧视为暂停
-          if (dt > 0 && newFrames === 0 && !wasPaused) {
-            pauseCount++
-            wasPaused = true
-          } else if (newFrames > 0) {
-            wasPaused = false
-          }
-
-          // Bitrate: bytesReceived 增量 -> kbps
-          const bitrate = dt > 0 ? ((report.bytesReceived - prevStats.bytesReceived) * 8 / dt / 1000).toFixed(0) : null
-
-          // Jitter buffer delay (ms)
-          const jbDelay = (report.jitterBufferDelay / (report.jitterBufferEmittedCount || 1) * 1000).toFixed(0)
-
-          // 累计值
-          const pliCount = report.pliCount || 0
-          const lostCount = report.packetsLost || 0
-
-          // 保存快照
-          prevStats = {
-            timestamp: now,
-            bytesReceived: report.bytesReceived,
-            framesDecoded: report.framesDecoded
-          }
-
-          return { fps, bitrate, jbDelay, pliCount, pauseCount, lostCount }
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null
-  }
-
-  function resetStats() {
-    prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
-    pauseCount = 0
-    wasPaused = false
   }
 
   return {

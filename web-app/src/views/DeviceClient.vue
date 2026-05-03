@@ -1,118 +1,219 @@
 <template>
-  <div class="device-panel-view" :class="{ 'mobile-landscape': isMobile && isVideoLandscape }">
-    <!-- 悬浮全屏按钮 (右上角) -->
-    <button class="fullscreen-fab" @click="toggleFullscreen" title="全屏">⛶</button>
+  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape }">
+    <!-- 主内容区 -->
+    <div class="main-content">
 
-    <!-- 主视频容器 -->
-    <div class="video-wrapper" ref="containerRef">
-      <video
-        ref="videoElement"
-        autoplay
-        playsinline
-        muted
-        class="video-stream"
-        @mousedown="onMouseDown"
-        @mousemove="onMouseMove"
-        @mouseup="onMouseUp"
-        @mouseleave="onMouseLeave"
-        @touchstart.prevent="onTouchStart"
-        @touchmove.prevent="onTouchMove"
-        @touchend.prevent="onTouchEnd"
-        @touchcancel.prevent="onTouchEnd"
-        @loadedmetadata="onVideoLoaded"
-        @resize="onVideoResize"
-      />
+      <!-- 主视频容器 -->
+      <div class="video-wrapper" ref="containerRef">
+        <!-- 悬浮全屏按钮 (移入视频容器内，保证全屏时可见) -->
+        <button class="fullscreen-fab" @click="toggleFullscreen" title="全屏">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        </button>
 
-      <!-- 视频流状态面板 (左上角) -->
-      <div v-if="videoStats" class="stats-badge">
-        <span class="stat-fps">{{ videoStats.fps }}fps</span>
-        <span class="stat-delimiter">|</span>
-        <span class="stat-delay">JB {{ videoStats.jbDelay }}ms</span>
-        <span class="stat-delimiter">|</span>
-        <span class="stat-bitrate">{{ videoStats.bitrate }}kbps</span>
-        <span class="stat-delimiter">|</span>
-        <span :class="['stat-pli', { 'stat-warn': videoStats.pliCount > 0 }]">PLI {{ videoStats.pliCount }}</span>
-        <span class="stat-delimiter">|</span>
-        <span :class="['stat-pause', { 'stat-warn': videoStats.pauseCount > 0 }]">Pause {{ videoStats.pauseCount }}</span>
-        <span class="stat-delimiter">|</span>
-        <span :class="['stat-lost', { 'stat-warn': videoStats.lostCount > 0 }]">Lost {{ videoStats.lostCount }}</span>
-      </div>
+        <video
+          ref="videoElement"
+          autoplay
+          playsinline
+          muted
+          class="video-stream"
+          @mousedown="onMouseDown"
+          @mousemove="onMouseMove"
+          @mouseup="onMouseUp"
+          @mouseleave="onMouseLeave"
+          @touchstart.prevent="onTouchStart"
+          @touchmove.prevent="onTouchMove"
+          @touchend.prevent="onTouchEnd"
+          @touchcancel.prevent="onTouchEnd"
+          @loadedmetadata="onVideoLoaded"
+          @resize="onVideoResize"
+        />
 
-      <!-- 加载/错误覆盖层 -->
-      <div v-if="showOverlay" class="panel-overlay">
-        <div class="overlay-box">
-          <template v-if="['connecting', 'signaling', 'waiting_offer', 'connecting_webrtc'].includes(webrtc.status.value)">
-            <div class="mini-spinner"></div>
-            <p>{{ loadingText }}</p>
-          </template>
-          <template v-else-if="webrtc.error.value">
-            <p class="error-msg">❌ 连接失败</p>
-            <p class="error-tip">{{ webrtc.error.value }}</p>
-            <button class="retry-btn" @click="retry">重试</button>
-          </template>
-          <template v-else-if="webrtc.status.value === 'disconnected'">
-            <p>连接已断开</p>
-            <button class="retry-btn" @click="retry">重新连接</button>
-          </template>
+        <!-- 视频流状态面板 (左上角) -->
+        <div v-if="videoStats" class="stats-badge">
+          <span class="stat-fps">{{ videoStats.fps }}fps</span>
+          <span class="stat-delimiter">|</span>
+          <span class="stat-delay">JB {{ videoStats.jbDelay }}ms</span>
+          <span class="stat-delimiter">|</span>
+          <span class="stat-bitrate">{{ videoStats.bitrate }}kbps</span>
+          <span class="stat-delimiter">|</span>
+          <span :class="['stat-pli', { 'stat-warn': videoStats.pliCount > 0 }]">PLI {{ videoStats.pliCount }}</span>
+          <span class="stat-delimiter">|</span>
+          <span :class="['stat-pause', { 'stat-warn': videoStats.pauseCount > 0 }]">Pause {{ videoStats.pauseCount }}</span>
+          <span class="stat-delimiter">|</span>
+          <span :class="['stat-lost', { 'stat-warn': videoStats.lostCount > 0 }]">Lost {{ videoStats.lostCount }}</span>
         </div>
-      </div>
-    </div>
 
-    <!-- 底部控制按钮 -->
-    <div class="panel-footer-actions">
-      <button class="action-item" @click="quickKey('input keyevent 3')">🏠 HOME</button>
-      <button class="action-item" @click="quickKey('input keyevent 4')">◀ BACK</button>
-      <button class="action-item" @click="showConsole = !showConsole">📟 控制台</button>
-      <button class="action-item danger" @click="quitAgent">退出 Agent</button>
-    </div>
-
-    <!-- 控制台/ADB 抽屉 -->
-    <div v-show="showConsole" class="console-drawer">
-      <div class="console-header">
-        <div class="console-tabs">
-          <button :class="{active: activeTab === 'shell'}" @click="activeTab = 'shell'">终端 (Shell)</button>
-          <button :class="{active: activeTab === 'adb'}" @click="activeTab = 'adb'">ADB 调试</button>
-        </div>
-        <button class="close-console" @click="toggleConsole">✕</button>
-      </div>
-
-      <!-- 标准 Shell 视图 -->
-      <div v-show="activeTab === 'shell'" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
-        <div class="console-history" ref="consoleRef">
-          <div v-for="(log, idx) in consoleLogs" :key="idx" :class="['log-item', log.type]">
-            <span class="log-cmd" v-if="log.cmd">$ {{ log.cmd }}</span>
-            <pre class="log-out">{{ log.text }}</pre>
+        <!-- 加载/错误覆盖层 -->
+        <div v-if="showOverlay" class="panel-overlay">
+          <div class="overlay-box">
+            <template v-if="['connecting', 'signaling', 'waiting_offer', 'connecting_webrtc'].includes(webrtc.status.value)">
+              <div class="mini-spinner"></div>
+              <p>{{ loadingText }}</p>
+            </template>
+            <template v-else-if="webrtc.error.value">
+              <p class="error-msg">❌ 连接失败</p>
+              <p class="error-tip">{{ webrtc.error.value }}</p>
+              <button class="retry-btn" @click="retry">重试</button>
+            </template>
+            <template v-else-if="webrtc.status.value === 'disconnected'">
+              <p>连接已断开</p>
+              <button class="retry-btn" @click="retry">重新连接</button>
+            </template>
           </div>
-          <div v-if="consoleLogs.length === 0" class="console-empty">等待命令下发...</div>
         </div>
-        <div class="console-shortcuts">
-          <button @click="quickCmd('pm list packages -3')">三方应用</button>
-          <button @click="quickCmd('getprop ro.product.model')">型号</button>
-          <button @click="quickCmd('uptime')">运行时间</button>
-          <button @click="quickCmd('settings put system pointer_location 1')">打开划线</button>
-          <button @click="consoleLogs = []">清屏</button>
+
+        <!-- 悬浮菜单展开时的全屏点击遮罩 -->
+        <div v-if="(isMobile || isFullscreen) && showMobileMenu" class="fab-overlay" @mousedown.stop.prevent="showMobileMenu = false" @touchstart.stop.prevent="showMobileMenu = false"></div>
+
+        <!-- 手机端悬浮菜单 (移入视频容器内，保证全屏时可见) -->
+        <div v-if="isMobile || isFullscreen" class="mobile-fab-container" :style="fabStyle">
+          <button class="mobile-fab-main" :class="{ 'active': showMobileMenu }"
+            @mousedown="onFabStart" @mousemove="onFabMove" @mouseup="onFabEnd" @mouseleave="onFabEnd"
+            @touchstart.prevent="onFabStart" @touchmove.prevent="onFabMove" @touchend.prevent="onFabEnd">
+            <svg v-if="showMobileMenu" class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <svg v-else class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          </button>
+          
+          <div class="mobile-fab-menu" :class="{ 'show': showMobileMenu, 'align-left': isFabOnLeft, 'align-top': isFabOnTop }">
+            <button class="fab-item" @click="quickKey('input keyevent 26'); showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> 电源
+            </button>
+            <button class="fab-item" @click="quickKey('input keyevent 3'); showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> 首页
+            </button>
+            <button class="fab-item" @click="quickKey('input keyevent 4'); showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> 返回
+            </button>
+            <button class="fab-item" @click="showConsole = !showConsole; showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> 终端
+            </button>
+            <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> 按键映射
+            </button>
+            <button class="fab-item" @click="keymapStore.toggleKeyHints(); showMobileMenu=false">
+              <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <svg v-else class="icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+              {{ keymapStore.showKeyHints ? '隐藏提示' : '显示提示' }}
+            </button>
+            
+            <div class="fab-divider" v-if="customButtons.length > 0"></div>
+            <button v-for="(btn, idx) in customButtons" :key="idx" class="fab-item custom-item" @click="quickKey(btn.cmd); showMobileMenu=false" @contextmenu.prevent="removeCustomButton(idx)">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> {{ btn.name }}
+            </button>
+            <button class="fab-item add-btn" @click="addCustomButton">
+              <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 添加按键
+            </button>
+            
+            <div class="fab-divider"></div>
+            <button class="fab-item danger" @click="quitAgent; showMobileMenu=false">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> 退出 Agent
+            </button>
+          </div>
         </div>
-        <div class="console-shortcuts danger">
-           <button class="quit-btn" @click="quitAgent">强制退出 Agent 进程</button>
-        </div>
-        <div class="console-input-group">
-          <input 
-            v-model="inputCmd" 
-            @keyup.enter="execCmd"
-            placeholder="输入命令..."
-            class="cmd-input"
-          />
-          <button @click="execCmd" class="send-btn">发送</button>
-        </div>
+
+        <!-- 按键映射编辑器 -->
+        <KeymapEditor :video-element="videoElement" />
       </div>
 
-      <!-- ADB 调试视图 (xterm.js) -->
-      <div v-show="activeTab === 'adb'" class="adb-container" ref="adbTermContainer">
-        <div v-if="!isAdbConnected" class="adb-placeholder">
-          <button class="adb-connect-btn" @click="startAdb">初始化 ADB over WebRTC</button>
-          <p>建立 P2P 隧道并开启原生 ADB Shell</p>
+      <!-- 控制台/ADB 抽屉 -->
+      <div v-show="showConsole" class="console-drawer">
+        <div class="console-header">
+          <div class="console-tabs">
+            <button :class="{active: activeTab === 'shell'}" @click="activeTab = 'shell'">终端 (Shell)</button>
+            <button :class="{active: activeTab === 'adb'}" @click="activeTab = 'adb'">ADB 调试</button>
+          </div>
+          <button class="close-console" @click="toggleConsole">✕</button>
+        </div>
+
+        <!-- 标准 Shell 视图 -->
+        <div v-show="activeTab === 'shell'" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+          <div class="console-history" ref="consoleRef">
+            <div v-for="(log, idx) in consoleLogs" :key="idx" :class="['log-item', log.type]">
+              <span class="log-cmd" v-if="log.cmd">$ {{ log.cmd }}</span>
+              <pre class="log-out">{{ log.text }}</pre>
+            </div>
+            <div v-if="consoleLogs.length === 0" class="console-empty">等待命令下发...</div>
+          </div>
+          <div class="console-shortcuts">
+            <button @click="quickCmd('pm list packages -3')">三方应用</button>
+            <button @click="quickCmd('getprop ro.product.model')">型号</button>
+            <button @click="quickCmd('uptime')">运行时间</button>
+            <button @click="quickCmd('settings put system pointer_location 1')">打开划线</button>
+            <button @click="consoleLogs = []">清屏</button>
+          </div>
+          <div class="console-shortcuts danger">
+             <button class="quit-btn" @click="quitAgent">强制退出 Agent 进程</button>
+          </div>
+          <div class="console-input-group">
+            <input 
+              v-model="inputCmd" 
+              @keyup.enter="execCmd"
+              placeholder="输入命令..."
+              class="cmd-input"
+            />
+            <button @click="execCmd" class="send-btn">发送</button>
+          </div>
+        </div>
+
+        <!-- ADB 调试视图 (xterm.js) -->
+        <div v-show="activeTab === 'adb'" class="adb-container" ref="adbTermContainer">
+          <div v-if="!isAdbConnected" class="adb-placeholder">
+            <button class="adb-connect-btn" @click="startAdb">初始化 ADB over WebRTC</button>
+            <p>建立 P2P 隧道并开启原生 ADB Shell</p>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- PC 右侧控制栏 -->
+    <div v-if="!isMobile" class="control-sidebar">
+      <div class="sidebar-group">
+        <button class="sidebar-btn" @click="quickKey('input keyevent 26')" title="电源">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+          <span class="btn-text">电源</span>
+        </button>
+        <button class="sidebar-btn" @click="quickKey('input keyevent 3')" title="HOME">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          <span class="btn-text">首页</span>
+        </button>
+        <button class="sidebar-btn" @click="quickKey('input keyevent 4')" title="BACK">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>
+          <span class="btn-text">返回</span>
+        </button>
+        <button class="sidebar-btn" @click="showConsole = !showConsole" title="控制台">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span class="btn-text">终端</span>
+        </button>
+        <button class="sidebar-btn" @click="keymapStore.setEditMode(true)" title="按键映射">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+          <span class="btn-text">映射</span>
+        </button>
+        <button class="sidebar-btn" @click="keymapStore.toggleKeyHints()" :title="keymapStore.showKeyHints ? '隐藏按键提示' : '显示按键提示'">
+          <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg v-else class="icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          <span class="btn-text">提示</span>
+        </button>
+      </div>
+      
+      <div class="sidebar-divider"></div>
+      
+      <div class="sidebar-group custom-group">
+        <button v-for="(btn, idx) in customButtons" :key="idx" class="sidebar-btn custom-btn" @click="quickKey(btn.cmd)" @contextmenu.prevent="removeCustomButton(idx)" :title="btn.cmd + ' (右键删除)'">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          <span class="btn-text">{{ btn.name }}</span>
+        </button>
+        <button class="sidebar-btn add-btn" @click="addCustomButton" title="添加按键">
+          <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span class="btn-text">添加</span>
+        </button>
+      </div>
+      
+      <div style="flex: 1"></div>
+      
+      <button class="sidebar-btn danger" @click="quitAgent" title="退出 Agent">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
+        <span class="btn-text">退出</span>
+      </button>
     </div>
 
     <!-- 截图模态框 -->
@@ -130,8 +231,11 @@ import { useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/devices'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { useAdb } from '@/composables/useAdb'
+import { useKeymapStore } from '@/stores/keymap'
+import { KeymapEngine } from '@/utils/keymapEngine'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
 import ScreenshotModal from '@/components/ScreenshotModal.vue'
+import KeymapEditor from '@/components/KeymapEditor.vue'
 
 const props = defineProps({
   deviceId: {
@@ -159,12 +263,118 @@ const consoleRef = ref(null)
 const adbTermContainer = ref(null)
 const activeTab = ref('shell') // 'shell' | 'adb'
 
+// 手机悬浮菜单状态及拖拽
+const showMobileMenu = ref(false)
+const fabStyle = ref({ right: '24px', bottom: '24px' })
+const isFabOnLeft = ref(false)
+const isFabOnTop = ref(false)
+let isDragging = false
+let dragStartTime = 0
+let startX = 0
+let startY = 0
+
+function onFabStart(e) {
+  isDragging = false
+  dragStartTime = Date.now()
+  const ev = e.touches ? e.touches[0] : e
+  startX = ev.clientX
+  startY = ev.clientY
+}
+
+function onFabMove(e) {
+  if (!dragStartTime) return
+  const ev = e.touches ? e.touches[0] : e
+  const dx = ev.clientX - startX
+  const dy = ev.clientY - startY
+  if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+    isDragging = true
+  }
+  if (isDragging) {
+    let left = ev.clientX - 28 // 56/2 = 28 (center)
+    let top = ev.clientY - 28
+    
+    if (left < 0) left = 0
+    if (top < 0) top = 0
+    if (left > window.innerWidth - 56) left = window.innerWidth - 56
+    if (top > window.innerHeight - 56) top = window.innerHeight - 56
+    
+    isFabOnLeft.value = left < window.innerWidth / 2
+    isFabOnTop.value = top < window.innerHeight / 2
+
+    fabStyle.value = {
+      left: left + 'px',
+      top: top + 'px',
+      right: 'auto',
+      bottom: 'auto'
+    }
+  }
+}
+
+function onFabEnd(e) {
+  if (dragStartTime && !isDragging && (Date.now() - dragStartTime < 500)) {
+    showMobileMenu.value = !showMobileMenu.value
+  }
+  isDragging = false
+  dragStartTime = 0
+}
+
+// 自定义按键
+const customButtons = ref(JSON.parse(localStorage.getItem('cloudphone_custom_btns') || '[]'))
+
+function addCustomButton() {
+  const name = prompt('按钮名称 (最长4个字，如: 划线)')
+  if (!name) return
+  const cmd = prompt('ADB Shell 命令 (如: settings put system pointer_location 1)')
+  if (!cmd) return
+  customButtons.value.push({ name: name.substring(0, 4), cmd })
+  localStorage.setItem('cloudphone_custom_btns', JSON.stringify(customButtons.value))
+}
+
+function removeCustomButton(index) {
+  if (confirm('确定删除此按键？')) {
+    customButtons.value.splice(index, 1)
+    localStorage.setItem('cloudphone_custom_btns', JSON.stringify(customButtons.value))
+  }
+}
+
 // 视频流统计信息
 const videoStats = ref(null)
 let statsInterval = null
 
 let webrtc = useWebRTC(currentId.value)
 const { isAdbConnected, initAdb, closeAdb } = useAdb(webrtc)
+
+const keymapStore = useKeymapStore()
+const keymapEngine = new KeymapEngine(
+  (action, cx, cy, id, coord) => webrtc.sendTouch(action, cx, cy, id, coord),
+  (cmd) => webrtc.sendCommand(cmd)
+)
+
+watch(() => keymapStore.activeProfile, (newProfile) => {
+  keymapEngine.updateProfile(newProfile)
+}, { immediate: true, deep: true })
+
+function onGlobalKeyDown(e) {
+  if (keymapStore.isEditMode) return;
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (!videoNaturalSize.value.width) return;
+
+  if (keymapEngine.handleKeyEvent(e, true, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
+    e.preventDefault();
+  }
+}
+
+function onGlobalKeyUp(e) {
+  if (keymapStore.isEditMode) return;
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (!videoNaturalSize.value.width) return;
+
+  if (keymapEngine.handleKeyEvent(e, false, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
+    e.preventDefault();
+  }
+}
 
 // 布局推荐相关
 let layoutInterval = null
@@ -225,6 +435,8 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
   })
+  document.addEventListener('keydown', onGlobalKeyDown)
+  document.addEventListener('keyup', onGlobalKeyUp)
   // 定期检查布局
   layoutInterval = setInterval(checkAndRecommendLayout, 2000)
   // 监听窗口大小变化
@@ -234,6 +446,8 @@ onMounted(() => {
 onUnmounted(() => {
   webrtc.disconnect()
   closeAdb()
+  document.removeEventListener('keydown', onGlobalKeyDown)
+  document.removeEventListener('keyup', onGlobalKeyUp)
   if (layoutInterval) clearInterval(layoutInterval)
   if (statsInterval) clearInterval(statsInterval)
   window.removeEventListener('resize', updateMobileState)
@@ -274,7 +488,6 @@ function checkAndRecommendLayout() {
 }
 
 // 旋转坐标转换
-// 用户点击屏幕 -> 转换为"相当于点击在未旋转视频上的坐标"
 function rotateCoords(clientX, clientY) {
   if (!needRotateCoords.value) return { x: clientX, y: clientY }
   
@@ -283,56 +496,32 @@ function rotateCoords(clientX, clientY) {
   
   const screenW = window.innerWidth
   const screenH = window.innerHeight
-  const videoW = videoNaturalSize.value.width   // 原始视频宽度（横屏时 > 高度）
-  const videoH = videoNaturalSize.value.height  // 原始视频高度
+  const videoW = videoNaturalSize.value.width
+  const videoH = videoNaturalSize.value.height
   
   if (!videoW || !videoH) return { x: clientX, y: clientY }
   
-  // 视频 rotate(90deg) 后：
-  // 原视频坐标系 -> 旋转后显示坐标系
-  // (x, y) -> (videoH - y, x)
-  // 
-  // 逆变换：
-  // 旋转后 (x', y') -> 原视频 (y', videoH - x')
-  
-  // 由于使用 object-fit: contain，视频完整显示可能有黑边
-  // 屏幕坐标 -> 旋转后视频坐标 (归一化 0-1)
-  
-  // 旋转后的视频显示尺寸比例
-  // 旋转后：宽=videoH，高=videoW
-  const rotatedRatio = videoH / videoW  // 旋转后的宽高比
+  const rotatedRatio = videoH / videoW
   const screenRatio = screenW / screenH
   
-  let normInVideoX, normInVideoY  // 在旋转后视频内的归一化坐标
+  let normInVideoX, normInVideoY
   
   if (screenRatio > rotatedRatio) {
-    // 屏幕更宽，视频左右有黑边
-    // 视频在屏幕上：高度填满，宽度有黑边
-    const videoDisplayW = screenH * rotatedRatio  // 视频实际显示宽度
-    const offsetX = (screenW - videoDisplayW) / 2  // 左右黑边
-    
-    // 屏幕 x -> 视频内 x
-    const videoX = clientX - offsetX  // 相对于视频显示区域的 x 坐标
-    
+    const videoDisplayW = screenH * rotatedRatio
+    const offsetX = (screenW - videoDisplayW) / 2
+    const videoX = clientX - offsetX
     normInVideoX = videoX / videoDisplayW
     normInVideoY = clientY / screenH
   } else {
-    // 屏幕更高，视频上下有黑边
     const videoDisplayH = screenW / rotatedRatio
     const offsetY = (screenH - videoDisplayH) / 2
-    
     const videoY = clientY - offsetY
-    
     normInVideoX = clientX / screenW
     normInVideoY = videoY / videoDisplayH
   }
   
-  // 旋转后视频内归一化坐标 -> 原视频归一化坐标
-  // 旋转后 (x', y') -> 原视频 (y', 1 - x')
   const origNormX = normInVideoY
   const origNormY = 1 - normInVideoX
-  
-  // 归一化坐标 -> 原视频像素坐标
   const origX = origNormX * videoW
   const origY = origNormY * videoH
   
@@ -361,7 +550,6 @@ function closeScreenshot() {
   screenshotData.value = null
 }
 
-// 命令执行
 function execCmd() {
   if (!inputCmd.value.trim()) return
   const cmd = inputCmd.value
@@ -376,11 +564,9 @@ function quickCmd(cmd) {
   execCmd()
 }
 
-// 切换控制台显示
 function toggleConsole() {
   showConsole.value = !showConsole.value
   if (!showConsole.value) {
-    console.log('[UI] Closing console drawer, force closing ADB...');
     closeAdb()
   }
 }
@@ -410,29 +596,28 @@ function quitAgent() {
   }
 }
 
-// 触控处理逻辑
 let mouseDown = false
 function onMouseDown(e) { 
   const coord = rotateCoords(e.clientX, e.clientY)
   mouseDown = true; 
-  webrtc.sendTouch(0, e.clientX, e.clientY, 0, coord)
+  webrtc.sendTouch(0, e.clientX, e.clientY, -1, coord)
 }
 function onMouseMove(e) { 
   if (mouseDown) {
     const coord = rotateCoords(e.clientX, e.clientY)
-    webrtc.sendTouch(2, e.clientX, e.clientY, 0, coord)
+    webrtc.sendTouch(2, e.clientX, e.clientY, -1, coord)
   }
 }
 function onMouseUp(e) { 
   const coord = rotateCoords(e.clientX, e.clientY)
   mouseDown = false; 
-  webrtc.sendTouch(1, e.clientX, e.clientY, 0, coord)
+  webrtc.sendTouch(1, e.clientX, e.clientY, -1, coord)
 }
 function onMouseLeave(e) { 
   if (mouseDown) { 
     const coord = rotateCoords(e.clientX, e.clientY)
     mouseDown = false; 
-    webrtc.sendTouch(1, e.clientX, e.clientY, 0, coord)
+    webrtc.sendTouch(1, e.clientX, e.clientY, -1, coord)
   }
 }
 
@@ -463,10 +648,28 @@ function onTouchEnd(e) {
 .device-panel-view {
   height: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   background: #000;
   position: relative;
   overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-width: 0;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .fullscreen-fab {
@@ -486,9 +689,8 @@ function onTouchEnd(e) {
   cursor: pointer;
   z-index: 100;
   transition: all 0.2s;
-  font-size: 18px;
 }
-
+.fullscreen-fab .icon { width: 18px; height: 18px; }
 .fullscreen-fab:hover { background: rgba(0, 0, 0, 0.8); transform: scale(1.1); }
 
 .stats-badge {
@@ -548,34 +750,176 @@ function onTouchEnd(e) {
 
 .retry-btn { background: var(--accent); color: white; border: none; padding: 6px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 
-.panel-footer-actions {
-  display: flex;
+/* PC 右侧栏 */
+.control-sidebar {
+  width: 64px;
   background: #111;
-  padding: 12px;
-  gap: 8px;
-  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 12px;
+  overflow-y: auto;
+  z-index: 10;
 }
 
-.action-item {
-  flex: 1;
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+}
+
+.sidebar-btn {
   background: #222;
   border: 1px solid #333;
   color: #ccc;
-  padding: 10px 4px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
 }
 
-.action-item:hover { background: #333; border-color: var(--accent); color: white; }
+.sidebar-btn .icon {
+  margin-bottom: 2px;
+}
 
-.action-item.danger:hover { background: rgba(248, 81, 73, 0.2); border-color: var(--error); color: var(--error); }
+.sidebar-btn .btn-text {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sidebar-btn:hover { background: #333; border-color: var(--accent); color: white; }
+.sidebar-btn.danger:hover { background: rgba(248, 81, 73, 0.2); border-color: var(--error); color: var(--error); }
+.sidebar-btn.danger { color: #888; }
+.sidebar-btn.add-btn { border-style: dashed; }
+
+.sidebar-divider {
+  width: 32px;
+  height: 1px;
+  background: #333;
+  margin: 4px 0;
+}
+
+/* 悬浮菜单全屏遮罩 */
+.fab-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+/* 手机悬浮菜单 */
+.mobile-fab-container {
+  position: fixed;
+  z-index: 100;
+  width: 56px;
+  height: 56px;
+}
+
+.mobile-fab-main {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+  touch-action: none;
+  z-index: 2;
+}
+.mobile-fab-main .icon {
+  width: 24px;
+  height: 24px;
+}
+.mobile-fab-main:active { cursor: grabbing; transform: scale(0.95); }
+.mobile-fab-main.active { background: #555; }
+
+.mobile-fab-menu {
+  position: absolute;
+  bottom: 68px;
+  right: 0;
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(20, 20, 20, 0.9);
+  backdrop-filter: blur(10px);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(20px);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 1;
+}
+
+.mobile-fab-menu.align-left {
+  right: auto;
+  left: 0;
+}
+
+.mobile-fab-menu.align-top {
+  bottom: auto;
+  top: 68px;
+  transform: translateY(-20px);
+}
+
+.mobile-fab-menu.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.fab-item {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #eee;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.fab-item .icon {
+  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+}
+
+.fab-item:active { background: var(--accent); }
+.fab-item.danger { color: #f85149; }
+.fab-item.add-btn { background: transparent; border-style: dashed; justify-content: center; }
+.fab-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0; }
 
 /* 控制台样式 */
 .console-drawer {
   position: absolute;
-  bottom: 64px;
+  bottom: 0;
   left: 0;
   right: 0;
   height: 360px;
@@ -629,7 +973,6 @@ function onTouchEnd(e) {
 
 /* 手机端横屏视频全屏显示 - 长边对长边 */
 @media (max-width: 1024px) {
-  /* 横屏视频时，整个面板全屏 */
   .device-panel-view.mobile-landscape {
     position: fixed;
     inset: 0;
@@ -637,14 +980,12 @@ function onTouchEnd(e) {
     background: #000;
   }
   
-  /* 视频容器占满全屏 */
   .device-panel-view.mobile-landscape .video-wrapper {
     position: absolute;
     inset: 0;
     z-index: 1;
   }
   
-  /* 视频旋转90度，完整显示（可能有黑边） */
   .device-panel-view.mobile-landscape .video-stream {
     position: absolute;
     top: 50%;
@@ -652,37 +993,13 @@ function onTouchEnd(e) {
     width: 100vh;
     height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
-    object-fit: contain;  /* 完整显示视频，可能有黑边 */
+    object-fit: contain;
   }
   
-  /* 悬浮控制按钮 */
-  .device-panel-view.mobile-landscape .panel-footer-actions {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  
-  .device-panel-view.mobile-landscape .panel-footer-actions .action-item {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #fff;
-  }
-  
-  .device-panel-view.mobile-landscape .panel-footer-actions .action-item:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-  
-  /* 悬浮全屏按钮 */
   .device-panel-view.mobile-landscape .fullscreen-fab {
     z-index: 101;
   }
   
-  /* 控制台在横屏时也需要悬浮 */
   .device-panel-view.mobile-landscape .console-drawer {
     position: fixed;
     bottom: 60px;
@@ -691,7 +1008,6 @@ function onTouchEnd(e) {
     z-index: 100;
   }
   
-  /* 加载覆盖层 */
   .device-panel-view.mobile-landscape .panel-overlay {
     z-index: 50;
   }

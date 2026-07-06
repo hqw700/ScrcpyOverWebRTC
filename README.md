@@ -2,7 +2,7 @@
 
 中文 | [English](README.en.md)
 
-📖 **官方技术文档与保姆级部署指南**：👉 [https://cloudphone-official.hqw700.workers.dev/docs/](https://cloudphone-official.hqw700.workers.dev/docs/)
+📖 **官方技术文档与保姆级部署指南**：👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)
 
 基于 WebRTC 和 Scrcpy 的高性能、低延迟云手机解决方案，无需客户端，可以通过网页直接连接。
 采用 **Fat Agent (直连模式)** 架构，结合 **硬件级 PTS 透传** 技术，实现媲美原生 Scrcpy 的丝滑体验。
@@ -42,11 +42,13 @@
     docker run -d \
       --name cp-aio \
       --net=host \
+      -v ./data:/app/data \
       -e PUBLIC_IP=<宿主机真实IP> \
       buutuu/scrcpy-over-webrtc:latest
     ```
 *   **优势**: 容器直接使用宿主机网络，零 NAT 转发损耗，无需映射大量 UDP 端口段，网络吞吐量最高。
 *   **注意**: 必须确保宿主机上 `3478`（TURN）和 `8443`（信令）等端口未被其他服务占用。
+*   **用户数据目录挂载**: `-v ./data:/app/data` 容器会把所有的持久化资产包括用户账号 users.json、设备标签及下载的文件保存在宿主机本地的 `./data` 目录下，保证升级时不被覆盖。
 *   **PUBLIC_IP**: 当有公网IP时填入公网IP，当局域网内使用内填入宿主机IP
 
 ---
@@ -64,6 +66,7 @@
       -p 3478:3478/tcp \
       -p 3478:3478/udp \
       -p 55000-55100:55000-55100/udp \
+      -v ./data:/app/data \
       -e PUBLIC_IP=<宿主机物理IP> \
       -e COTURN_MIN_PORT=55000 \
       -e COTURN_MAX_PORT=55100 \
@@ -94,35 +97,7 @@
     ```
 
 *   **PUBLIC_IP**: 当有公网IP时填入公网IP，当局域网内使用内填入宿主机IP
-
-### 2.3 数据持久化与容器挂载 (推荐，升级不丢数据)
-为了方便容器的重建与更新，信令服务器将所有的物理持久化资产（包含用户账户 `users.json`、设备分组标签 `device_tags.json`、用户上传的文件 `downloads/`、虚机预览截图 `snapshots/`）一站式归集到了统一的 `data/` 目录中。
-
-在 Docker 部署时，建议将宿主机的物理目录挂载到容器内的 `/app/data` 目录：
-
-*   **Host 模式挂载运行**:
-    ```bash
-    docker run -d \
-      --name cp-aio \
-      --net=host \
-      -e PUBLIC_IP=<宿主机真实IP> \
-      -v ./data:/app/data \
-      buutuu/scrcpy-over-webrtc:latest
-    ```
-*   **常规模式挂载运行**:
-    ```bash
-    docker run -d --name cp-aio \
-      -p 8443:8443 \
-      -p 3478:3478/tcp \
-      -p 3478:3478/udp \
-      -p 55000-55100:55000-55100/udp \
-      -v ./data:/app/data \
-      -e PUBLIC_IP=<宿主机物理IP> \
-      -e COTURN_MIN_PORT=55000 \
-      -e COTURN_MAX_PORT=55100 \
-      buutuu/scrcpy-over-webrtc:latest
-    ```
-*   **挂载效果**：拉取最新的镜像并重建容器进行版本升级时，您的用户数据和上传资源都**不会被覆盖或丢失**。
+*   **用户数据目录挂载**: `-v ./data:/app/data` 容器会把所有的持久化资产包括用户账号 users.json、设备标签及下载的文件保存在宿主机本地的 `./data` 目录下，保证升级时不被覆盖。
 
 
 ## 3. 部署 Android Agent (入网)

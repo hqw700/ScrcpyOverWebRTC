@@ -119,6 +119,13 @@
           </svg>
           <span class="nav-item-text">终端</span>
         </a>
+        <a href="javascript:void(0)" @click="navigateTo('/advanced')" class="nav-item" :class="{ active: showAdvancedPage }">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+          </svg>
+          <span class="nav-item-text">外设</span>
+        </a>
         <a href="javascript:void(0)" @click="navigateTo('/admin')" class="nav-item" :class="{ active: showUserAdminPage }" v-if="authStore.role === 'admin'">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -137,7 +144,7 @@
           <span class="nav-item-text">退出</span>
         </a>
       </div>
-      <div class="nav-tag-group" v-if="!showDeployPage && !showFilePage && !showMonitorPage">
+      <div class="nav-tag-group" v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showAdvancedPage">
         <div class="nav-tag-group-title">
           <span>标签</span>
           <button class="nav-tag-manage-btn" @click="openTagManager">
@@ -179,7 +186,7 @@
     <!-- 2. 主内容区域 -->
     <main class="main-content" id="main-layout-content">
       <header class="top-bar" v-if="!isMobile">
-        <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : '云虚机矩阵')) }}</h1>
+        <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : '云虚机矩阵'))) }}</h1>
         <div class="top-bar-right">
           <!-- 帮助与支持下拉菜单 -->
           <div class="header-help-menu" @click.stop v-if="!authStore.noAuthMode">
@@ -255,12 +262,13 @@
       
       <section class="viewport">
         <transition name="fade" mode="out-in">
-          <DeviceList v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showUserAdminPage && !showBatchPage" />
+          <DeviceList v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage" />
           <UserAdminPage v-else-if="showUserAdminPage" />
           <DeployPage v-else-if="showDeployPage" />
           <FileManagerPage v-else-if="showFilePage" />
           <Dashboard v-else-if="showMonitorPage" />
           <BatchControlPage v-else-if="showBatchPage" />
+          <AdvancedPage v-else-if="showAdvancedPage" />
         </transition>
       </section>
 
@@ -347,8 +355,8 @@
     </aside>
 
     <!-- 4. 移动端底部导航栏 (仅在主视图显示活跃虚机视频时才隐藏，在文件、终端或列表页均保持可见) -->
-    <nav class="mobile-bottom-nav" v-if="isMobile && (showFilePage || showTerminalPage || showDeployPage || showMonitorPage || showUserAdminPage || showBatchPage || !deviceStore.activeDeviceId)">
-      <button @click="navigateTo('/')" class="mobile-nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage }">
+    <nav class="mobile-bottom-nav" v-if="isMobile && (showFilePage || showTerminalPage || showDeployPage || showMonitorPage || showUserAdminPage || showBatchPage || showAdvancedPage || !deviceStore.activeDeviceId)">
+      <button @click="navigateTo('/')" class="mobile-nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage }">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
           <line x1="12" y1="18" x2="12.01" y2="18"></line>
@@ -478,6 +486,7 @@ import Dashboard from '@/views/Dashboard.vue'
 import Login from '@/views/Login.vue'
 import UserAdminPage from '@/views/UserAdminPage.vue'
 import BatchControlPage from '@/views/BatchControlPage.vue'
+import AdvancedPage from '@/views/AdvancedPage.vue'
 
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
@@ -509,6 +518,7 @@ const showTerminalPage = ref(false)
 const showMonitorPage = ref(false)
 const showUserAdminPage = ref(false)
 const showBatchPage = ref(false)
+const showAdvancedPage = ref(false)
 const isNavExpanded = ref(false)
 const showHelpMenu = ref(false)
 const showContactModal = ref(false)
@@ -752,6 +762,7 @@ function navigateTo(path) {
     showMonitorPage.value = false
     showBatchPage.value = false
     showUserAdminPage.value = false
+    showAdvancedPage.value = false
   } else if (path === '/files') {
     showDeployPage.value = false
     showFilePage.value = true
@@ -759,6 +770,7 @@ function navigateTo(path) {
     showMonitorPage.value = false
     showBatchPage.value = false
     showUserAdminPage.value = false
+    showAdvancedPage.value = false
   } else if (path === '/terminal') {
     // 点击终端按钮，不进行页面切换，直接切换全局底部终端抽屉的显隐状态
     deviceStore.toggleGlobalConsole()
@@ -769,6 +781,7 @@ function navigateTo(path) {
     showMonitorPage.value = true
     showBatchPage.value = false
     showUserAdminPage.value = false
+    showAdvancedPage.value = false
   } else if (path === '/batch') {
     showDeployPage.value = false
     showFilePage.value = false
@@ -776,6 +789,7 @@ function navigateTo(path) {
     showMonitorPage.value = false
     showBatchPage.value = true
     showUserAdminPage.value = false
+    showAdvancedPage.value = false
   } else if (path === '/admin') {
     showDeployPage.value = false
     showFilePage.value = false
@@ -783,6 +797,15 @@ function navigateTo(path) {
     showMonitorPage.value = false
     showBatchPage.value = false
     showUserAdminPage.value = true
+    showAdvancedPage.value = false
+  } else if (path === '/advanced') {
+    showDeployPage.value = false
+    showFilePage.value = false
+    showTerminalPage.value = false
+    showMonitorPage.value = false
+    showBatchPage.value = false
+    showUserAdminPage.value = false
+    showAdvancedPage.value = true
   } else {
     showDeployPage.value = false
     showFilePage.value = false
@@ -790,6 +813,7 @@ function navigateTo(path) {
     showMonitorPage.value = false
     showBatchPage.value = false
     showUserAdminPage.value = false
+    showAdvancedPage.value = false
   }
 }
 </script>

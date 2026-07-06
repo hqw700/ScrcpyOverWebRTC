@@ -25,8 +25,10 @@ export const useDeviceStore = defineStore('devices', () => {
   const offlineDevices = ref([])
 
 
-  // 辅助函数：根据当前活跃的 ID 列表更新在线和离线列表
-  function processDeviceList(activeIds) {
+  // 辅助函数：根据当前活跃的设备列表更新在线和离线列表
+  function processDeviceList(activeDevices) {
+    const activeIds = activeDevices.map(d => d.id)
+
     // 1. 找出刚刚掉线（原本在线但在新活跃列表中找不到）的设备
     devices.value.forEach(d => {
       if (!activeIds.includes(d.id)) {
@@ -45,11 +47,18 @@ export const useDeviceStore = defineStore('devices', () => {
       }
     })
 
-    // 2. 过滤在线列表，只保留当前活跃的设备
-    const newOnlineList = devices.value.filter(d => activeIds.includes(d.id))
+    // 2. 过滤在线列表，只保留当前活跃的设备，并更新 info
+    const newOnlineList = devices.value.filter(d => activeIds.includes(d.id)).map(d => {
+      const activeDev = activeDevices.find(ad => ad.id === d.id)
+      return {
+        ...d,
+        info: activeDev?.info || d.info
+      }
+    })
 
     // 3. 处理重新上线或新上线的设备
-    activeIds.forEach(id => {
+    activeDevices.forEach(devData => {
+      const id = devData.id
       const existingOnline = newOnlineList.find(d => d.id === id)
       if (!existingOnline) {
         const existingOfflineIdx = offlineDevices.value.findIndex(d => d.id === id)
@@ -58,6 +67,7 @@ export const useDeviceStore = defineStore('devices', () => {
           const resurrected = offlineDevices.value.splice(existingOfflineIdx, 1)[0]
           newOnlineList.push({
             ...resurrected,
+            info: devData.info,
             status: 'online',
             lastSeen: new Date().toISOString()
           })
@@ -65,6 +75,7 @@ export const useDeviceStore = defineStore('devices', () => {
           // 全新上线的设备
           newOnlineList.push({
             id,
+            info: devData.info,
             status: 'online',
             snapshot: null,
             lastSeen: new Date().toISOString()
@@ -85,8 +96,16 @@ export const useDeviceStore = defineStore('devices', () => {
       const data = await res.json()
       
       if (Array.isArray(data)) {
-        const activeIds = data.map(id => typeof id === 'string' ? id : id.device_id)
-        processDeviceList(activeIds)
+        const activeDevices = data.map(item => {
+          if (typeof item === 'string') {
+            return { id: item, info: null }
+          }
+          return {
+            id: item.device_id,
+            info: item.device_info
+          }
+        })
+        processDeviceList(activeDevices)
       } else {
         processDeviceList([])
       }
@@ -124,8 +143,16 @@ export const useDeviceStore = defineStore('devices', () => {
 
   function updateFromList(idList) {
     if (!Array.isArray(idList)) return
-    const activeIds = idList.map(id => typeof id === 'string' ? id : id.device_id)
-    processDeviceList(activeIds)
+    const activeDevices = idList.map(item => {
+      if (typeof item === 'string') {
+        return { id: item, info: null }
+      }
+      return {
+        id: item.device_id,
+        info: item.device_info || null
+      }
+    })
+    processDeviceList(activeDevices)
     debugLog('[Store] Device list updated via broadcast:', idList)
   }
 
@@ -219,7 +246,7 @@ export const useDeviceStore = defineStore('devices', () => {
     previewCallbacks.delete(deviceId)
   }
 
-  function sendPreviewControl(action, deviceId, fps, maxSize) {
+  function sendPreviewControl(action, deviceId, fps, maxSize, bitrate) {
     if (globalWs && globalWs.readyState === WebSocket.OPEN) {
       const payload = {
         message_type: action,
@@ -228,6 +255,7 @@ export const useDeviceStore = defineStore('devices', () => {
       }
       if (fps !== undefined && fps > 0) payload.fps = fps
       if (maxSize !== undefined && maxSize > 0) payload.max_size = maxSize
+      if (bitrate !== undefined && bitrate > 0) payload.bitrate = bitrate * 1000000
       globalWs.send(JSON.stringify(payload))
     }
   }
@@ -242,16 +270,30 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  function sendInjectData(channel, payload, targetDeviceIds) {
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+      const msg = {
+        message_type: 'inject_data',
+        channel: channel,
+        payload: payload
+      }
+      if (Array.isArray(targetDeviceIds) && targetDeviceIds.length > 0) {
+        msg.target_device_ids = targetDeviceIds
+      }
+      globalWs.send(JSON.stringify(msg))
+    }
+  }
+
   function handlePreviewBinary(buffer) {
-    if (buffer.byteLength < 33) return
+    if (buffer.byteLength < 49) return
     const view = new DataView(buffer)
     
     // Check Magic: PREV
     if (view.getUint8(0) !== 0x50 || view.getUint8(1) !== 0x52 ||
         view.getUint8(2) !== 0x45 || view.getUint8(3) !== 0x56) return
 
-    // Extract DeviceID (16 bytes)
-    const idBytes = new Uint8Array(buffer, 4, 16)
+    // Extract DeviceID (32 bytes)
+    const idBytes = new Uint8Array(buffer, 4, 32)
     let deviceId = new TextDecoder().decode(idBytes)
     const nullIdx = deviceId.indexOf('\0')
     if (nullIdx !== -1) {
@@ -261,11 +303,11 @@ export const useDeviceStore = defineStore('devices', () => {
     const cb = previewCallbacks.get(deviceId)
     if (!cb) return
 
-    const isKey = view.getUint8(20) === 0x01
+    const isKey = view.getUint8(36) === 0x01
     // BigEndian read uint64 ptsUs
-    const ptsUs = Number(view.getBigUint64(21, false))
-    const payloadLen = view.getUint32(29, false)
-    const nalu = new Uint8Array(buffer, 33, payloadLen)
+    const ptsUs = Number(view.getBigUint64(37, false))
+    const payloadLen = view.getUint32(45, false)
+    const nalu = new Uint8Array(buffer, 49, payloadLen)
 
     cb(nalu, isKey, ptsUs)
   }
@@ -403,6 +445,9 @@ export const useDeviceStore = defineStore('devices', () => {
   // 全局高频预览模式状态
   const globalPreviewMode = ref(false)
 
+  // 全局预览直控模式状态
+  const globalInteractiveMode = ref(false)
+
   // 全局下半屏控制台状态
   const showGlobalConsole = ref(false)
   const consoleDeviceId = ref('')
@@ -537,6 +582,8 @@ export const useDeviceStore = defineStore('devices', () => {
     unregisterPreviewCallback,
     sendPreviewControl,
     sendGroupControlEvent,
-    globalPreviewMode
+    sendInjectData,
+    globalPreviewMode,
+    globalInteractiveMode
   }
 })

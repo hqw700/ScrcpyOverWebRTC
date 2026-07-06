@@ -2549,4 +2549,12 @@ onUnmounted(() => {
   padding: 6px 10px;
   border-radius: 4px;
 }
+
+/* 覆盖 xterm.js 视口与屏幕渲染的底部留白，防输入行遮挡 */
+:deep(.xterm-viewport) {
+  padding-bottom: 32px !important;
+}
+:deep(.xterm-screen) {
+  padding-bottom: 32px !important;
+}
 </style>

@@ -21,6 +21,13 @@ const routes = [
     components: {
       default: () => import('@/views/Dashboard.vue')
     }
+  },
+  {
+    path: '/advanced',
+    name: 'Advanced',
+    components: {
+      default: () => import('@/views/AdvancedPage.vue')
+    }
   }
 ]
 

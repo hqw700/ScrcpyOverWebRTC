@@ -9,12 +9,11 @@ export function useWebRTC(deviceId, options = {}) {
   const cameraSupport = ref(true)
   const agentVersion = ref('unknown')
 
+  let webrtcObj = null
   let ws = null
   let pc = null
   let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }]
   let inputChannel = null
-  let adbChannel = null
-  let adbSendQueue = []
   let clipboardChannel = null
   let videoElementGetter = null  // 获取 video 元素的函数
   let videoStream = null
@@ -236,6 +235,21 @@ function handleDeviceMessage(payload) {
         pc = null
       }
       break
+    }
+  }
+
+  function sendInjectData(channel, payload, targetDeviceIds = null) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const msg = {
+        message_type: 'inject_data',
+        device_id: deviceId,
+        channel: channel,
+        payload: payload
+      }
+      if (Array.isArray(targetDeviceIds) && targetDeviceIds.length > 0) {
+        msg.target_device_ids = targetDeviceIds
+      }
+      ws.send(JSON.stringify(msg))
     }
   }
 
@@ -462,11 +476,6 @@ function handleDeviceMessage(payload) {
       iceServers: iceServers,
       iceTransportPolicy: iceTransportPolicy
     })
-
-    // 创建 ADB 通道 (主动创建)
-    adbChannel = pc.createDataChannel('adb-channel', { ordered: true })
-    adbChannel.binaryType = 'arraybuffer' // 必须设置为 arraybuffer 以支持二进制流
-    setupAdbChannel(adbChannel)
 
     // 创建 File 通道 (主动创建)
     fileChannel = pc.createDataChannel('file-channel', { ordered: true })
@@ -997,32 +1006,105 @@ function handleDeviceMessage(payload) {
     }
   }
 
-  function setupAdbChannel(channel) {
-    channel.onopen = () => {
-      debugLog('[ADB] DataChannel OPEN')
-      if (adbSendQueue.length > 0) {
-        debugLog(`[ADB] Flushing ${adbSendQueue.length} queued send packets`)
-        adbSendQueue.forEach(buf => {
-          if (channel.readyState === 'open') {
+  function createAdbSessionChannel() {
+    if (!pc || pc.readyState === 'closed') {
+      throw new Error('WebRTC connection not ready')
+    }
+    debugLog('[ADB] Creating a new session DataChannel...')
+    const channel = pc.createDataChannel('adb-channel', { ordered: true })
+    channel.binaryType = 'arraybuffer'
+
+    let channelLastOpenTime = 0
+    let stabilizeTimer = null
+    let sendQueue = []
+
+    const flushQueue = () => {
+      if (sendQueue.length > 0 && channel.readyState === 'open') {
+        debugLog(`[ADB] Flushing ${sendQueue.length} queued send packets`)
+        sendQueue.forEach(buf => {
+          try {
             channel.send(buf)
+          } catch (e) {
+            console.error('[ADB] Failed to send buffered data:', e)
           }
         })
-        adbSendQueue = []
+        sendQueue = []
       }
     }
-    channel.onmessage = (evt) => {
-      // console.log('[ADB] DataChannel Message Received:', evt.data.byteLength, 'bytes')
-      if (adbDataCallback) {
-        adbDataCallback(evt.data)
-      } else {
-        debugLog('[ADB] Buffering data packet:', evt.data.byteLength, 'bytes')
-        adbDataBuffer.push(evt.data)
+
+    channel.onopen = () => {
+      debugLog('[ADB] Session DataChannel OPEN')
+      channelLastOpenTime = Date.now()
+      if (!stabilizeTimer) {
+        stabilizeTimer = setTimeout(() => {
+          flushQueue()
+          stabilizeTimer = null
+        }, 150)
       }
     }
+
     channel.onclose = () => {
-      debugLog('[ADB] DataChannel CLOSED')
+      debugLog('[ADB] Session DataChannel CLOSED')
+      if (stabilizeTimer) {
+        clearTimeout(stabilizeTimer)
+        stabilizeTimer = null
+      }
     }
-    channel.onerror = (e) => console.error('[ADB] DataChannel Error:', e)
+
+    channel.onerror = (e) => {
+      console.error('[ADB] Session DataChannel Error:', e)
+      if (stabilizeTimer) {
+        clearTimeout(stabilizeTimer)
+        stabilizeTimer = null
+      }
+    }
+
+    const sendData = (data) => {
+      let buffer = null
+      if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
+        buffer = data
+      } else if (data && data.buffer instanceof ArrayBuffer) {
+        buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+      } else {
+        return
+      }
+
+      const now = Date.now()
+      const isStabilized = (now - channelLastOpenTime) > 150
+
+      if (channel.readyState === 'open' && isStabilized) {
+        try {
+          channel.send(buffer)
+        } catch (e) {
+          console.error('[ADB] Send data failed, buffering instead:', e)
+          sendQueue.push(buffer)
+        }
+      } else {
+        sendQueue.push(buffer)
+        if (channel.readyState === 'open' && !stabilizeTimer) {
+          stabilizeTimer = setTimeout(() => {
+            flushQueue()
+            stabilizeTimer = null
+          }, 150)
+        }
+      }
+    }
+
+    return {
+      channel,
+      sendData,
+      close: () => {
+        debugLog('[ADB] Closing session DataChannel')
+        try {
+          channel.close()
+        } catch (e) {}
+        if (stabilizeTimer) {
+          clearTimeout(stabilizeTimer)
+          stabilizeTimer = null
+        }
+        sendQueue = []
+      }
+    }
   }
 
   let fileChannel = null
@@ -1076,66 +1158,6 @@ function handleDeviceMessage(payload) {
 
   function getFileChannelBufferedAmount() {
     return fileChannel ? fileChannel.bufferedAmount : 0
-  }
-
-  let adbDataCallback = null
-  let adbDataBuffer = [] // 数据缓冲区
-
-  function onAdbData(callback) {
-    adbDataCallback = callback
-    if (!callback) {
-      adbDataBuffer = [] // 如果清空回调，也清空缓冲区
-      return
-    }
-    // 立即处理缓冲中的数据
-    if (adbDataBuffer.length > 0) {
-      debugLog(`[ADB] Flushing ${adbDataBuffer.length} buffered packets`)
-      adbDataBuffer.forEach(data => callback(data))
-      adbDataBuffer = []
-    }
-  }
-
-  function sendAdbData(data) {
-    let buffer = null
-    if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
-      buffer = data
-    } else if (data && data.buffer instanceof ArrayBuffer) {
-      buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-    } else {
-      console.error('[ADB] Fatal: sendAdbData received non-binary object, blocking send:', data)
-      return
-    }
-
-    if (adbChannel && adbChannel.readyState === 'open') {
-      adbChannel.send(buffer)
-    } else {
-      debugLog('[ADB] DataChannel not open yet, buffering send packet:', buffer.byteLength || buffer.length || 0)
-      adbSendQueue.push(buffer)
-    }
-  }
-
-  function closeAdbChannel() {
-    if (adbChannel) {
-      debugLog('[ADB] Closing adb-channel DataChannel...')
-      try {
-        adbChannel.close()
-      } catch (e) {
-        console.error('[ADB] Failed to close DataChannel:', e)
-      }
-      adbChannel = null
-    }
-    adbSendQueue = []
-    adbDataBuffer = []
-  }
-
-  function recreateAdbChannel() {
-    closeAdbChannel()
-    if (pc && pc.readyState !== 'closed') {
-      debugLog('[ADB] Recreating adb-channel DataChannel...')
-      adbChannel = pc.createDataChannel('adb-channel', { ordered: true })
-      adbChannel.binaryType = 'arraybuffer'
-      setupAdbChannel(adbChannel)
-    }
   }
 
   async function startCameraStreaming() {
@@ -1246,6 +1268,13 @@ function handleDeviceMessage(payload) {
     fileChannelReady.value = false
     status.value = 'disconnected'
     adbSendQueue = []
+
+    if (webrtcObj) {
+      webrtcObj._adbInstance = null
+      webrtcObj._adbTransport = null
+      webrtcObj._adbRawConnection = null
+      webrtcObj._adbActiveSocketsCount = 0
+    }
   }
 
   onUnmounted(() => {
@@ -1300,7 +1329,7 @@ function handleDeviceMessage(payload) {
     controlEventCallback = cb
   }
 
-  return {
+  webrtcObj = {
     status,
     onControlEvent,
     error,
@@ -1317,10 +1346,8 @@ function handleDeviceMessage(payload) {
     sendCommand,
     executeCommand,
     onCommandResult,
-    onAdbData,
-    sendAdbData,
-    closeAdbChannel,
-    recreateAdbChannel,
+    sendInjectData,
+    createAdbSessionChannel,
     getVideoStats,
     resetStats,
     setAudioMuted,
@@ -1336,4 +1363,6 @@ function handleDeviceMessage(payload) {
     sendFileChannelChunk,
     getFileChannelBufferedAmount
   }
+
+  return webrtcObj
 }

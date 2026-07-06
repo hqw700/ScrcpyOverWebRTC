@@ -77,27 +77,10 @@
               <small class="hint">固定网络开销码率，默认：4 Mbps</small>
             </div>
 
-            <div class="form-group form-group-row">
-              <div class="group-info">
-                <label>显示连接状态栏</label>
-                <small class="hint">在视频画面左上角显示连接质量与统计信息</small>
-              </div>
-              <div class="toggle-switch">
-                <input type="checkbox" id="show-stats-toggle" v-model="localSettings.showStats" />
-                <label for="show-stats-toggle"></label>
-              </div>
-            </div>
-
-            <div class="form-group form-group-row">
-              <div class="group-info">
-                <label>开启摄像头注入</label>
-                <small class="hint" v-if="cameraSupport">获取浏览器摄像头并透传给云手机</small>
-                <small class="hint" v-else style="color: #f85149;">⚠️ 该虚拟机未部署 Camera HAL，不支持摄像头透传</small>
-              </div>
-              <div class="toggle-switch">
-                <input type="checkbox" id="camera-toggle" v-model="localSettings.camera" :disabled="!cameraSupport" />
-                <label for="camera-toggle"></label>
-              </div>
+            <div class="form-group">
+              <label>编码器参数 (video_codec_options)</label>
+              <input type="text" v-model="localSettings.videoCodecOptions" placeholder="例如: intra-refresh-period=30,i-frame-interval=2" />
+              <small class="hint">用于控制 scrcpy 视频流的编码量化参数，留空则由 Agent 默认决定</small>
             </div>
           </div>
 
@@ -124,6 +107,12 @@
                 <option value="webcodecs">WebCodecs 硬件解码 (更省 CPU/电量)</option>
               </select>
               <small class="hint">WebCodecs 支持硬件加速但有实例数限制，WASM 兼容性更广泛</small>
+            </div>
+
+            <div class="form-group">
+              <label>预览固定画面码率 (Preview Bitrate - Mbps)</label>
+              <input type="number" v-model.number="localSettings.previewBitrate" min="0.1" step="0.1" />
+              <small class="hint">默认 1 Mbps。控制大盘预览流的编码网络开销，推荐 0.5 ~ 2 Mbps</small>
             </div>
 
             <div class="form-group-divider">待机缩略图</div>
@@ -222,12 +211,6 @@
               </div>
             </div>
 
-            <div class="form-group">
-              <label>编码器参数 (video_codec_options)</label>
-              <input type="text" v-model="localSettings.videoCodecOptions" placeholder="例如: intra-refresh-period=30,i-frame-interval=2" />
-              <small class="hint">用于控制 scrcpy 视频流的编码量化参数，留空则由 Agent 默认决定</small>
-            </div>
-
             <div class="form-group form-group-row">
               <div class="group-info">
                 <label>开启 Agent 调试日志</label>
@@ -236,6 +219,29 @@
               <div class="toggle-switch">
                 <input type="checkbox" id="debug-toggle" v-model="localSettings.debug" />
                 <label for="debug-toggle"></label>
+              </div>
+            </div>
+
+            <div class="form-group form-group-row">
+              <div class="group-info">
+                <label>显示连接状态栏</label>
+                <small class="hint">在视频画面左上角显示连接质量与统计信息</small>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="show-stats-toggle" v-model="localSettings.showStats" />
+                <label for="show-stats-toggle"></label>
+              </div>
+            </div>
+
+            <div class="form-group form-group-row">
+              <div class="group-info">
+                <label>开启摄像头注入</label>
+                <small class="hint" v-if="cameraSupport">获取浏览器摄像头并透传给云手机</small>
+                <small class="hint" v-else style="color: #f85149;">⚠️ 该虚拟机未部署 Camera HAL，不支持摄像头透传</small>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="camera-toggle" v-model="localSettings.camera" :disabled="!cameraSupport" />
+                <label for="camera-toggle"></label>
               </div>
             </div>
           </div>

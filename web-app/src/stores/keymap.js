@@ -6,27 +6,7 @@ const DEFAULT_CONFIG = {
     {
       id: 'default',
       name: 'Default Profile',
-      mappings: [
-        {
-          id: 'm_1',
-          type: 'tap',
-          key: 'q',
-          pos: { x: 0.5, y: 0.5 } // Center of the screen
-        },
-        {
-          id: 'm_2',
-          type: 'command',
-          key: 'escape',
-          cmd: 'input keyevent 4' // BACK
-        },
-        {
-          id: 'm_3',
-          type: 'joystick',
-          keys: { up: 'w', down: 's', left: 'a', right: 'd' },
-          center: { x: 0.20, y: 0.75 },
-          radius: 0.10
-        }
-      ]
+      mappings: []
     }
   ]
 }
@@ -38,6 +18,12 @@ export const useKeymapStore = defineStore('keymap', {
       const stored = localStorage.getItem('cloudphone_keymap')
       if (stored) {
         data = JSON.parse(stored)
+        // 自动将默认 default 配置清空 mappings (如果包含系统预置的 'm_1'/'m_2'/'m_3')
+        const defProfile = data.profiles?.find(p => p.id === 'default')
+        if (defProfile && defProfile.mappings && defProfile.mappings.some(m => m.id === 'm_1' || m.id === 'm_2' || m.id === 'm_3')) {
+          defProfile.mappings = []
+          localStorage.setItem('cloudphone_keymap', JSON.stringify(data))
+        }
       }
     } catch (e) {
       console.warn('Failed to load keymap config', e)

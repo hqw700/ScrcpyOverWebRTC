@@ -1,5 +1,11 @@
 <template>
-  <div class="device-card" ref="cardElement" :data-device-id="device.id" @click="onCardClick">
+  <div 
+    class="device-card" 
+    ref="cardElement" 
+    :data-device-id="device.id" 
+    :class="{ 'is-interactive-mode': deviceStore.globalInteractiveMode && device.status === 'online' }"
+    @click="onCardClick"
+  >
     <div class="preview-area" :class="{ 'is-landscape': isLandscape }">
       <!-- 展示快照或占位图 -->
       <img v-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" />
@@ -13,6 +19,38 @@
         class="snapshot-img"
         :class="{ 'is-landscape': isLandscape }"
       ></canvas>
+      <!-- 预览直控覆盖交互层 -->
+      <div
+        v-if="deviceStore.globalInteractiveMode && device.status === 'online'"
+        class="interactive-overlay"
+        tabindex="0"
+        @pointerdown.stop="handlePointerDown"
+        @pointermove.stop="handlePointerMove"
+        @pointerup.stop="handlePointerUp"
+        @pointerleave.stop="handlePointerLeave"
+        @wheel.stop="handleWheel"
+        @keydown.stop.prevent="handleKeyDown"
+        @click.stop
+      >
+        <!-- 悬浮毛玻璃虚拟按键栏 -->
+        <div class="virtual-navbar" @pointerdown.stop @pointerup.stop @click.stop>
+          <button class="nav-btn connect-btn" @click="emit('connect', device.id)" title="进入详情控制">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </button>
+          <button class="nav-btn" @click="sendKey(4)" title="返回 (BACK)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button class="nav-btn" @click="sendKey(3)" title="主页 (HOME)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+          <button class="nav-btn" @click="sendKey(187)" title="最近任务 (RECENTS)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+          </button>
+        </div>
+        
+        <!-- 聚焦时中央的淡雅提示 -->
+        <div class="focus-indicator">⌨️ 输入已锁定</div>
+      </div>
       <!-- 群控主控制遮罩（大字号+半透明） -->
       <div v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-full-overlay">
         <span class="master-full-text">主控</span>
@@ -33,7 +71,7 @@
       </div>
       <!-- 隐藏的预加载图片 -->
       <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
-      <div class="overlay">
+      <div class="overlay" v-if="!deviceStore.globalInteractiveMode">
         <span class="play-hint">点击进入控制</span>
       </div>
       <!-- 悬浮页脚 -->
@@ -115,7 +153,29 @@ const emit = defineEmits(['connect', 'settings', 'edit-tags'])
 const deviceStore = useDeviceStore()
 const groupControlStore = useGroupControlStore()
 const showMenu = ref(false)
-const isLandscape = ref(false)
+const imgLoaded = ref(false)
+
+const isLandscape = computed(() => {
+  // 建立响应式依赖
+  const loaded = imgLoaded.value
+  
+  const canvas = previewCanvas.value
+  // 只有当高频预览处于活动状态，并且首帧已经成功渲染（即 Canvas 已经被赋予了实际图像大小，排排除默认 300x150 大小的影响）时，才采用 Canvas 的高宽判断
+  if (isPreviewActive.value && isFirstFrameRendered.value && canvas && canvas.width && canvas.height) {
+    return canvas.width > canvas.height
+  }
+  
+  const img = cardElement.value?.querySelector('.snapshot-img:not(canvas)')
+  if (img && img.naturalWidth && img.naturalHeight) {
+    return img.naturalWidth > img.naturalHeight
+  }
+  
+  const display = props.device.info?.displays?.[0]
+  if (display && display.x_res && display.y_res) {
+    return display.x_res > display.y_res
+  }
+  return false
+})
 
 function onSlaveCheckboxChange() {
   groupControlStore.toggleSlave(props.device.id)
@@ -125,6 +185,7 @@ const currentSnapshot = ref(props.device.snapshot || '')
 const nextSnapshotUrl = ref('')
 const isPreviewActive = ref(false)
 const hasReceivedKeyFrame = ref(false)
+const isFirstFrameRendered = ref(false)
 const previewCanvas = ref(null)
 const cardElement = ref(null)
 
@@ -149,12 +210,7 @@ function onNextSnapshotLoaded() {
 }
 
 function onImageLoad(event) {
-  const img = event.target
-  if (img.naturalWidth > img.naturalHeight) {
-    isLandscape.value = true
-  } else {
-    isLandscape.value = false
-  }
+  imgLoaded.value = true
 }
 
 const statusClass = computed(() => {
@@ -290,6 +346,7 @@ function initDecoder(decoderMode) {
         }
         ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height)
         frame.close() // 必须立刻关闭，释放显存
+        isFirstFrameRendered.value = true
       },
       error: (e) => {
         console.error(`[WebCodecs] Decoder error for ${props.device.id}:`, e)
@@ -495,6 +552,7 @@ function feedFrame(nalu, isKey, ptsUs, decoderMode) {
         const canvas = previewCanvas.value
         if (canvas) {
           renderYUV(canvas, h264Decoder.pic, h264Decoder.width, h264Decoder.height)
+          isFirstFrameRendered.value = true
         }
       }
     } catch (err) {
@@ -513,6 +571,7 @@ function startPreviewFlow() {
   const settings = getDeviceSettings(props.device.id)
   const fps = settings.previewFps || 10
   const maxSize = settings.previewSize || 360
+  const bitrate = settings.previewBitrate || 1
   const decoderMode = settings.previewDecoder || 'wasm'
   
   initDecoder(decoderMode)
@@ -522,13 +581,14 @@ function startPreviewFlow() {
     feedFrame(nalu, isKey, ptsUs, decoderMode)
   })
   
-  // 发送 start_preview 控制指令，带上定制的 fps 和 maxSize
-  deviceStore.sendPreviewControl('start_preview', props.device.id, fps, maxSize)
+  // 发送 start_preview 控制指令，带上定制的 fps, maxSize 和 bitrate
+  deviceStore.sendPreviewControl('start_preview', props.device.id, fps, maxSize, bitrate)
 }
 
 function stopPreviewFlow() {
   isPreviewActive.value = false
   hasReceivedKeyFrame.value = false
+  isFirstFrameRendered.value = false
   
   // 注销回调
   deviceStore.unregisterPreviewCallback(props.device.id)
@@ -649,6 +709,247 @@ onUnmounted(() => {
     stopPreviewFlow()
   }
 })
+
+// --- 预览直控交互逻辑 ---
+const CONTROL_KEY_MAP = {
+  'Backspace': 67,
+  'Enter': 66,
+  'Escape': 111,
+  'ArrowUp': 19,
+  'ArrowDown': 20,
+  'ArrowLeft': 21,
+  'ArrowRight': 22,
+  'Space': 62,
+  ' ': 62
+}
+
+let isPointerDown = false
+let touchSeq = 0
+let lastMoveSentTs = 0
+let lastMoveSentX = -999
+let lastMoveSentY = -999
+const THROTTLE_INTERVAL_MS = 25
+const MOVE_DISTANCE_THRESHOLD_SQ = 16 // 4px^2
+
+const getAbsoluteCoords = (e) => {
+  const canvas = previewCanvas.value
+  const img = cardElement.value?.querySelector('.snapshot-img')
+  const target = (canvas && isPreviewActive.value) ? canvas : (img || e.currentTarget)
+
+  const rect = target.getBoundingClientRect()
+  const clientX = e.clientX - rect.left
+  const clientY = e.clientY - rect.top
+  
+  const display = props.device.info?.displays?.[0]
+  const rawW = display?.x_res || 1080
+  const rawH = display?.y_res || 1920
+  
+  // 判定逻辑分辨率（横屏模式下，物理高宽必须互换）
+  const videoW = isLandscape.value ? Math.max(rawW, rawH) : Math.min(rawW, rawH)
+  const videoH = isLandscape.value ? Math.min(rawW, rawH) : Math.max(rawW, rawH)
+  
+  const clientW = rect.width
+  const clientH = rect.height
+  
+  // 考虑 object-fit: contain 下的真正渲染高宽及黑边偏移量
+  // 如果是横屏（isLandscape.value = true），图像在 CSS 中被旋转了 90 度
+  // 等于说在网页上展现的高宽比其实是 videoH / videoW
+  const videoRatio = isLandscape.value ? (videoH / videoW) : (videoW / videoH)
+  const clientRatio = clientW / clientH
+  
+  let actualW, actualH, offsetX, offsetY
+  if (clientRatio > videoRatio) {
+    // 左右有黑边 (Pillarbox)
+    actualH = clientH
+    actualW = clientH * videoRatio
+    offsetX = (clientW - actualW) / 2
+    offsetY = 0
+  } else {
+    // 上下有黑边 (Letterbox)
+    actualW = clientW
+    actualH = clientW / videoRatio
+    offsetX = 0
+    offsetY = (clientH - actualH) / 2
+  }
+  
+  // 相对真正视频画面的坐标位置
+  const relativeX = clientX - offsetX
+  const relativeY = clientY - offsetY
+  
+  const normX = Math.max(0, Math.min(1, relativeX / actualW))
+  const normY = Math.max(0, Math.min(1, relativeY / actualH))
+  
+  let result = null
+  if (isLandscape.value) { // 顺时针旋转 90 度
+    const origNormX = normY
+    const origNormY = 1 - normX
+    
+    result = {
+      x: Math.round(origNormX * videoW),
+      y: Math.round(origNormY * videoH),
+      w: videoW,
+      h: videoH,
+      isRotated: true
+    }
+  } else { // 正常竖屏
+    result = {
+      x: Math.round(normX * videoW),
+      y: Math.round(normY * videoH),
+      w: videoW,
+      h: videoH,
+      isRotated: false
+    }
+  }
+
+  console.log(`[DirectControl Debug] [${props.device.id}] Coordinates Calc:`, {
+    isLandscape: isLandscape.value,
+    clientX: e.clientX,
+    clientY: e.clientY,
+    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    relativeClick: { clientX, clientY },
+    videoContentBounds: { actualW, actualH, offsetX, offsetY },
+    normalized: { normX, normY },
+    rawResolution: { rawW, rawH },
+    videoResolution: { videoW, videoH },
+    computedCoords: result,
+    displaysInfo: display
+  })
+
+  return result
+}
+
+const sendDeviceControl = (payload) => {
+  if (payload.type === 'touch' && payload.action !== 2) { // 过滤高频 Move，仅对 Down / Up 输出
+    console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
+  } else if (payload.type !== 'touch') {
+    console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
+  }
+  deviceStore.sendGroupControlEvent([props.device.id], payload)
+}
+
+const handlePointerDown = (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  isPointerDown = true
+  e.currentTarget.setPointerCapture(e.pointerId)
+  
+  // 点击时聚焦，使得可以接收按键事件
+  e.currentTarget.focus()
+  
+  const coords = getAbsoluteCoords(e)
+  if (coords) {
+    touchSeq++
+    lastMoveSentTs = 0
+    lastMoveSentX = coords.x
+    lastMoveSentY = coords.y
+    
+    sendDeviceControl({
+      type: 'touch',
+      action: 0, // DOWN
+      x: coords.x,
+      y: coords.y,
+      w: coords.w,
+      h: coords.h,
+      id: e.pointerId,
+      seq: touchSeq,
+      client_ts_ms: Date.now()
+    })
+  }
+}
+
+const handlePointerMove = (e) => {
+  if (!isPointerDown) return
+  const coords = getAbsoluteCoords(e)
+  if (!coords) return
+  
+  const now = Date.now()
+  const dx = coords.x - lastMoveSentX
+  const dy = coords.y - lastMoveSentY
+  const distSq = dx * dx + dy * dy
+  
+  if (now - lastMoveSentTs < THROTTLE_INTERVAL_MS && distSq < MOVE_DISTANCE_THRESHOLD_SQ) {
+    return
+  }
+  
+  lastMoveSentTs = now
+  lastMoveSentX = coords.x
+  lastMoveSentY = coords.y
+  
+  sendDeviceControl({
+    type: 'touch',
+    action: 2, // MOVE
+    x: coords.x,
+    y: coords.y,
+    w: coords.w,
+    h: coords.h,
+    id: e.pointerId,
+    seq: ++touchSeq,
+    client_ts_ms: now
+  })
+}
+
+const handlePointerUp = (e) => {
+  if (!isPointerDown) return
+  isPointerDown = false
+  try {
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  } catch (err) {}
+  
+  const coords = getAbsoluteCoords(e)
+  if (coords) {
+    lastMoveSentTs = 0
+    sendDeviceControl({
+      type: 'touch',
+      action: 1, // UP
+      x: coords.x,
+      y: coords.y,
+      w: coords.w,
+      h: coords.h,
+      id: e.pointerId,
+      seq: ++touchSeq,
+      client_ts_ms: Date.now()
+    })
+  }
+}
+
+const handlePointerLeave = (e) => {
+  if (isPointerDown) {
+    handlePointerUp(e)
+  }
+}
+
+const handleWheel = (e) => {
+  const coords = getAbsoluteCoords(e)
+  if (coords) {
+    sendDeviceControl({
+      type: 'inject_scroll',
+      x: coords.x,
+      y: coords.y,
+      w: coords.w,
+      h: coords.h,
+      scroll_h: e.deltaX > 0 ? 1 : (e.deltaX < 0 ? -1 : 0),
+      scroll_v: e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0),
+      seq: ++touchSeq,
+      client_ts_ms: Date.now()
+    })
+  }
+}
+
+const handleKeyDown = (e) => {
+  const androidCode = CONTROL_KEY_MAP[e.key]
+  if (androidCode !== undefined) {
+    sendDeviceControl({ type: 'inject_keycode', action: 0, keycode: androidCode })
+    setTimeout(() => {
+      sendDeviceControl({ type: 'inject_keycode', action: 1, keycode: androidCode })
+    }, 50)
+  }
+}
+
+const sendKey = (keycode) => {
+  sendDeviceControl({ type: 'inject_keycode', action: 0, keycode })
+  setTimeout(() => {
+    sendDeviceControl({ type: 'inject_keycode', action: 1, keycode })
+  }, 50)
+}
 </script>
 
 <style scoped>
@@ -1023,5 +1324,118 @@ onUnmounted(() => {
   border-radius: 4px;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(255, 159, 67, 0.4);
+}
+
+/* 预览直控相关样式 */
+.device-card.is-interactive-mode {
+  border-color: rgba(56, 139, 253, 0.4);
+  box-shadow: 0 0 10px rgba(56, 139, 253, 0.15);
+  animation: pulse-border 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.15); }
+  50% { box-shadow: 0 0 14px rgba(56, 139, 253, 0.4); border-color: rgba(56, 139, 253, 0.7); }
+  100% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.15); }
+}
+
+.interactive-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  cursor: crosshair;
+  background: transparent;
+  outline: none;
+}
+
+.interactive-overlay:focus {
+  background: rgba(56, 139, 253, 0.03);
+  box-shadow: inset 0 0 0 2px #388bfd;
+}
+
+/* 浮动虚拟按键栏 */
+.virtual-navbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  display: flex;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(22, 27, 34, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 25;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.interactive-overlay:hover .virtual-navbar,
+.interactive-overlay:focus-within .virtual-navbar {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.nav-btn.connect-btn:hover {
+  background: #388bfd;
+  color: #ffffff;
+}
+
+.nav-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 键盘锁定指示器 */
+.focus-indicator {
+  position: absolute;
+  bottom: 50px;
+  left: 50%;
+  transform: translate(-50%, 10px);
+  background: rgba(35, 134, 54, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  opacity: 0;
+  transition: all 0.25s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.interactive-overlay:focus .focus-indicator {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 </style>

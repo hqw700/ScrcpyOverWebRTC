@@ -42,6 +42,22 @@
           </label>
         </div>
 
+        <div class="preview-mode-switch">
+          <label 
+            class="switch-label" 
+            :class="{ 'disabled': !deviceStore.globalPreviewMode }" 
+            title="开启后，可直接点击列表里的预览画面进行触控和按键控制，无需进入详情页 (需要先开启高频预览)"
+          >
+            <input
+              type="checkbox"
+              v-model="deviceStore.globalInteractiveMode"
+              :disabled="!deviceStore.globalPreviewMode"
+              class="switch-checkbox"
+            >
+            <span class="switch-text">预览直控</span>
+          </label>
+        </div>
+
         <!-- 群控快捷工具栏 -->
         <div v-if="groupControlStore.isGroupControlActive" class="group-quick-actions animate-fade-in">
           <span class="group-mode-badge">群控主控: {{ groupControlStore.masterId }}</span>
@@ -320,6 +336,12 @@ onUnmounted(() => {
   window.removeEventListener('click', closeTagDropdownMenu)
 })
 
+watch(() => deviceStore.globalPreviewMode, (newVal) => {
+  if (!newVal) {
+    deviceStore.globalInteractiveMode = false
+  }
+})
+
 watch(cardSize, (newVal) => {
   localStorage.setItem('cloudphone_card_size', newVal.toString())
 })
@@ -435,11 +457,53 @@ const signalingProtocol = computed(() => {
   return window.location.protocol === 'https:' ? 'wss://' : 'ws://'
 })
 
+const fetchedIceServers = ref('')
+
 const computedIceServers = computed(() => {
+  if (fetchedIceServers.value) {
+    return fetchedIceServers.value
+  }
   const host = quickstartSignaling.value || window.location.host
   const ip = host.split(':')[0] || '127.0.0.1'
   return `turn:cloudphone_user:cloudphone_secure_password@${ip}:3478?transport=udp,stun:${ip}:3478`
 })
+
+// 格式化后端返回的 ICE Servers 数组为逗号分隔的参数格式
+function formatIceServers(servers) {
+  if (!Array.isArray(servers)) return ''
+  const result = []
+  servers.forEach(srv => {
+    if (!srv.urls || !Array.isArray(srv.urls)) return
+    srv.urls.forEach(url => {
+      if ((url.startsWith('turn:') || url.startsWith('turns:')) && srv.username) {
+        const prefix = url.startsWith('turn:') ? 'turn:' : 'turns:'
+        const hostPart = url.substring(prefix.length)
+        result.push(`${prefix}${srv.username}:${srv.credential || ''}@${hostPart}`)
+      } else {
+        result.push(url)
+      }
+    })
+  })
+  return result.join(',')
+}
+
+// 从后端接口动态拉取已配置的 ICE 服务器列表
+async function fetchIceServers() {
+  try {
+    const res = await fetch('/api/ice_servers')
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        const formatted = formatIceServers(data)
+        if (formatted) {
+          fetchedIceServers.value = formatted
+        }
+      }
+    }
+  } catch (err) {
+    console.error('获取 ICE Servers 失败:', err)
+  }
+}
 
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => {
@@ -464,13 +528,14 @@ function toggleSelectedTag(tagId) {
   tagStore.toggleSelectedTag(tagId)
 }
 
-onMounted(() => {
+onMounted(async () => {
   quickstartSignaling.value = window.location.host
   deviceStore.fetchDevices()
   refreshInterval = setInterval(() => {
     deviceStore.fetchDevices()
   }, 10000)
   window.addEventListener('cloudphone-open-tag-manager', handleOpenTagManagerEvent)
+  await fetchIceServers()
 })
 
 onUnmounted(() => {
@@ -644,6 +709,15 @@ function handleOpenTagManagerEvent() {
   gap: 8px;
   cursor: pointer;
   user-select: none;
+}
+
+.switch-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch-label.disabled .switch-checkbox {
+  cursor: not-allowed;
 }
 
 .switch-checkbox {

@@ -515,7 +515,7 @@ function saveEdit() {
 .keymap-editor {
   position: absolute;
   inset: 0;
-  z-index: 1000;
+  z-index: 2500;
   pointer-events: none; /* 提示模式下不阻挡点击 */
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -541,7 +541,7 @@ function saveEdit() {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-  z-index: 1001;
+  z-index: 2501;
   min-width: 320px;
 }
 
@@ -690,7 +690,7 @@ function saveEdit() {
 .keymap-overlay {
   position: absolute;
   inset: 0;
-  z-index: 1000;
+  z-index: 2500;
 }
 
 /* 视频实际区域指示器 (虚线框) */
@@ -847,7 +847,7 @@ function saveEdit() {
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   padding: 12px 16px;
-  z-index: 1002;
+  z-index: 2502;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
 }
 

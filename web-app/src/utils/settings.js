@@ -21,7 +21,8 @@ export const defaultSettings = {
   camera: false,
   previewFps: 10,
   previewSize: 360,
-  previewDecoder: 'wasm'
+  previewDecoder: 'wasm',
+  previewBitrate: 1
 }
 
 function parseSettings(parsed) {
@@ -30,6 +31,9 @@ function parseSettings(parsed) {
     parsed.bitrate = Math.max(1, Math.round(parsed.bitrate / 1000000))
     if (parsed.minBitrate > 1000) parsed.minBitrate = Math.max(1, Math.round(parsed.minBitrate / 1000000))
     if (parsed.maxBitrate > 1000) parsed.maxBitrate = Math.max(1, Math.round(parsed.maxBitrate / 1000000))
+  }
+  if (parsed.previewBitrate > 1000) {
+    parsed.previewBitrate = Math.max(1, Math.round(parsed.previewBitrate / 1000000))
   }
   if (parsed.audioGain === undefined) parsed.audioGain = defaultSettings.audioGain
   if (parsed.audioSource === undefined) parsed.audioSource = defaultSettings.audioSource
@@ -47,6 +51,7 @@ function parseSettings(parsed) {
   if (parsed.previewFps === undefined) parsed.previewFps = defaultSettings.previewFps
   if (parsed.previewSize === undefined) parsed.previewSize = defaultSettings.previewSize
   if (parsed.previewDecoder === undefined) parsed.previewDecoder = defaultSettings.previewDecoder
+  if (parsed.previewBitrate === undefined) parsed.previewBitrate = defaultSettings.previewBitrate
   return parsed
 }
 

@@ -96,10 +96,10 @@
         </div>
 
         <!-- 悬浮菜单展开时的全屏点击遮罩 -->
-        <div v-if="(isMobile || isFullscreen) && showMobileMenu" class="fab-overlay" @mousedown.stop.prevent="showMobileMenu = false" @touchstart.stop.prevent="showMobileMenu = false"></div>
+        <div v-if="(isMobile || isFullscreen || isWebFullscreen) && showMobileMenu" class="fab-overlay" @mousedown.stop.prevent="showMobileMenu = false" @touchstart.stop.prevent="showMobileMenu = false"></div>
 
         <!-- 手机端悬浮菜单 (移入视频容器内，保证全屏时可见) -->
-        <div v-if="isMobile || isFullscreen" class="mobile-fab-container" :style="fabStyle">
+        <div v-if="isMobile || isFullscreen || isWebFullscreen" class="mobile-fab-container" :style="fabStyle">
           <button class="mobile-fab-main" :class="{ 'active': showMobileMenu }"
             @mousedown="onFabStart" @mousemove="onFabMove" @mouseup="onFabEnd" @mouseleave="onFabEnd"
             @touchstart.prevent="onFabStart" @touchmove.prevent="onFabMove" @touchend.prevent="onFabEnd">
@@ -916,6 +916,12 @@ onMounted(() => {
   setupWebRTC()
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
+    if (isFullscreen.value) {
+      if (isWebFullscreen.value) {
+        document.body.classList.remove('web-fullscreen')
+        isWebFullscreen.value = false
+      }
+    }
   })
   document.addEventListener('keydown', onGlobalKeyDown)
   document.addEventListener('keyup', onGlobalKeyUp)
@@ -1070,6 +1076,11 @@ function retry() {
 
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
+    // 如果处于网页全屏，先退出网页全屏，避免样式污染系统全屏元素
+    if (isWebFullscreen.value) {
+      document.body.classList.remove('web-fullscreen')
+      isWebFullscreen.value = false
+    }
     containerRef.value?.requestFullscreen()
   } else {
     document.exitFullscreen()
@@ -1078,6 +1089,10 @@ function toggleFullscreen() {
 
 function toggleWebFullscreen() {
   if (!isWebFullscreen.value) {
+    // 如果处于系统全屏，先退出系统全屏
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    }
     document.body.classList.add('web-fullscreen')
     isWebFullscreen.value = true
   } else {

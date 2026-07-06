@@ -20,24 +20,22 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label">ICE Servers 地址</label>
+          <input
+            v-model="form.iceServers"
+            class="form-input"
+            placeholder="stun:stun.l.google.com:19302"
+          >
+          <div class="form-hint">自定义 ICE 服务器，多个以英文逗号分隔，如：stun:stun.l.google.com:19302,turn:user:pass@host:port</div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Device ID</label>
           <input
             v-model="form.deviceId"
             class="form-input"
             placeholder="留空自动生成"
           >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">最大帧率</label>
-          <select v-model="form.maxFps" class="form-input">
-            <option :value="0">不限制</option>
-            <option :value="15">15 FPS</option>
-            <option :value="30">30 FPS</option>
-            <option :value="60">60 FPS (推荐)</option>
-            <option :value="90">90 FPS</option>
-            <option :value="120">120 FPS</option>
-          </select>
         </div>
 
         <div class="form-group">
@@ -67,16 +65,6 @@
             class="form-input"
             placeholder="留空不设置，默认 50000端口"
           >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">ICE Servers 地址</label>
-          <input
-            v-model="form.iceServers"
-            class="form-input"
-            placeholder="stun:stun.l.google.com:19302"
-          >
-          <div class="form-hint">自定义 ICE 服务器，多个以英文逗号分隔，如：stun:stun.l.google.com:19302,turn:user:pass@host:port</div>
         </div>
 
         <button
@@ -198,7 +186,7 @@ const { isDeploying, deployStatus, deployProgress, deployError, deployLog, deplo
 const logArea = ref(null)
 
 const form = reactive({
-  signalingUrl: localStorage.getItem('signalingAddr') || '',
+  signalingUrl: '',
   deviceId: '',
   maxFps: 60,
   videoCodecOptions: '',
@@ -310,11 +298,54 @@ function copyCommand(text) {
   })
 }
 
-onMounted(() => {
-  if (!form.signalingUrl) {
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
-    form.signalingUrl = protocol + window.location.host
+// 格式化后端返回的 ICE Servers 数组为逗号分隔的参数格式
+function formatIceServers(servers) {
+  if (!Array.isArray(servers)) return ''
+  const result = []
+  servers.forEach(srv => {
+    if (!srv.urls || !Array.isArray(srv.urls)) return
+    srv.urls.forEach(url => {
+      if ((url.startsWith('turn:') || url.startsWith('turns:')) && srv.username) {
+        const prefix = url.startsWith('turn:') ? 'turn:' : 'turns:'
+        const hostPart = url.substring(prefix.length)
+        result.push(`${prefix}${srv.username}:${srv.credential || ''}@${hostPart}`)
+      } else {
+        result.push(url)
+      }
+    })
+  })
+  return result.join(',')
+}
+
+// 从后端接口动态拉取已配置的 ICE 服务器列表，自动填充默认值
+async function fetchIceServers() {
+  try {
+    const res = await fetch('/api/ice_servers')
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        const formatted = formatIceServers(data)
+        if (formatted) {
+          form.iceServers = formatted
+        }
+      }
+    }
+  } catch (err) {
+    console.error('获取 ICE Servers 失败:', err)
   }
+}
+
+onMounted(async () => {
+  // 强行跟随当前访问的服务器配置地址与协议，防止多网卡或者部署环境改变导致的缓存污染
+  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+  form.signalingUrl = protocol + window.location.host
+  
+  // 先自动填上基于当前域名的默认 ICE Server 地址，以保证输入框立即有值并实现兜底
+  const host = signalingIp.value
+  const ip = host.split(':')[0] || '127.0.0.1'
+  form.iceServers = `turn:cloudphone_user:cloudphone_secure_password@${ip}:3478?transport=udp,stun:${ip}:3478`
+
+  await fetchIceServers()
 })
 </script>
 

@@ -246,7 +246,7 @@ export const useDeviceStore = defineStore('devices', () => {
     previewCallbacks.delete(deviceId)
   }
 
-  function sendPreviewControl(action, deviceId, fps, maxSize, bitrate) {
+  function sendPreviewControl(action, deviceId, fps, maxSize, bitrate, stayAwake) {
     if (globalWs && globalWs.readyState === WebSocket.OPEN) {
       const payload = {
         message_type: action,
@@ -256,6 +256,7 @@ export const useDeviceStore = defineStore('devices', () => {
       if (fps !== undefined && fps > 0) payload.fps = fps
       if (maxSize !== undefined && maxSize > 0) payload.max_size = maxSize
       if (bitrate !== undefined && bitrate > 0) payload.bitrate = bitrate * 1000000
+      if (stayAwake !== undefined) payload.stay_awake = stayAwake
       globalWs.send(JSON.stringify(payload))
     }
   }

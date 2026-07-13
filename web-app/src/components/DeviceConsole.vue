@@ -394,6 +394,15 @@ const activeTab = ref('shell')
 const consoleLogs = ref([])
 const inputCmd = ref('')
 
+// 监听 AI Tab 的激活，在切换到 AI 时按需创建直连命令通道，不用时不占用资源
+watch(activeTab, (newTab) => {
+  if (newTab === 'ai') {
+    if (webrtc.value && typeof webrtc.value.createAiCommandChannel === 'function') {
+      webrtc.value.createAiCommandChannel()
+    }
+  }
+})
+
 // --- 批量 Shell 与单台整合状态 ---
 const batchShellSelectedIds = ref([])
 const targetDeviceIds = computed(() => [props.deviceId, ...batchShellSelectedIds.value])
@@ -486,7 +495,7 @@ const defaultSkills = [
   { name: '📶 网络链路分析', desc: '诊断 WebRTC 码率与往返时延', prompt: '请获取当前的 WebRTC 传输质量指标(get_webrtc_stats)，分析 FPS、延迟(RTT/JitterBuffer)状况并给出一份中文分析。' },
   { name: '🔍 分析异常崩溃', desc: '抓取 logcat 检索最近报错日志', prompt: '检索最近 100 行 logcat 错误日志，查找是否有进程崩溃或 Exception 报错并总结根源。' },
   { name: '🧹 清理系统空间', desc: '一键检索并清理系统无用缓存', prompt: '检查设备的磁盘存储空间。如果有可以清理的临时垃圾或缓存目录，请执行清理，并对比清理前后的空间容量变化。' },
-  { name: '🔧 诊断连接黑屏', desc: '一键分析连接、UDS 与网络拥塞', prompt: '请协助诊断连接黑屏问题。请读取 /data/local/tmp/cloudphone-agent.log 日志的最后 200 行，分析并检查以下几点：\n1. WebRTC 连接状态（Client state / ICEConnectionState）是否正常。\n2. UDS 三通道（Video/Control/Touch）是否已成功建立连接。\n3. CoreService 的退出代码及是否有 Exception 错误输出。\n4. 关键帧 Trace（KeyframeTrace）和 BWE 码率变化，排查是否受到 Clash 等代理软件的拦截或发生休眠息屏。\n最后用中文给出一份诊断结论和解决方案。' }
+  { name: '🔧 诊断连接与网络', desc: '一键分析连接、UDS 与网络拥塞', prompt: '请协助诊断连接失败、画面黑屏或无连接问题。请直接读取设备端 /data/local/tmp/cloudphone-agent.log 日志的最后 200 行，并重点诊断以下几点：\n1. 诊断启动参数：检查日志中是否存在 \"No external NAT mappings configured\"。如果有，说明 Agent 未配置外部 NAT 映射地址（启动参数 -external-addr 或环境变量 CP_AGENT_EXTERNAL_ADDR 缺失），导致跨网段/跨机器连接时物理网络阻断。\n2. 诊断网络环境：检查本端与对端上报的 ICE 候选者（Candidates）。分析设备端是否仅上报了 Docker 内置私有 IP (如 172.17.x.x)；检查本端客户端的 Host IP 中是否包含代理软件虚拟网关（如 Clash Tun 模式，常见 IP 为 198.18.x.x）导致连接流量被拦截。\n3. 检查 WebRTC 与 UDS 通道状态：分析 ICEConnectionState 的变化趋势，检查 UDS 三通道（Video/Control/Touch）是否正常 Dial 连通。\n4. 检查画面渲染状态：检查 CoreService 是否异常退出，分析 KeyframeTrace 里是否频繁出现 \"detail=no-control-conn\" 或 \"request-sync-frame skipped: no active codec\" 从而引发黑屏现象。\n最后请用专业明细的中文给出一份诊断报告和具体的修复建议。' }
 ]
 
 const getCustomSkills = () => {
@@ -1110,8 +1119,13 @@ You can execute real shell commands and collect details to troubleshoot network 
 Key requirements:
 1. First, call get_device_info to check the device environment if you need basic info.
 2. If the user complains about lag or WebRTC frozen, call get_webrtc_stats to diagnose Jitter Buffer (JB), RTT (network lag), and FPS. Explain recommendations to the user in Chinese.
-3. Be careful with command execution. Prefer safe, standard queries.
-4. Output your responses and summaries exclusively in Chinese (中文).
+3. Troubleshooting connection failures & blackscreen: If the user complains about connection timeout, failure, or blackscreen, you should directly inspect the Go agent logs located at '/data/local/tmp/cloudphone-agent.log' (e.g. by running 'su -c tail -n 200 /data/local/tmp/cloudphone-agent.log'). Specifically:
+   a. Check if "No external NAT mappings configured" is printed. If yes, it indicates the agent is missing the host NAT IP (-external-addr or CP_AGENT_EXTERNAL_ADDR), causing cross-device routing failure.
+   b. Inspect the ICE candidate IPs. Check if the device agent only bound local Docker private IPs (like 172.17.x.x) and if the client is using local proxy Tun modes (like Clash Tun 198.18.x.x) which blocks UDP connection checks.
+   c. Verify that UDS channels (Video, Control, Touch) are all connected successfully.
+   d. Check if CoreService exited unexpectedly, or if keyframe requests were skipped with reason "no-control-conn" or "no active codec" during initiation.
+4. Be careful with command execution. Prefer safe, standard queries.
+5. Output your responses and summaries exclusively in Chinese (中文).
 `
   }
 
@@ -1221,7 +1235,7 @@ async function executeAgentTool(name, args) {
     case 'execute_shell_command':
       if (!args.command) throw new Error('缺少 command 参数')
       logTrace('info', `[ADB Shell] 执行: "${args.command}"`)
-      const res = await webrtc.value.executeCommand(args.command)
+      const res = await webrtc.value.executeCommandP2P(args.command)
       return {
         exit_code: res.exit_code,
         stdout: res.stdout || '',

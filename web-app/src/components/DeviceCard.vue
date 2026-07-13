@@ -573,6 +573,7 @@ function startPreviewFlow() {
   const maxSize = settings.previewSize || 360
   const bitrate = settings.previewBitrate || 1
   const decoderMode = settings.previewDecoder || 'wasm'
+  const stayAwake = settings.stayAwake || false
   
   initDecoder(decoderMode)
   
@@ -581,8 +582,8 @@ function startPreviewFlow() {
     feedFrame(nalu, isKey, ptsUs, decoderMode)
   })
   
-  // 发送 start_preview 控制指令，带上定制的 fps, maxSize 和 bitrate
-  deviceStore.sendPreviewControl('start_preview', props.device.id, fps, maxSize, bitrate)
+  // 发送 start_preview 控制指令，带上定制的 fps, maxSize, bitrate 和 stayAwake
+  deviceStore.sendPreviewControl('start_preview', props.device.id, fps, maxSize, bitrate, stayAwake)
 }
 
 function stopPreviewFlow() {
@@ -670,11 +671,12 @@ watch(() => {
   return {
     fps: settings.previewFps,
     maxSize: settings.previewSize,
-    decoder: settings.previewDecoder
+    decoder: settings.previewDecoder,
+    stayAwake: settings.stayAwake
   }
 }, (newVal, oldVal) => {
   if (isPreviewActive.value) {
-    if (newVal.fps !== oldVal.fps || newVal.maxSize !== oldVal.maxSize || newVal.decoder !== oldVal.decoder) {
+    if (newVal.fps !== oldVal.fps || newVal.maxSize !== oldVal.maxSize || newVal.decoder !== oldVal.decoder || newVal.stayAwake !== oldVal.stayAwake) {
       console.log(`[PreviewSettings] Restarting preview flow for ${props.device.id} to apply new settings:`, newVal)
       stopPreviewFlow()
       startPreviewFlow()
@@ -849,7 +851,7 @@ const handlePointerDown = (e) => {
       y: coords.y,
       w: coords.w,
       h: coords.h,
-      id: e.pointerId,
+      id: e.pointerType === 'mouse' ? -1 : e.pointerId,
       seq: touchSeq,
       client_ts_ms: Date.now()
     })
@@ -881,7 +883,7 @@ const handlePointerMove = (e) => {
     y: coords.y,
     w: coords.w,
     h: coords.h,
-    id: e.pointerId,
+    id: e.pointerType === 'mouse' ? -1 : e.pointerId,
     seq: ++touchSeq,
     client_ts_ms: now
   })
@@ -904,7 +906,7 @@ const handlePointerUp = (e) => {
       y: coords.y,
       w: coords.w,
       h: coords.h,
-      id: e.pointerId,
+      id: e.pointerType === 'mouse' ? -1 : e.pointerId,
       seq: ++touchSeq,
       client_ts_ms: Date.now()
     })

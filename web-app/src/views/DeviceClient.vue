@@ -431,7 +431,8 @@ const scrcpyOptions = computed(() => {
     snapshot_interval: localSettings.value.snapshotInterval,
     power_off: localSettings.value.powerOff,
     video_codec_options: localSettings.value.videoCodecOptions,
-    camera: localSettings.value.camera
+    camera: localSettings.value.camera,
+    stay_awake: localSettings.value.stayAwake
   }
 })
 

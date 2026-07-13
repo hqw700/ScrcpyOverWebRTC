@@ -22,7 +22,8 @@ export const defaultSettings = {
   previewFps: 10,
   previewSize: 360,
   previewDecoder: 'wasm',
-  previewBitrate: 1
+  previewBitrate: 1,
+  stayAwake: false
 }
 
 function parseSettings(parsed) {
@@ -52,6 +53,7 @@ function parseSettings(parsed) {
   if (parsed.previewSize === undefined) parsed.previewSize = defaultSettings.previewSize
   if (parsed.previewDecoder === undefined) parsed.previewDecoder = defaultSettings.previewDecoder
   if (parsed.previewBitrate === undefined) parsed.previewBitrate = defaultSettings.previewBitrate
+  if (parsed.stayAwake === undefined) parsed.stayAwake = defaultSettings.stayAwake
   return parsed
 }
 

@@ -29,8 +29,14 @@ export function useWebRTC(deviceId, options = {}) {
   let controlEventCallback = null
 
   let cameraChannel = null
+
+  const localCandidates = []
+  const remoteCandidates = []
   let cameraStream = null
   let cameraIntervalId = null
+
+  let aiCommandChannel = null
+  const aiCommandPromises = new Map()
 
   function getOption(key, def) {
     try {
@@ -175,32 +181,9 @@ function handleDeviceMessage(payload) {
           return pc.setLocalDescription(newAnswer);
         })
         .then(() => {
-          // 等待 ICE 收集完成
-          let answerSent = false
-          const doSend = () => {
-            if (answerSent) return
-            answerSent = true
-            sendAnswer()
-          }
-
-          if (pc.iceGatheringState === 'complete') {
-            doSend()
-          } else {
-            let timeoutId = null
-            const checkIce = () => {
-              if (pc.iceGatheringState === 'complete') {
-                if (timeoutId) clearTimeout(timeoutId)
-                pc.removeEventListener('icegatheringstatechange', checkIce)
-                doSend()
-              }
-            }
-            pc.addEventListener('icegatheringstatechange', checkIce)
-            // 设置超时，防止等待过久
-            timeoutId = setTimeout(() => {
-              pc.removeEventListener('icegatheringstatechange', checkIce)
-              doSend()
-            }, 2000)
-          }
+          // 不再死等 ICE 收集完毕，直接发送 Answer 开启 Trickle ICE。
+          // 浏览器收集到的后续 ICE 候选者会自动通过 pc.onicecandidate 发送给对端。
+          sendAnswer()
           status.value = 'connecting_webrtc'
         })
         .catch(e => {
@@ -212,6 +195,7 @@ function handleDeviceMessage(payload) {
     case 'ice-candidate':
       if (pc && payload.candidate) {
         const candStr = payload.candidate.candidate
+        remoteCandidates.push(candStr)
         if (shouldKeepCandidate(candStr)) {
           debugLog('[WebRTC] Received remote ICE candidate (accepted):', candStr)
           pc.addIceCandidate(new RTCIceCandidate(payload.candidate))
@@ -278,6 +262,83 @@ function handleDeviceMessage(payload) {
         }
       }, timeoutMs)
       commandPromises.set(requestId, { resolve, reject, timer })
+    })
+  }
+
+  function createAiCommandChannel() {
+    if (!pc || pc.readyState === 'closed') {
+      debugWarn('[AI-Command] Cannot create command channel, WebRTC not ready')
+      return
+    }
+    if (aiCommandChannel && (aiCommandChannel.readyState === 'open' || aiCommandChannel.readyState === 'connecting')) {
+      return
+    }
+
+    debugLog('[AI-Command] Creating P2P command DataChannel...')
+    aiCommandChannel = pc.createDataChannel('ai-command-channel', { ordered: true })
+    aiCommandChannel.binaryType = 'arraybuffer'
+
+    aiCommandChannel.onopen = () => {
+      debugLog('[AI-Command] P2P command DataChannel OPEN')
+    }
+
+    aiCommandChannel.onclose = () => {
+      debugLog('[AI-Command] P2P command DataChannel CLOSED')
+    }
+
+    aiCommandChannel.onerror = (e) => {
+      console.warn('[AI-Command] P2P command DataChannel error:', e)
+    }
+
+    aiCommandChannel.onmessage = (evt) => {
+      try {
+        let dataStr = evt.data
+        if (evt.data instanceof ArrayBuffer) {
+          dataStr = new TextDecoder().decode(evt.data)
+        }
+        const res = JSON.parse(dataStr)
+        const reqId = res.request_id
+        if (reqId && aiCommandPromises.has(reqId)) {
+          const { resolve, timer } = aiCommandPromises.get(reqId)
+          clearTimeout(timer)
+          aiCommandPromises.delete(reqId)
+          resolve(res)
+        }
+      } catch (e) {
+        console.error('[AI-Command] Failed to parse P2P cmd result:', e)
+      }
+    }
+  }
+
+  function executeCommandP2P(command, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      if (!aiCommandChannel || aiCommandChannel.readyState !== 'open') {
+        debugWarn('[AI-Command] P2P command channel not open, falling back to signaling channel')
+        createAiCommandChannel()
+        resolve(executeCommand(command, timeoutMs))
+        return
+      }
+
+      const requestId = Math.random().toString(36).substring(7)
+      const timer = setTimeout(() => {
+        if (aiCommandPromises.has(requestId)) {
+          aiCommandPromises.delete(requestId)
+          reject(new Error(`P2P 命令执行超时 (${timeoutMs}ms)`))
+        }
+      }, timeoutMs)
+
+      aiCommandPromises.set(requestId, { resolve, reject, timer })
+      try {
+        aiCommandChannel.send(JSON.stringify({
+          request_id: requestId,
+          command: command
+        }))
+      } catch (e) {
+        clearTimeout(timer)
+        aiCommandPromises.delete(requestId)
+        console.warn('[AI-Command] Failed to send via P2P channel, falling back', e)
+        resolve(executeCommand(command, timeoutMs))
+      }
     })
   }
 
@@ -470,6 +531,9 @@ function handleDeviceMessage(payload) {
   function createPeerConnection() {
     if (pc) return
 
+    localCandidates.length = 0
+    remoteCandidates.length = 0
+
     const iceTransportPolicy = getOption('connectionPath', 'auto') === 'relay' ? 'relay' : 'all'
     debugLog('[WebRTC] Creating RTCPeerConnection with servers:', iceServers, 'policy:', iceTransportPolicy)
     pc = new RTCPeerConnection({
@@ -510,6 +574,7 @@ function handleDeviceMessage(payload) {
     pc.onicecandidate = (evt) => {
       if (evt.candidate) {
         const candStr = evt.candidate.candidate
+        localCandidates.push(candStr)
         if (shouldKeepCandidate(candStr)) {
           debugLog('[WebRTC] Sending local ICE candidate (accepted):', candStr)
           sendForward({
@@ -526,12 +591,55 @@ function handleDeviceMessage(payload) {
       }
     }
 
+    function diagnoseConnectionFailure() {
+      let advice = 'WebRTC 握手建连失败。建议检查：1. 确认设备端与本端网络是否在同一局域网；2. 若处于公网/跨网访问，请确认系统是否配置并开启了有效的 TURN 中转服务器。'
+      
+      const hasOnlyDockerOrLoopback = remoteCandidates.length > 0 && remoteCandidates.every(cand => {
+        const parts = cand.split(' ')
+        if (parts.length >= 5) {
+          const ip = parts[4]
+          return ip === '127.0.0.1' || ip.startsWith('172.17.') || ip.startsWith('172.18.') || ip.startsWith('172.16.') || ip.startsWith('172.19.') || ip.startsWith('172.20.') || ip.startsWith('172.30.')
+        }
+        return false
+      })
+
+      const clientHasPhysicalLanIp = localCandidates.some(cand => {
+        const parts = cand.split(' ')
+        if (parts.length >= 5) {
+          const ip = parts[4]
+          return ip.startsWith('192.168.') || ip.startsWith('10.')
+        }
+        return false
+      })
+
+      if (hasOnlyDockerOrLoopback && clientHasPhysicalLanIp) {
+        advice = '网络物理隔离。检测到被控端云手机仅上报了 Docker 内部私有 IP (如 172.17.x.x)，您的电脑（在局域网内物理网段）无法直接路由到容器内网。请联系管理员确保启动 Agent 时配置了宿主机物理 IP 映射（如启动参数 -external-addr 或环境变量 CP_AGENT_EXTERNAL_ADDR）。'
+        return advice
+      }
+
+      const hasClashTun = localCandidates.some(cand => {
+        const parts = cand.split(' ')
+        if (parts.length >= 5) {
+          const ip = parts[4]
+          return ip.startsWith('198.18.')
+        }
+        return false
+      })
+
+      if (hasClashTun) {
+        advice = '网络连接受阻。检测到您的电脑启用了网络代理软件的 Tun 虚拟网卡模式（常见 IP 198.18.x.x）。该模式会拦截或篡改 WebRTC UDP 握手数据包。建议您暂时关闭代理软件的 Tun 模式后重新连接。'
+        return advice
+      }
+
+      return advice
+    }
+
     pc.oniceconnectionstatechange = () => {
       debugLog('[WebRTC] ICE Connection State:', pc.iceConnectionState)
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         status.value = 'connected'
       } else if (pc.iceConnectionState === 'failed') {
-        error.value = 'ICE connection failed'
+        error.value = '连接失败: ' + diagnoseConnectionFailure()
         status.value = 'error'
       }
     }
@@ -541,7 +649,7 @@ function handleDeviceMessage(payload) {
       if (pc.connectionState === 'connected') {
         status.value = 'connected'
       } else if (pc.connectionState === 'failed') {
-        error.value = 'WebRTC connection failed'
+        error.value = '连接失败: ' + diagnoseConnectionFailure()
         status.value = 'error'
       } else if (pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
         status.value = 'disconnected'
@@ -1266,6 +1374,11 @@ function handleDeviceMessage(payload) {
       fileChannel = null
     }
     fileChannelReady.value = false
+    if (aiCommandChannel) {
+      try { aiCommandChannel.close() } catch(e) {}
+      aiCommandChannel = null
+    }
+    aiCommandPromises.clear()
     status.value = 'disconnected'
     adbSendQueue = []
 
@@ -1345,6 +1458,8 @@ function handleDeviceMessage(payload) {
     onScreenshot,
     sendCommand,
     executeCommand,
+    executeCommandP2P,
+    createAiCommandChannel,
     onCommandResult,
     sendInjectData,
     createAdbSessionChannel,

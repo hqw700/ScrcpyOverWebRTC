@@ -213,6 +213,17 @@
 
             <div class="form-group form-group-row">
               <div class="group-info">
+                <label>保持设备唤醒</label>
+                <small class="hint">连接与预览期间防止设备自动进入休眠熄屏</small>
+              </div>
+              <div class="toggle-switch">
+                <input type="checkbox" id="stayawake-toggle" v-model="localSettings.stayAwake" />
+                <label for="stayawake-toggle"></label>
+              </div>
+            </div>
+
+            <div class="form-group form-group-row">
+              <div class="group-info">
                 <label>开启 Agent 调试日志</label>
                 <small class="hint">在后台终端打印 scrcpy-server 和视频流的 verbose 日志</small>
               </div>

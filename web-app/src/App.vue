@@ -155,8 +155,8 @@
         <div class="nav-tag-list">
           <button
             class="nav-tag-item"
-            :class="{ active: tagStore.selectedTagIds.length === 0 }"
-            @click="tagStore.clearSelectedTags()"
+            :class="{ active: tagStore.selectedTagIds.length === 0 && !deviceStore.showOfflineOnly && !deviceStore.showRecentOnly }"
+            @click="selectAllDevices"
             title="全部设备"
           >
             <span class="nav-tag-dot all"></span>
@@ -174,6 +174,28 @@
             <span class="nav-tag-dot" :style="{ background: tag.color }"></span>
             <span class="nav-tag-name">{{ tag.name }}</span>
             <span class="nav-tag-count">{{ getTagDeviceCount(tag.id) }}</span>
+          </button>
+          <!-- 最近新增筛选（30 分钟内首次注册） -->
+          <button
+            class="nav-tag-item recent-tag-item"
+            :class="{ active: deviceStore.showRecentOnly }"
+            title="最近 30 分钟内新增的设备"
+            @click="toggleRecentView"
+          >
+            <span class="nav-tag-dot recent"></span>
+            <span class="nav-tag-name">最近新增</span>
+            <span class="nav-tag-count">{{ deviceStore.recentDevices.length }}</span>
+          </button>
+          <!-- 离线设备筛选（数据来自服务端离线记录） -->
+          <button
+            class="nav-tag-item offline-tag-item"
+            :class="{ active: deviceStore.showOfflineOnly }"
+            title="离线设备"
+            @click="toggleOfflineView"
+          >
+            <span class="nav-tag-dot offline"></span>
+            <span class="nav-tag-name">离线设备</span>
+            <span class="nav-tag-count">{{ deviceStore.offlineDevices.length }}</span>
           </button>
         </div>
       </div>
@@ -682,6 +704,33 @@ function openTagManager() {
 
 function toggleTag(tagId) {
   tagStore.toggleSelectedTag(tagId)
+  // 选择标签时退出特殊筛选视图
+  deviceStore.showOfflineOnly = false
+  deviceStore.showRecentOnly = false
+}
+
+function selectAllDevices() {
+  tagStore.clearSelectedTags()
+  deviceStore.showOfflineOnly = false
+  deviceStore.showRecentOnly = false
+}
+
+function toggleOfflineView() {
+  deviceStore.showOfflineOnly = !deviceStore.showOfflineOnly
+  if (deviceStore.showOfflineOnly) {
+    // 离线筛选与标签筛选互斥
+    tagStore.clearSelectedTags()
+    deviceStore.showRecentOnly = false
+  }
+}
+
+function toggleRecentView() {
+  deviceStore.showRecentOnly = !deviceStore.showRecentOnly
+  if (deviceStore.showRecentOnly) {
+    // 最近新增筛选与标签筛选互斥
+    tagStore.clearSelectedTags()
+    deviceStore.showOfflineOnly = false
+  }
 }
 
 function getTagDeviceCount(tagId) {
@@ -1458,6 +1507,20 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 
 .nav-tag-dot.all {
   background: var(--accent);
+}
+
+.nav-tag-dot.offline {
+  background: #8b949e;
+}
+
+.nav-tag-dot.recent {
+  background: #4ade80;
+}
+
+.offline-tag-item {
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  border-radius: 0 0 6px 6px;
 }
 
 .nav-tag-name {

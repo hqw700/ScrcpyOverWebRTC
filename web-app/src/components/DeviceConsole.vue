@@ -119,18 +119,43 @@
           </div>
         </div>
         <div class="console-shortcuts">
-          <button @click="quickCmd('pm list packages -3')">三方应用</button>
-          <button @click="quickCmd('getprop ro.product.model')">型号</button>
-          <button @click="quickCmd('uptime')">运行时间</button>
-          <button @click="quickCmd('df -h /data')">存储空间</button>
-          <button @click="quickCmd('settings put system pointer_location 1')">开启触控轨迹</button>
-          <button @click="quickCmd('settings put system pointer_location 0')">关闭轨迹</button>
-          <button @click="consoleLogs = []">清屏</button>
+          <button 
+            v-for="(item, idx) in consoleShortcuts" 
+            :key="idx" 
+            @click="quickCmd(item.cmd)"
+          >
+            {{ item.name }}
+          </button>
+          <button @click="consoleLogs = []" class="system-btn">清屏</button>
+          <button @click="showShortcutModal = true" class="system-btn edit-btn">⚙️ 自定义</button>
         </div>
 
         <!-- 并发下发目标设备选择 -->
         <div class="shell-targets-bar">
-          <span class="label">并发目标：</span>
+          <div class="targets-control-row">
+            <span class="label">并发目标：</span>
+            <label class="select-all-check" v-if="deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId).length > 0">
+              <input type="checkbox" v-model="isAllDevicesSelected" />
+              <span class="checkbox-custom"></span>
+              <span class="name">全选</span>
+            </label>
+            <div class="tag-filters" v-if="tagStore.tags.length > 0">
+              <span class="tag-filter-label">按标签选择：</span>
+              <button 
+                v-for="tag in tagStore.tags" 
+                :key="tag.id" 
+                class="tag-filter-btn"
+                :style="{ 
+                  borderColor: tag.color,
+                  backgroundColor: isTagAllSelected(tag.id) ? tag.color : 'transparent',
+                  color: isTagAllSelected(tag.id) ? '#fff' : tag.color 
+                }"
+                @click="toggleTagDevices(tag.id)"
+              >
+                {{ tag.name }}
+              </button>
+            </div>
+          </div>
           <div class="targets-list">
             <label class="target-check current">
               <input type="checkbox" checked disabled />
@@ -355,6 +380,42 @@
 
     <!-- 隐藏的 dummy video，用来满足 useWebRTC 在没有主视频时的画面要求 -->
     <video ref="dummyVideo" style="display: none;" autoplay playsinline muted></video>
+
+    <!-- 自定义快捷指令弹窗 -->
+    <div v-if="showShortcutModal" class="shortcut-modal-overlay" @click.self="showShortcutModal = false">
+      <div class="shortcut-modal-card">
+        <div class="modal-header">
+          <h3>自定义快捷指令</h3>
+          <button class="close-btn" @click="showShortcutModal = false">✕</button>
+        </div>
+        <div class="modal-body custom-scrollbar">
+          <div class="shortcut-list">
+            <div v-for="(item, idx) in modalShortcuts" :key="idx" class="shortcut-item-row">
+              <div class="input-col name-col">
+                <label>名称</label>
+                <input v-model="item.name" placeholder="请输入指令名称，如 型号" />
+              </div>
+              <div class="input-col cmd-col">
+                <label>Shell 命令</label>
+                <input v-model="item.cmd" placeholder="请输入 Shell 命令，如 getprop ro.product.model" />
+              </div>
+              <button class="delete-btn" @click="deleteModalShortcut(idx)" title="删除指令">✕</button>
+            </div>
+            <div v-if="modalShortcuts.length === 0" class="no-shortcuts">
+              暂无自定义快捷指令
+            </div>
+          </div>
+          <button class="add-row-btn" @click="addModalShortcut">+ 添加快捷指令</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-reset" @click="resetToDefaultShortcuts">恢复默认</button>
+          <div class="footer-actions">
+            <button class="btn btn-cancel" @click="showShortcutModal = false">取消</button>
+            <button class="btn btn-save" @click="saveShortcuts">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -362,6 +423,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
 import { useAuthStore } from '@/stores/auth'
+import { useTagStore } from '@/stores/tags'
 import { useAdb } from '@/composables/useAdb'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { getDeviceSettings } from '@/utils/settings'
@@ -385,6 +447,7 @@ const emit = defineEmits(['close'])
 
 const deviceStore = useDeviceStore()
 const authStore = useAuthStore()
+const tagStore = useTagStore()
 const dummyVideo = ref(null)
 const consoleRef = ref(null)
 const chatRef = ref(null)
@@ -405,6 +468,143 @@ watch(activeTab, (newTab) => {
 
 // --- 批量 Shell 与单台整合状态 ---
 const batchShellSelectedIds = ref([])
+
+const defaultShortcuts = [
+  { name: '三方应用', cmd: 'pm list packages -3' },
+  { name: '型号', cmd: 'getprop ro.product.model' },
+  { name: '当前页面', cmd: 'dumpsys window | grep mCurrentFocus | grep -v null' },
+  { name: '存储空间', cmd: 'df -h /data' },
+  { name: '开启触控轨迹', cmd: 'settings put system pointer_location 1' },
+  { name: '关闭轨迹', cmd: 'settings put system pointer_location 0' }
+]
+
+const consoleShortcuts = ref([])
+const showShortcutModal = ref(false)
+const modalShortcuts = ref([])
+
+async function loadShortcuts() {
+  try {
+    const token = localStorage.getItem('auth_token') || ''
+    const res = await fetch('/api/shortcuts', {
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : ''
+      }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        consoleShortcuts.value = data
+        try {
+          localStorage.setItem('cloudphone_console_shortcuts', JSON.stringify(data))
+        } catch (e) {}
+        return
+      }
+    }
+  } catch (e) {
+    print("[Shortcuts] Failed to load from server, fallback to local:", e)
+  }
+
+  const saved = localStorage.getItem('cloudphone_console_shortcuts')
+  if (saved) {
+    try {
+      consoleShortcuts.value = JSON.parse(saved)
+    } catch (e) {
+      consoleShortcuts.value = [...defaultShortcuts]
+    }
+  } else {
+    consoleShortcuts.value = [...defaultShortcuts]
+  }
+}
+
+async function saveShortcuts() {
+  const filtered = modalShortcuts.value.filter(item => item.name.trim() && item.cmd.trim())
+  consoleShortcuts.value = filtered
+  
+  try {
+    localStorage.setItem('cloudphone_console_shortcuts', JSON.stringify(filtered))
+  } catch (e) {}
+
+  try {
+    const token = localStorage.getItem('auth_token') || ''
+    const res = await fetch('/api/shortcuts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify(filtered)
+    })
+    if (!res.ok) {
+      print("[Shortcuts] Failed to sync shortcuts to server")
+    }
+  } catch (e) {
+    print("[Shortcuts] Failed to sync shortcuts to server:", e)
+  }
+
+  showShortcutModal.value = false
+}
+
+function addModalShortcut() {
+  modalShortcuts.value.push({ name: '', cmd: '' })
+}
+
+function deleteModalShortcut(idx) {
+  modalShortcuts.value.splice(idx, 1)
+}
+
+function resetToDefaultShortcuts() {
+  modalShortcuts.value = defaultShortcuts.map(item => ({ ...item }))
+}
+
+watch(showShortcutModal, (newVal) => {
+  if (newVal) {
+    modalShortcuts.value = consoleShortcuts.value.map(item => ({ ...item }))
+  }
+})
+
+const isAllDevicesSelected = computed({
+  get() {
+    const onlineOthers = deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== props.deviceId)
+    if (onlineOthers.length === 0) return false
+    return onlineOthers.every(dev => batchShellSelectedIds.value.includes(dev.id))
+  },
+  set(val) {
+    const onlineOthers = deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== props.deviceId)
+    if (val) {
+      batchShellSelectedIds.value = onlineOthers.map(dev => dev.id)
+    } else {
+      batchShellSelectedIds.value = []
+    }
+  }
+})
+
+function getOnlineDevicesByTag(tagId) {
+  return deviceStore.devices.filter(dev => {
+    if (dev.status !== 'online' || dev.id === props.deviceId) return false
+    const devTags = tagStore.deviceTags[dev.id] || []
+    return devTags.includes(tagId)
+  })
+}
+
+function isTagAllSelected(tagId) {
+  const devs = getOnlineDevicesByTag(tagId)
+  if (devs.length === 0) return false
+  return devs.every(dev => batchShellSelectedIds.value.includes(dev.id))
+}
+
+function toggleTagDevices(tagId) {
+  const devs = getOnlineDevicesByTag(tagId)
+  if (devs.length === 0) return
+  
+  if (isTagAllSelected(tagId)) {
+    const devIds = devs.map(d => d.id)
+    batchShellSelectedIds.value = batchShellSelectedIds.value.filter(id => !devIds.includes(id))
+  } else {
+    const newIds = new Set(batchShellSelectedIds.value)
+    devs.forEach(d => newIds.add(d.id))
+    batchShellSelectedIds.value = Array.from(newIds)
+  }
+}
 const targetDeviceIds = computed(() => [props.deviceId, ...batchShellSelectedIds.value])
 const sendBtnText = computed(() => targetDeviceIds.value.length > 1 ? `并发发送 (${targetDeviceIds.value.length}台)` : '发送')
 
@@ -1319,6 +1519,8 @@ let resizeObserver = null
 
 onMounted(() => {
   setupDeviceConnection(props.deviceId)
+  loadShortcuts()
+  tagStore.load()
   
   if (typeof ResizeObserver !== 'undefined' && consoleMainRef.value) {
     resizeObserver = new ResizeObserver(() => {
@@ -2431,15 +2633,63 @@ onUnmounted(() => {
 /* 批量与单台整合终端样式 */
 .shell-targets-bar {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   background: #161b22;
   border-top: 1px solid #30363d;
   border-bottom: 1px solid #30363d;
   padding: 8px 16px;
   box-sizing: border-box;
-  overflow-x: auto;
-  white-space: nowrap;
+}
+
+.targets-control-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  width: 100%;
+}
+
+.select-all-check {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+  user-select: none;
+}
+
+.select-all-check input {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.tag-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-filter-label {
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.tag-filter-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 12px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  font-weight: 500;
+  background: transparent;
+}
+
+.tag-filter-btn:hover {
+  filter: brightness(1.2);
 }
 
 .shell-targets-bar .label {
@@ -2570,5 +2820,225 @@ onUnmounted(() => {
 }
 :deep(.xterm-screen) {
   padding-bottom: 32px !important;
+}
+
+.console-shortcuts button.system-btn {
+  background: rgba(88, 166, 255, 0.1);
+  color: #58a6ff;
+  border-color: rgba(88, 166, 255, 0.2);
+}
+
+.console-shortcuts button.system-btn:hover {
+  background: rgba(88, 166, 255, 0.2);
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+.console-shortcuts button.edit-btn {
+  margin-left: auto;
+}
+
+/* 自定义快捷指令弹窗 */
+.shortcut-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.shortcut-modal-card {
+  width: 90%;
+  max-width: 600px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  max-height: 80%;
+  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.shortcut-modal-card .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #30363d;
+}
+
+.shortcut-modal-card .modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.shortcut-modal-card .modal-header .close-btn {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.shortcut-modal-card .modal-header .close-btn:hover {
+  color: #f0f6fc;
+}
+
+.shortcut-modal-card .modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcut-item-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: #0d1117;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #21262d;
+}
+
+.shortcut-item-row .input-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-item-row .input-col label {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.shortcut-item-row .input-col input {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #c9d1d9;
+  padding: 6px 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+.shortcut-item-row .input-col input:focus {
+  border-color: #58a6ff;
+}
+
+.shortcut-item-row .name-col {
+  flex: 1;
+}
+
+.shortcut-item-row .cmd-col {
+  flex: 2;
+}
+
+.shortcut-item-row .delete-btn {
+  background: transparent;
+  border: none;
+  color: #f85149;
+  cursor: pointer;
+  padding: 8px;
+  font-size: 14px;
+}
+
+.shortcut-item-row .delete-btn:hover {
+  opacity: 0.8;
+}
+
+.no-shortcuts {
+  text-align: center;
+  color: #8b949e;
+  padding: 20px 0;
+  font-size: 12px;
+}
+
+.add-row-btn {
+  background: transparent;
+  border: 1px dashed #30363d;
+  color: #58a6ff;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.add-row-btn:hover {
+  background: rgba(88, 166, 255, 0.05);
+  border-color: #58a6ff;
+}
+
+.shortcut-modal-card .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #30363d;
+  background: #0d1117;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.shortcut-modal-card .modal-footer .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.shortcut-modal-card .modal-footer .btn-reset {
+  background: transparent;
+  border-color: #30363d;
+  color: #f85149;
+}
+
+.shortcut-modal-card .modal-footer .btn-reset:hover {
+  background: rgba(248, 81, 73, 0.05);
+}
+
+.shortcut-modal-card .modal-footer .footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.shortcut-modal-card .modal-footer .btn-cancel {
+  background: transparent;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+.shortcut-modal-card .modal-footer .btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.shortcut-modal-card .modal-footer .btn-save {
+  background: #238636;
+  color: #fff;
+}
+
+.shortcut-modal-card .modal-footer .btn-save:hover {
+  background: #2ea043;
 }
 </style>

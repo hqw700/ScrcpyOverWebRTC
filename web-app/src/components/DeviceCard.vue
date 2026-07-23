@@ -71,8 +71,11 @@
       </div>
       <!-- 隐藏的预加载图片 -->
       <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
-      <div class="overlay" v-if="!deviceStore.globalInteractiveMode">
+      <div class="overlay" v-if="!deviceStore.globalInteractiveMode && device.status === 'online'">
         <span class="play-hint">点击进入控制</span>
+      </div>
+      <div class="overlay" v-else-if="device.status !== 'online'">
+        <span class="play-hint offline-hint">设备离线</span>
       </div>
       <!-- 悬浮页脚 -->
       <div class="card-footer-overlay" @click.stop>
@@ -84,6 +87,9 @@
         </div>
         <div v-if="device.info?.model" class="device-meta">
           <span class="model-name">{{ device.info.model }}</span>
+        </div>
+        <div v-if="device.status !== 'online' && lastSeenText" class="device-meta">
+          <span class="model-name offline-last-seen">最后在线: {{ lastSeenText }}</span>
         </div>
         <div v-if="tags.length > 0" class="device-tags">
           <span
@@ -123,6 +129,10 @@
       <button class="menu-item danger" @click="onQuitAgent" :disabled="device.status !== 'online'">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v6M12 4.5a6 6 0 11-8 0"/></svg>
         退出 Agent
+      </button>
+      <button v-if="device.status !== 'online'" class="menu-item danger" @click="onDeleteRecord">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        移除记录
       </button>
     </div>
     
@@ -221,10 +231,19 @@ const statusText = computed(() => {
   return props.device.status === 'online' ? '在线' : '离线'
 })
 
+const lastSeenText = computed(() => {
+  if (!props.device.lastSeen) return ''
+  const d = new Date(props.device.lastSeen)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString()
+})
+
 const visibleTags = computed(() => props.tags.slice(0, 3))
 const hiddenTagCount = computed(() => Math.max(0, props.tags.length - visibleTags.value.length))
 
 function onCardClick() {
+  // 离线设备不进入控制页（服务端会拒绝 TypeConnect）
+  if (props.device.status !== 'online') return
   if (!showMenu.value) {
     emit('connect', props.device.id)
   }
@@ -256,6 +275,17 @@ function onQuitAgent() {
   showMenu.value = false
   if (confirm(`警告：确定要停止设备 "${props.device.id}" 上的 Agent 进程吗？停止后该设备将下线。`)) {
     deviceStore.quitAgent(props.device.id)
+  }
+}
+
+async function onDeleteRecord() {
+  showMenu.value = false
+  if (confirm(`确定要删除设备 "${props.device.id}" 的离线记录吗？删除后该设备将从列表中移除（不影响设备本身，重新上线后会再次注册）。`)) {
+    try {
+      await deviceStore.deleteOfflineDevice(props.device.id)
+    } catch (e) {
+      alert('删除离线记录失败: ' + (e.message || e))
+    }
   }
 }
 
@@ -742,13 +772,20 @@ const getAbsoluteCoords = (e) => {
   const clientX = e.clientX - rect.left
   const clientY = e.clientY - rect.top
   
-  const display = props.device.info?.displays?.[0]
-  const rawW = display?.x_res || 1080
-  const rawH = display?.y_res || 1920
-  
-  // 判定逻辑分辨率（横屏模式下，物理高宽必须互换）
-  const videoW = isLandscape.value ? Math.max(rawW, rawH) : Math.min(rawW, rawH)
-  const videoH = isLandscape.value ? Math.min(rawW, rawH) : Math.max(rawW, rawH)
+  let videoW, videoH
+  if (canvas && isPreviewActive.value && canvas.width && canvas.height) {
+    videoW = canvas.width
+    videoH = canvas.height
+  } else if (img && img.naturalWidth && img.naturalHeight) {
+    videoW = img.naturalWidth
+    videoH = img.naturalHeight
+  } else {
+    const display = props.device.info?.displays?.[0]
+    const rawW = display?.x_res || 1080
+    const rawH = display?.y_res || 1920
+    videoW = isLandscape.value ? Math.max(rawW, rawH) : Math.min(rawW, rawH)
+    videoH = isLandscape.value ? Math.min(rawW, rawH) : Math.max(rawW, rawH)
+  }
   
   const clientW = rect.width
   const clientH = rect.height
@@ -1097,6 +1134,14 @@ const sendKey = (keycode) => {
 .status-badge.offline {
   background: rgba(255, 255, 255, 0.1);
   color: #999;
+}
+
+.offline-hint {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.offline-last-seen {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .device-meta {

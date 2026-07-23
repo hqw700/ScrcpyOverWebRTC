@@ -107,65 +107,149 @@
           </div>
         </section>
 
-        <!-- 手动部署与命令行 ADB 指导 -->
+        <!-- 手动部署与命令行 ADB / Magisk 指导 -->
         <section class="manual-section">
-          <h2 class="section-title">手动部署与一键脚本指导</h2>
-
-          <!-- 准备条件提示 -->
-          <div class="manual-prereqs">
-            <div class="qs-prereq-title">📋 手动部署前准备工作：</div>
-            <ul class="qs-prereq-list">
-              <li><b>手机端配置</b>：需进入手机的「设置 -> 开发者选项」开启<b>「USB 调试」</b>，并已使用 USB 数据线连上电脑。</li>
-              <li><b>电脑端配置</b>：电脑需要已安装 <b>ADB 工具</b>（确保可在命令行成功识别到您的手机设备，可通过 <code>adb devices</code> 验证）。</li>
-            </ul>
-          </div>
-          
-          <div class="manual-layout">
-            <!-- 资源下载 -->
-            <div class="manual-download-col">
-              <h3 class="manual-subtitle">第一步：下载一键部署资源包</h3>
-              <div class="download-row">
-                <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="download-card-btn gold-card">
-                  <div class="card-title">⚡ 一键部署资源包 (ZIP)</div>
-                  <div class="card-desc">包含全平台 Agent 二进制、核心投屏库及一键脚本，解压即可运行。</div>
-                </a>
-              </div>
+          <div class="manual-header">
+            <h2 class="section-title">独立部署与配置指导</h2>
+            <!-- 方式选择 Tab -->
+            <div class="deploy-mode-tabs">
+              <button 
+                class="mode-tab-btn" 
+                :class="{ active: manualMode === 'adb' }" 
+                @click="manualMode = 'adb'"
+              >
+                💻 电脑 ADB 一键部署 (无需 Root)
+              </button>
+              <button 
+                class="mode-tab-btn magisk-tab" 
+                :class="{ active: manualMode === 'magisk' }" 
+                @click="manualMode = 'magisk'"
+              >
+                📱 Magisk / KSU 刷机模块 (Root 开机自启)
+              </button>
             </div>
+          </div>
 
-            <!-- 脚本运行指导 -->
-            <div class="manual-guide-col">
-              <h3 class="manual-subtitle">第二步：本地终端一键部署</h3>
-              <div class="guide-steps">
-                <div class="guide-step-item">
-                  <span class="step-num">1</span>
-                  <div class="step-content">
-                    <p>解压下载的 <code>agent-deploy.zip</code> 包并进入解压后的目录，然后执行下方一键运行脚本命令：</p>
-                    
-                    <div class="deploy-script-tabs">
-                      <div class="script-box-title">Linux / macOS (Unix)</div>
-                      <div class="code-container">
-                        <pre class="code-block wrap">chmod +x run.sh && {{ shCommand }}</pre>
-                        <button class="copy-code-btn" @click="copyCommand(`chmod +x run.sh && ${shCommand}`)">复制</button>
-                      </div>
+          <!-- 途径一：电脑 ADB 一键部署 -->
+          <div v-if="manualMode === 'adb'" class="manual-mode-block">
+            <div class="manual-prereqs">
+              <div class="qs-prereq-title">📋 电脑 ADB 部署前准备：</div>
+              <ul class="qs-prereq-list">
+                <li><b>手机端配置</b>：进入手机「设置 -> 开发者选项」开启<b>「USB 调试」</b>，并通过 USB 数据线连接电脑。</li>
+                <li><b>电脑端配置</b>：电脑已安装 <b>ADB 工具</b>（可运行 <code>adb devices</code> 验证成功识别设备）。</li>
+              </ul>
+            </div>
+            
+            <div class="manual-layout">
+              <div class="manual-download-col">
+                <h3 class="manual-subtitle">第一步：下载 ADB 部署包</h3>
+                <div class="download-row">
+                  <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="download-card-btn gold-card">
+                    <div class="card-title">⚡ ADB 一键部署资源包 (ZIP)</div>
+                    <div class="card-desc">包含全平台 Agent 二进制、核心投屏库及一键脚本，解压即可通过 ADB 运行。</div>
+                  </a>
+                </div>
+              </div>
 
-                      <div class="script-box-title" style="margin-top: 12px;">Windows CMD</div>
-                      <div class="code-container">
-                        <pre class="code-block wrap">{{ batCommand }}</pre>
-                        <button class="copy-code-btn" @click="copyCommand(batCommand)">复制</button>
+              <div class="manual-guide-col">
+                <h3 class="manual-subtitle">第二步：本地终端运行一键脚本</h3>
+                <div class="guide-steps">
+                  <div class="guide-step-item">
+                    <span class="step-num">1</span>
+                    <div class="step-content">
+                      <p>解压下载的 <code>agent-deploy.zip</code> 并进入解压后的目录，然后执行下方对应系统的一键部署脚本命令：</p>
+                      
+                      <div class="deploy-script-tabs">
+                        <div class="script-box-title">Linux / macOS (Unix ADB)</div>
+                        <div class="code-container">
+                          <pre class="code-block wrap">chmod +x run.sh && {{ shCommand }}</pre>
+                          <button class="copy-code-btn" @click="copyCommand(`chmod +x run.sh && ${shCommand}`)">复制</button>
+                        </div>
+
+                        <div class="script-box-title" style="margin-top: 12px;">Windows CMD (ADB)</div>
+                        <div class="code-container">
+                          <pre class="code-block wrap">{{ batCommand }}</pre>
+                          <button class="copy-code-btn" @click="copyCommand(batCommand)">复制</button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div class="guide-step-item">
-                  <span class="step-num">2</span>
-                  <div class="step-content">
-                    <p>在本地终端验证云手机/容器内的 Agent 运行状态：</p>
-                    <pre class="code-block"># 验证 Agent 后台进程是否正常在线
+                  <div class="guide-step-item">
+                    <span class="step-num">2</span>
+                    <div class="step-content">
+                      <p>在电脑终端验证 Agent 进程在线状态与日志：</p>
+                      <pre class="code-block"># 验证 Agent 后台进程是否在线
 adb shell "ps -A | grep cloudphone-agent"
 
 # 查看 Agent 服务运行日志
 adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 途径二：Magisk / KernelSU / APatch 刷机模块 -->
+          <div v-else-if="manualMode === 'magisk'" class="manual-mode-block">
+            <div class="manual-prereqs magisk-prereqs">
+              <div class="qs-prereq-title magisk-title">📋 Magisk 模块部署前准备：</div>
+              <ul class="qs-prereq-list">
+                <li><b>设备权限要求</b>：物理手机需<b>已 Root</b>，并已安装 Magisk、KernelSU 或 APatch 模块管理器。</li>
+                <li><b>服务优势</b>：刷入后作为系统后台服务自动运行，设备重启后无需电脑连接即可<b>自动开机自启并保活</b>。</li>
+              </ul>
+            </div>
+            
+            <div class="manual-layout">
+              <div class="manual-download-col">
+                <h3 class="manual-subtitle">第一步：下载 Magisk 模块包</h3>
+                <div class="download-row">
+                  <a href="/agent/cloudphone-agent-magisk.zip" download="cloudphone-agent-magisk.zip" class="download-card-btn magisk-card">
+                    <div class="card-title">📱 Magisk / KSU 刷机模块 (ZIP)</div>
+                    <div class="card-desc">专属模块压缩包，内置全架构支持、守护进程以及 cpctl 控制台工具。</div>
+                  </a>
+                </div>
+              </div>
+
+              <div class="manual-guide-col">
+                <h3 class="manual-subtitle">第二步：刷入模块与热配置</h3>
+                <div class="guide-steps">
+                  <div class="guide-step-item">
+                    <span class="step-num">1</span>
+                    <div class="step-content">
+                      <p><b>刷入模块包</b>：打开手机上的 Magisk / KernelSU 管理器，选择“从本地安装”并选中 <code>cloudphone-agent-magisk.zip</code>，刷入成功后<b>重启手机</b>。</p>
+                    </div>
+                  </div>
+
+                  <div class="guide-step-item">
+                    <span class="step-num">2</span>
+                    <div class="step-content">
+                      <p><b>配置信令服务器地址</b>（支持以下任一方式）：</p>
+                      <div class="deploy-script-tabs">
+                        <div class="script-box-title" style="color: #a855f7;">方式 A：命令行一键配置 (手机终端 / ADB shell)</div>
+                        <div class="code-container">
+                          <pre class="code-block wrap">{{ magiskCommand }}</pre>
+                          <button class="copy-code-btn" @click="copyCommand(magiskCommand)">复制</button>
+                        </div>
+                      </div>
+                      <p style="margin-top: 10px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                        • <b>方式 B (交互式菜单)</b>：在手机终端中运行 <code>su</code> 接着运行 <code>cpctl</code> 打开交互控制台选择项4修改。<br>
+                        • <b>方式 C (编辑配置文件)</b>：使用 MT管理器编辑 <code>/data/adb/modules/cloudphone-agent/config.conf</code>，保存后在 Magisk 模块界面<b>连续点击 2 次 Action 按钮</b>重载生效。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="guide-step-item">
+                    <span class="step-num">3</span>
+                    <div class="step-content">
+                      <p>验证 Magisk 模块服务状态：</p>
+                      <pre class="code-block"># 查看控制台状态
+adb shell "su -c cpctl status"   # 或手机终端运行: su -> cpctl
+
+# 查看日志
+adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -184,6 +268,7 @@ import { useDeploy } from '@/composables/useDeploy'
 const { isDeploying, deployStatus, deployProgress, deployError, deployLog, deployAgent } = useDeploy()
 
 const logArea = ref(null)
+const manualMode = ref('adb') // 'adb' | 'magisk'
 
 const form = reactive({
   signalingUrl: '',
@@ -286,6 +371,15 @@ const batCommand = computed(() => {
   }
 
   return `run.bat${deviceIdArg} -signaling "${protocol}://${host}"${maxFpsArg}${codecArg}${extArg}${portArg}${iceServersArg}`
+})
+
+// 响应式生成 Magisk / KSU 的命令
+const magiskCommand = computed(() => {
+  const host = signalingIp.value
+  const protocol = form.signalingUrl.startsWith('ws://') ? 'ws' : 'wss'
+  const sig = `${protocol}://${host}`
+  const devIdCmd = form.deviceId ? `\ncpctl set CP_AGENT_ID "${form.deviceId}"` : ''
+  return `su\ncpctl set CP_AGENT_SIGNALING "${sig}"${devIdCmd}\ncpctl restart`
 })
 
 // 一键复制命令到剪贴板
@@ -842,6 +936,65 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 }
+.manual-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.manual-header .section-title {
+  margin-bottom: 0;
+}
+
+.deploy-mode-tabs {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.mode-tab-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-tab-btn.active {
+  background: var(--bg-surface, rgba(88, 166, 255, 0.15));
+  color: #58a6ff;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mode-tab-btn.magisk-tab.active {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.magisk-prereqs {
+  border-color: rgba(168, 85, 247, 0.2);
+  background: rgba(168, 85, 247, 0.02);
+}
+
+.qs-prereq-title.magisk-title {
+  color: #c084fc;
+}
+
 .download-card-btn.gold-card {
   border-color: rgba(88, 166, 255, 0.4);
   background: rgba(88, 166, 255, 0.03);
@@ -854,6 +1007,21 @@ onMounted(async () => {
 
 .download-card-btn.gold-card .card-title {
   color: #58a6ff;
+  font-weight: 700;
+}
+
+.download-card-btn.magisk-card {
+  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.03);
+}
+
+.download-card-btn.magisk-card:hover {
+  border-color: #a855f7;
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.download-card-btn.magisk-card .card-title {
+  color: #a855f7;
   font-weight: 700;
 }
 

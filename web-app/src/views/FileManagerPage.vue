@@ -341,6 +341,13 @@ function formatFileSize(bytes) {
   return `${Number((bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1))} ${units[index]}`
 }
 
+function formatSpeed(bytesPerSec) {
+  if (!bytesPerSec || bytesPerSec < 0) return '0 B/s'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const index = Math.min(Math.floor(Math.log(bytesPerSec) / Math.log(1024)), units.length - 1)
+  return `${Number((bytesPerSec / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1))} ${units[index]}`
+}
+
 function formatTime(seconds) {
   if (!seconds) return '-'
   return new Date(seconds * 1000).toLocaleString('zh-CN', {
@@ -628,26 +635,59 @@ async function startUploadFile(file) {
 }
 
 async function sendNextChunks(session) {
-  const chunkSize = 16384
+  const chunkSize = 16384 // 16KB - 最兼容的 WebRTC 单包发送大小，防止超出 SCTP 限制触发异常
   const file = session.file
+  let yieldsCount = 0
+
+  const startTime = Date.now()
+  let lastTime = startTime
+  let lastLoaded = 0
+
   while (session.offset < file.size) {
     if (!webrtc) break
-    if (webrtc.getFileChannelBufferedAmount() > 256 * 1024) {
-      await new Promise(resolve => setTimeout(resolve, 30))
+    if (webrtc.getFileChannelBufferedAmount() > 512 * 1024) {
+      await new Promise(resolve => setTimeout(resolve, 10))
       continue
     }
     const start = session.offset
     const end = Math.min(start + chunkSize, file.size)
     const arrayBuffer = await file.slice(start, end).arrayBuffer()
     if (!webrtc) break
-    if (webrtc.sendFileChannelChunk(arrayBuffer)) {
-      session.offset = end
-      updateTransfer(session.id, {
-        loaded: end,
-        progress: Math.min(Math.floor((end / file.size) * 100), 99)
-      })
-      await new Promise(resolve => setTimeout(resolve, 2))
-    } else {
+    try {
+      if (webrtc.sendFileChannelChunk(arrayBuffer)) {
+        session.offset = end
+
+        const now = Date.now()
+        const elapsed = now - lastTime
+        if (elapsed >= 500) {
+          const bytesSent = session.offset - lastLoaded
+          const speedBps = (bytesSent / elapsed) * 1000
+          const speedText = formatSpeed(speedBps)
+          updateTransfer(session.id, {
+            loaded: end,
+            progress: Math.min(Math.floor((end / file.size) * 100), 99),
+            speed: speedText
+          })
+          lastTime = now
+          lastLoaded = session.offset
+        } else {
+          updateTransfer(session.id, {
+            loaded: end,
+            progress: Math.min(Math.floor((end / file.size) * 100), 99)
+          })
+        }
+
+        // 每同步发送 32 个分片 (约 512KB) 进行一次让出，防止卡死 UI 和保证 bufferedAmount 更新
+        yieldsCount++
+        if (yieldsCount >= 32) {
+          yieldsCount = 0
+          await new Promise(resolve => setTimeout(resolve, 1))
+        }
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+    } catch (err) {
+      console.error('[FileChannel] Failed to send chunk, retrying:', err)
       await new Promise(resolve => setTimeout(resolve, 50))
     }
   }
@@ -780,10 +820,32 @@ function handleDownloadChunk(data) {
 
   activeDownloadSession.chunks.push(data)
   activeDownloadSession.loaded += data.byteLength
-  updateTransfer(activeDownloadSession.id, {
-    loaded: activeDownloadSession.loaded,
-    progress: Math.min(Math.floor((activeDownloadSession.loaded / activeDownloadSession.total) * 100), 100)
-  })
+
+  const now = Date.now()
+  if (!activeDownloadSession.lastTime) {
+    activeDownloadSession.startTime = now
+    activeDownloadSession.lastTime = now
+    activeDownloadSession.lastLoaded = 0
+  }
+  const elapsed = now - activeDownloadSession.lastTime
+
+  if (elapsed >= 500) {
+    const bytesReceived = activeDownloadSession.loaded - activeDownloadSession.lastLoaded
+    const speedBps = (bytesReceived / elapsed) * 1000
+    const speedText = formatSpeed(speedBps)
+    updateTransfer(activeDownloadSession.id, {
+      loaded: activeDownloadSession.loaded,
+      progress: Math.min(Math.floor((activeDownloadSession.loaded / activeDownloadSession.total) * 100), 99),
+      speed: speedText
+    })
+    activeDownloadSession.lastTime = now
+    activeDownloadSession.lastLoaded = activeDownloadSession.loaded
+  } else {
+    updateTransfer(activeDownloadSession.id, {
+      loaded: activeDownloadSession.loaded,
+      progress: Math.min(Math.floor((activeDownloadSession.loaded / activeDownloadSession.total) * 100), 99)
+    })
+  }
 
   if (activeDownloadSession.loaded < activeDownloadSession.total) return
 
@@ -869,7 +931,8 @@ function transferLabel(t) {
   if (t.status === 'checking') return '校验中'
   if (t.status === 'success') return '完成'
   if (t.status === 'failed') return '失败'
-  return `${map[t.type] || '任务'} ${t.progress}%`
+  const speedStr = t.speed ? ` (${t.speed})` : ''
+  return `${map[t.type] || '任务'} ${t.progress}%${speedStr}`
 }
 
 function isTransferDone(t) {

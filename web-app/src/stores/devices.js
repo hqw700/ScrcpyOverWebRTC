@@ -26,15 +26,23 @@ export const useDeviceStore = defineStore('devices', () => {
 
 
   // 辅助函数：根据当前活跃的设备列表更新在线和离线列表
-  function processDeviceList(activeDevices) {
+  // 入参 deviceList 项可携带服务端状态：{ id, info, online, firstSeen, lastSeen }
+  // online 缺省（旧服务端）按在线处理，保持向后兼容
+  function processDeviceList(deviceList) {
+    const activeDevices = deviceList.filter(d => d.online !== false)
+    const serverOffline = deviceList.filter(d => d.online === false)
     const activeIds = activeDevices.map(d => d.id)
 
     // 1. 找出刚刚掉线（原本在线但在新活跃列表中找不到）的设备
     devices.value.forEach(d => {
       if (!activeIds.includes(d.id)) {
+        const serverRec = serverOffline.find(sd => sd.id === d.id)
         const offlineDev = {
           ...d,
+          info: serverRec?.info || d.info,
           status: 'offline',
+          firstSeen: serverRec?.firstSeen || d.firstSeen,
+          lastSeen: serverRec?.lastSeen || d.lastSeen,
           lastOffline: new Date().toISOString()
         }
         const idx = offlineDevices.value.findIndex(od => od.id === d.id)
@@ -47,12 +55,38 @@ export const useDeviceStore = defineStore('devices', () => {
       }
     })
 
+    // 1b. 服务端记录中的离线设备（本页面会话内可能从未在线过）：直接并入离线列表
+    serverOffline.forEach(sd => {
+      if (devices.value.some(d => d.id === sd.id)) return // 已在步骤 1 中处理
+      const idx = offlineDevices.value.findIndex(od => od.id === sd.id)
+      if (idx > -1) {
+        const old = offlineDevices.value[idx]
+        offlineDevices.value[idx] = {
+          ...old,
+          info: sd.info || old.info,
+          firstSeen: sd.firstSeen || old.firstSeen,
+          lastSeen: sd.lastSeen || old.lastSeen
+        }
+      } else {
+        offlineDevices.value.push({
+          id: sd.id,
+          info: sd.info || null,
+          status: 'offline',
+          snapshot: null,
+          firstSeen: sd.firstSeen || null,
+          lastSeen: sd.lastSeen || null,
+          lastOffline: null
+        })
+      }
+    })
+
     // 2. 过滤在线列表，只保留当前活跃的设备，并更新 info
     const newOnlineList = devices.value.filter(d => activeIds.includes(d.id)).map(d => {
       const activeDev = activeDevices.find(ad => ad.id === d.id)
       return {
         ...d,
-        info: activeDev?.info || d.info
+        info: activeDev?.info || d.info,
+        firstSeen: activeDev?.firstSeen || d.firstSeen
       }
     })
 
@@ -69,6 +103,7 @@ export const useDeviceStore = defineStore('devices', () => {
             ...resurrected,
             info: devData.info,
             status: 'online',
+            firstSeen: devData.firstSeen || resurrected.firstSeen,
             lastSeen: new Date().toISOString()
           })
         } else {
@@ -78,6 +113,7 @@ export const useDeviceStore = defineStore('devices', () => {
             info: devData.info,
             status: 'online',
             snapshot: null,
+            firstSeen: devData.firstSeen || null,
             lastSeen: new Date().toISOString()
           })
         }
@@ -96,16 +132,19 @@ export const useDeviceStore = defineStore('devices', () => {
       const data = await res.json()
       
       if (Array.isArray(data)) {
-        const activeDevices = data.map(item => {
+        const deviceList = data.map(item => {
           if (typeof item === 'string') {
             return { id: item, info: null }
           }
           return {
             id: item.device_id,
-            info: item.device_info
+            info: item.device_info,
+            online: item.online !== false,
+            firstSeen: item.first_seen || null,
+            lastSeen: item.last_seen || null
           }
         })
-        processDeviceList(activeDevices)
+        processDeviceList(deviceList)
       } else {
         processDeviceList([])
       }
@@ -143,16 +182,19 @@ export const useDeviceStore = defineStore('devices', () => {
 
   function updateFromList(idList) {
     if (!Array.isArray(idList)) return
-    const activeDevices = idList.map(item => {
+    const deviceList = idList.map(item => {
       if (typeof item === 'string') {
         return { id: item, info: null }
       }
       return {
         id: item.device_id,
-        info: item.device_info || null
+        info: item.device_info || null,
+        online: item.online !== false,
+        firstSeen: item.first_seen || null,
+        lastSeen: item.last_seen || null
       }
     })
-    processDeviceList(activeDevices)
+    processDeviceList(deviceList)
     debugLog('[Store] Device list updated via broadcast:', idList)
   }
 
@@ -432,6 +474,20 @@ export const useDeviceStore = defineStore('devices', () => {
     }))
   }
 
+  // 删除离线设备档案（仅 admin；服务端拒绝删除在线设备）
+  async function deleteOfflineDevice(deviceId) {
+    const token = localStorage.getItem('auth_token') || ''
+    const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    })
+    if (!res.ok) {
+      const text = (await res.text()).trim()
+      throw new Error(text || `删除失败 (${res.status})`)
+    }
+    removeDevice(deviceId)
+  }
+
   function handleSnapshotUpdated(deviceId, url) {
     const index = devices.value.findIndex(d => d.id === deviceId)
     if (index > -1) {
@@ -453,6 +509,28 @@ export const useDeviceStore = defineStore('devices', () => {
   const showGlobalConsole = ref(false)
   const consoleDeviceId = ref('')
   const globalConsoleHeight = ref(parseInt(localStorage.getItem('cloudphone_console_height') || '380', 10))
+
+  // 离线设备筛选视图（侧边栏"离线设备"栏）：开启后设备列表只展示离线设备
+  const showOfflineOnly = ref(false)
+
+  // 最近新增筛选视图（30 分钟内首次注册的设备）
+  const showRecentOnly = ref(false)
+  const RECENT_WINDOW_MS = 30 * 60 * 1000
+  // 30 秒跳动的时钟，让"30 分钟内"窗口随时间滚动（computed 依赖它重算）
+  const nowTick = ref(Date.now())
+  setInterval(() => { nowTick.value = Date.now() }, 30000)
+
+  function isRecentDevice(d) {
+    if (!d.firstSeen) return false
+    const t = new Date(d.firstSeen).getTime()
+    if (isNaN(t)) return false
+    return (nowTick.value - t) < RECENT_WINDOW_MS
+  }
+
+  // 最近新增设备（在线 + 离线并集），供侧边栏计数与列表页筛选
+  const recentDevices = computed(() =>
+    [...devices.value, ...offlineDevices.value].filter(isRecentDevice)
+  )
 
   function openGlobalConsole(deviceId) {
     if (deviceId) {
@@ -554,6 +632,9 @@ export const useDeviceStore = defineStore('devices', () => {
     showGlobalConsole,
     consoleDeviceId,
     globalConsoleHeight,
+    showOfflineOnly,
+    showRecentOnly,
+    recentDevices,
     fetchDevices,
     addDevice,
     removeDevice,
@@ -562,6 +643,7 @@ export const useDeviceStore = defineStore('devices', () => {
     updateMetrics,
     initSignaling, // 导出
     quitAgent,
+    deleteOfflineDevice,
     setActiveDevice,
     setActiveWebRTC,
     clearActiveDevice,

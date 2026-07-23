@@ -870,16 +870,17 @@ function handleDeviceMessage(payload) {
 
     const videoW = video.videoWidth
     const videoH = video.videoHeight
+    const isDefaultLandscape = DEVICE_W.value > DEVICE_H.value
     const isVideoLandscape = videoW > videoH
-    const targetW = isVideoLandscape ? DEVICE_H.value : DEVICE_W.value
-    const targetH = isVideoLandscape ? DEVICE_W.value : DEVICE_H.value
+    const isRotated = isVideoLandscape !== isDefaultLandscape
+    const targetW = isRotated ? DEVICE_H.value : DEVICE_W.value
+    const targetH = isRotated ? DEVICE_W.value : DEVICE_H.value
 
     let finalX, finalY
 
     // 如果提供了预计算的旋转坐标，直接使用
     if (rotatedCoord && rotatedCoord.isRotated) {
-      // rotatedCoord.x/y 是相对于原始视频尺寸的坐标
-      // 映射到设备分辨率
+      // rotatedCoord.x/y 是相对于原始视频尺寸的坐标，按比例映射回逻辑尺寸
       const x = Math.round(rotatedCoord.x / videoW * targetW)
       const y = Math.round(rotatedCoord.y / videoH * targetH)
       finalX = Math.max(0, Math.min(targetW, x))
@@ -913,7 +914,7 @@ function handleDeviceMessage(payload) {
       const relativeX = clientX - rect.left - offsetX
       const relativeY = clientY - rect.top - offsetY
 
-      // 映射到设备分辨率
+      // 映射到设备逻辑分辨率
       const x = Math.round(relativeX / actualW * targetW)
       const y = Math.round(relativeY / actualH * targetH)
 
@@ -983,9 +984,11 @@ function handleDeviceMessage(payload) {
 
     const videoW = video.videoWidth
     const videoH = video.videoHeight
+    const isDefaultLandscape = DEVICE_W.value > DEVICE_H.value
     const isVideoLandscape = videoW > videoH
-    const targetW = isVideoLandscape ? DEVICE_H.value : DEVICE_W.value
-    const targetH = isVideoLandscape ? DEVICE_W.value : DEVICE_H.value
+    const isRotated = isVideoLandscape !== isDefaultLandscape
+    const targetW = isRotated ? DEVICE_H.value : DEVICE_W.value
+    const targetH = isRotated ? DEVICE_W.value : DEVICE_H.value
 
     let finalX, finalY
 
@@ -1257,11 +1260,16 @@ function handleDeviceMessage(payload) {
       console.warn('[DataChannel] sendFileChannelChunk failed: fileChannel is not open')
       return false
     }
-    if (fileChannel.bufferedAmount > 256 * 1024) {
-      return false // 发送缓冲大于 256KB 触发流控挂起
+    if (fileChannel.bufferedAmount > 512 * 1024) {
+      return false // 发送缓冲大于 512KB 触发流控挂起
     }
-    fileChannel.send(arrayBuffer)
-    return true
+    try {
+      fileChannel.send(arrayBuffer)
+      return true
+    } catch (e) {
+      console.error('[DataChannel] Error in sendFileChannelChunk:', e)
+      return false
+    }
   }
 
   function getFileChannelBufferedAmount() {

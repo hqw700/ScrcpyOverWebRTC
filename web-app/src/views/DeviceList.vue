@@ -3,7 +3,8 @@
     <header class="page-header">
       <div class="header-left">
         <h2 class="page-title">所有虚机</h2>
-        <span class="device-count">{{ filteredDevices.length }} / {{ deviceStore.devices.length }} 台在线</span>
+        <span v-if="deviceStore.showOfflineOnly" class="device-count">{{ filteredOfflineDevices.length }} / {{ deviceStore.offlineDevices.length }} 台离线</span>
+        <span v-else class="device-count">{{ filteredDevices.length }} / {{ deviceStore.devices.length }} 台在线</span>
       </div>
       
       <div class="header-controls">
@@ -115,8 +116,8 @@
       <section class="mobile-tag-bar">
         <button
           class="tag-filter"
-          :class="{ active: tagStore.selectedTagIds.length === 0 }"
-          @click="tagStore.clearSelectedTags()"
+          :class="{ active: tagStore.selectedTagIds.length === 0 && !deviceStore.showOfflineOnly }"
+          @click="selectAllTags"
         >
           <span class="tag-dot all"></span>
           <span class="tag-name">全部设备</span>
@@ -134,6 +135,15 @@
           <span class="tag-name">{{ tag.name }}</span>
           <span class="tag-count">{{ getTagDeviceCount(tag.id) }}</span>
         </button>
+        <button
+          class="tag-filter"
+          :class="{ active: deviceStore.showOfflineOnly }"
+          @click="toggleOfflineView"
+        >
+          <span class="tag-dot offline"></span>
+          <span class="tag-name">离线设备</span>
+          <span class="tag-count">{{ deviceStore.offlineDevices.length }}</span>
+        </button>
       </section>
 
       <main class="grid-container">
@@ -142,7 +152,7 @@
           <p>正在获取虚机列表...</p>
         </div>
 
-        <div v-else-if="deviceStore.devices.length === 0" class="quickstart-container">
+        <div v-else-if="deviceStore.devices.length === 0 && deviceStore.offlineDevices.length === 0" class="quickstart-container">
           <div class="quickstart-header">
             <div class="empty-icon">🔌</div>
             <h3 class="qs-title">快速接入您的第一台云手机</h3>
@@ -207,65 +217,160 @@
                 </div>
               </div>
 
-              <!-- 步骤一：下载部署包 -->
-              <div class="qs-step-block">
-                <div class="qs-step-title">第一步：下载一键部署资源包（包含全架构 Agent 及一键执行脚本）</div>
-                <div class="qs-download-row">
-                  <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="qs-download-link">
-                    <svg class="qs-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    下载统一部署包 (agent-deploy.zip)
-                  </a>
-                </div>
+              <!-- 部署模式切换按键 -->
+              <div class="qs-mode-selector">
+                <button 
+                  class="qs-mode-btn" 
+                  :class="{ active: quickstartMode === 'adb' }" 
+                  @click="quickstartMode = 'adb'"
+                >
+                  💻 电脑 ADB 一键部署 (无需 Root)
+                </button>
+                <button 
+                  class="qs-mode-btn magisk-qs-mode" 
+                  :class="{ active: quickstartMode === 'magisk' }" 
+                  @click="quickstartMode = 'magisk'"
+                >
+                  📱 Magisk / KSU 刷机模块 (Root 开机自启)
+                </button>
               </div>
 
-              <!-- 步骤二：运行命令 -->
-              <div class="qs-step-block">
-                <div class="qs-step-title">第二步：解压 ZIP 并在连接了设备的终端运行命令</div>
-                
-                <!-- 切换 OS 平台 -->
-                <div class="qs-tabs">
-                  <button class="qs-tab" :class="{ active: qsActiveOs === 'unix' }" @click="qsActiveOs = 'unix'">Linux / macOS (一键)</button>
-                  <button class="qs-tab" :class="{ active: qsActiveOs === 'win' }" @click="qsActiveOs = 'win'">Windows CMD (一键)</button>
+              <!-- 模式 A：ADB 电脑一键部署 -->
+              <template v-if="quickstartMode === 'adb'">
+                <!-- 步骤一：下载部署包 -->
+                <div class="qs-step-block">
+                  <div class="qs-step-title">第一步：下载 ADB 部署包 (包含全架构 Agent 及一键执行脚本)</div>
+                  <div class="qs-download-row">
+                    <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="qs-download-link">
+                      <svg class="qs-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      下载统一部署包 (agent-deploy.zip)
+                    </a>
+                  </div>
                 </div>
 
-                <!-- 终端视口 -->
-                <div class="qs-terminal">
-                  <pre v-if="qsActiveOs === 'unix'" class="qs-code-text"># 解压后在本地终端执行一键命令 (自动探测手机架构并推送拉起服务)
+                <!-- 步骤二：运行命令 -->
+                <div class="qs-step-block">
+                  <div class="qs-step-title">第二步：解压 ZIP 并在连接了设备的电脑终端运行命令</div>
+                  
+                  <!-- 切换 OS 平台 -->
+                  <div class="qs-tabs">
+                    <button class="qs-tab" :class="{ active: qsActiveOs === 'unix' }" @click="qsActiveOs = 'unix'">Linux / macOS (一键)</button>
+                    <button class="qs-tab" :class="{ active: qsActiveOs === 'win' }" @click="qsActiveOs = 'win'">Windows CMD (一键)</button>
+                  </div>
+
+                  <!-- 终端视口 -->
+                  <div class="qs-terminal">
+                    <pre v-if="qsActiveOs === 'unix'" class="qs-code-text"># 解压后在本地终端执行一键命令 (自动探测手机架构并推送拉起服务)
 chmod +x run.sh
 ./run.sh -id "{{ quickstartDeviceId || 'device_01' }}" -signaling "{{ signalingProtocol }}{{ quickstartSignaling }}" -ice-servers "{{ computedIceServers }}"</pre>
-                  <pre v-else-if="qsActiveOs === 'win'" class="qs-code-text">:: 解压后在本地 CMD 窗口执行一键命令 (自动探测手机架构并推送拉起服务)
+                    <pre v-else-if="qsActiveOs === 'win'" class="qs-code-text">:: 解压后在本地 CMD 窗口执行一键命令 (自动探测手机架构并推送拉起服务)
 run.bat -id "{{ quickstartDeviceId || 'device_01' }}" -signaling "{{ signalingProtocol }}{{ quickstartSignaling }}" -ice-servers "{{ computedIceServers }}"</pre>
-                  <button class="qs-copy-btn" @click="copyCommandText">复制运行指令</button>
+                    <button class="qs-copy-btn" @click="copyCommandText">复制运行指令</button>
+                  </div>
                 </div>
-              </div>
+              </template>
+
+              <!-- 模式 B：Magisk / KSU 刷机模块部署 -->
+              <template v-else-if="quickstartMode === 'magisk'">
+                <!-- 步骤一：下载模块包 -->
+                <div class="qs-step-block">
+                  <div class="qs-step-title">第一步：下载 Magisk 模块刷机包 (物理真机已 Root 环境)</div>
+                  <div class="qs-download-row">
+                    <a href="/agent/cloudphone-agent-magisk.zip" download="cloudphone-agent-magisk.zip" class="qs-download-link magisk-qs-btn">
+                      <svg class="qs-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                        <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                      </svg>
+                      下载 Magisk 模块包 (cloudphone-agent-magisk.zip)
+                    </a>
+                  </div>
+                </div>
+
+                <!-- 步骤二：刷入与热重载 -->
+                <div class="qs-step-block">
+                  <div class="qs-step-title">第二步：手机端刷入模块重启，并执行命令配置信令服务器</div>
+                  
+                  <!-- 终端视口 -->
+                  <div class="qs-terminal">
+                    <pre class="qs-code-text"># 手机刷入模块重启后，在手机终端或 ADB shell 执行以下命令设置地址并重启服务:
+su
+cpctl set CP_AGENT_SIGNALING "{{ signalingProtocol }}{{ quickstartSignaling }}"<template v-if="quickstartDeviceId">
+cpctl set CP_AGENT_ID "{{ quickstartDeviceId }}"</template>
+cpctl restart</pre>
+                    <button class="qs-copy-btn" @click="copyCommandText">复制运行指令</button>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </div>
 
-        <div v-else-if="filteredDevices.length === 0" class="state-view">
+        <div v-else-if="noVisibleDevices" class="state-view">
           <div class="empty-icon">🔎</div>
           <h3>没有匹配结果</h3>
           <p>调整搜索关键字或标签筛选</p>
         </div>
 
-        <div 
-          v-else 
-          class="device-grid" 
-          :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }"
-        >
-          <DeviceCard
-            v-for="device in filteredDevices"
-            :key="device.id"
-            :device="device"
-            :tags="tagStore.getTagsForDevice(device.id)"
-            @connect="connectDevice"
-            @settings="openSettings"
-            @edit-tags="id => openTagManager('single', id)"
-          />
+        <div v-else>
+          <!-- 离线筛选视图：只显示离线设备 -->
+          <div
+            v-if="deviceStore.showOfflineOnly"
+            class="device-grid offline-grid"
+            :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }"
+          >
+            <DeviceCard
+              v-for="device in filteredOfflineDevices"
+              :key="device.id"
+              :device="device"
+              :tags="tagStore.getTagsForDevice(device.id)"
+              @connect="connectDevice"
+              @settings="openSettings"
+              @edit-tags="id => openTagManager('single', id)"
+            />
+          </div>
+          <template v-else>
+            <div 
+              v-if="filteredDevices.length > 0"
+              class="device-grid" 
+              :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }"
+            >
+              <DeviceCard
+                v-for="device in filteredDevices"
+                :key="device.id"
+                :device="device"
+                :tags="tagStore.getTagsForDevice(device.id)"
+                @connect="connectDevice"
+                @settings="openSettings"
+                @edit-tags="id => openTagManager('single', id)"
+              />
+            </div>
+
+            <!-- 离线设备区块（数据来自服务端离线记录） -->
+            <div v-if="filteredOfflineDevices.length > 0" class="offline-section">
+              <div class="offline-section-header">
+                <span class="offline-section-title">离线设备</span>
+                <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
+              </div>
+              <div 
+                class="device-grid offline-grid" 
+                :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }"
+              >
+                <DeviceCard
+                  v-for="device in filteredOfflineDevices"
+                  :key="device.id"
+                  :device="device"
+                  :tags="tagStore.getTagsForDevice(device.id)"
+                  @connect="connectDevice"
+                  @settings="openSettings"
+                  @edit-tags="id => openTagManager('single', id)"
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </main>
     </div>
@@ -376,6 +481,56 @@ const filteredDevices = computed(() => {
   })
 })
 
+// 离线设备（服务端离线记录），与在线列表使用相同的搜索/标签筛选
+const filteredOfflineDevices = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return deviceStore.offlineDevices.filter(device => {
+    const deviceTags = tagStore.getTagsForDevice(device.id)
+    const matchesTag = tagStore.selectedTagIds.length === 0 ||
+      tagStore.selectedTagIds.every(id => deviceTags.some(tag => tag.id === id))
+    if (!matchesTag) return false
+
+    if (!query) return true
+
+    const searchable = [
+      device.id,
+      device.info?.model,
+      ...deviceTags.map(tag => tag.name)
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    return searchable.includes(query)
+  })
+})
+
+// 当前视图是否无可展示设备（离线筛选模式下只看离线列表）
+const noVisibleDevices = computed(() => {
+  if (deviceStore.showOfflineOnly) {
+    return filteredOfflineDevices.value.length === 0
+  }
+  return filteredDevices.value.length === 0 && filteredOfflineDevices.value.length === 0
+})
+
+function selectAllTags() {
+  tagStore.clearSelectedTags()
+  deviceStore.showOfflineOnly = false
+}
+
+function toggleOfflineView() {
+  deviceStore.showOfflineOnly = !deviceStore.showOfflineOnly
+  if (deviceStore.showOfflineOnly) {
+    // 离线筛选与标签筛选互斥
+    tagStore.clearSelectedTags()
+  }
+}
+
+// 离线列表清空时自动退出离线筛选视图
+watch(() => deviceStore.offlineDevices.length, len => {
+  if (len === 0 && deviceStore.showOfflineOnly) {
+    deviceStore.showOfflineOnly = false
+  }
+})
+
 function openGlobalSettings() {
   selectedDeviceId.value = ''
   localSettings.value = getDeviceSettings('')
@@ -451,6 +606,7 @@ function getTagDeviceCount(tagId) {
 
 const quickstartSignaling = ref('')
 const quickstartDeviceId = ref('device_01')
+const quickstartMode = ref('adb') // 'adb' | 'magisk'
 const qsActiveOs = ref('unix')
 
 const signalingProtocol = computed(() => {
@@ -516,16 +672,23 @@ function copyText(text) {
 
 function copyCommandText() {
   let cmd = ''
-  if (qsActiveOs.value === 'unix') {
-    cmd = `./run.sh -id "${quickstartDeviceId.value || 'device_01'}" -signaling "${signalingProtocol.value}${quickstartSignaling.value}" -ice-servers "${computedIceServers.value}"`
-  } else if (qsActiveOs.value === 'win') {
-    cmd = `run.bat -id "${quickstartDeviceId.value || 'device_01'}" -signaling "${signalingProtocol.value}${quickstartSignaling.value}" -ice-servers "${computedIceServers.value}"`
+  if (quickstartMode.value === 'adb') {
+    if (qsActiveOs.value === 'unix') {
+      cmd = `./run.sh -id "${quickstartDeviceId.value || 'device_01'}" -signaling "${signalingProtocol.value}${quickstartSignaling.value}" -ice-servers "${computedIceServers.value}"`
+    } else if (qsActiveOs.value === 'win') {
+      cmd = `run.bat -id "${quickstartDeviceId.value || 'device_01'}" -signaling "${signalingProtocol.value}${quickstartSignaling.value}" -ice-servers "${computedIceServers.value}"`
+    }
+  } else if (quickstartMode.value === 'magisk') {
+    const devIdCmd = quickstartDeviceId.value ? `\ncpctl set CP_AGENT_ID "${quickstartDeviceId.value}"` : ''
+    cmd = `su\ncpctl set CP_AGENT_SIGNALING "${signalingProtocol.value}${quickstartSignaling.value}"${devIdCmd}\ncpctl restart`
   }
   copyText(cmd)
 }
 
 function toggleSelectedTag(tagId) {
   tagStore.toggleSelectedTag(tagId)
+  // 选择标签时退出离线筛选视图
+  deviceStore.showOfflineOnly = false
 }
 
 onMounted(async () => {
@@ -814,6 +977,10 @@ function handleOpenTagManagerEvent() {
   background: var(--accent);
 }
 
+.tag-dot.offline {
+  background: #8b949e;
+}
+
 .tag-name {
   min-width: 0;
   overflow: hidden;
@@ -853,6 +1020,44 @@ function handleOpenTagManagerEvent() {
 .device-grid {
   display: grid;
   gap: 20px;
+}
+
+.offline-section {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.offline-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.offline-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.offline-section-count {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.offline-grid :deep(.device-card) {
+  filter: grayscale(0.55);
+  opacity: 0.72;
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.offline-grid :deep(.device-card:hover) {
+  filter: grayscale(0.2);
+  opacity: 0.95;
 }
 
 .state-view {
@@ -1454,6 +1659,46 @@ function handleOpenTagManagerEvent() {
   font-weight: 600;
 }
 
+.qs-mode-selector {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.qs-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.qs-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.qs-mode-btn.active {
+  background: var(--bg-surface, rgba(88, 166, 255, 0.15));
+  color: #58a6ff;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.qs-mode-btn.magisk-qs-mode.active {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
 .qs-terminal {
   position: relative;
   background: #0d1117;
@@ -1492,6 +1737,18 @@ function handleOpenTagManagerEvent() {
 .qs-copy-btn:hover {
   background: #30363d;
   border-color: #8b949e;
+}
+
+.qs-download-link.magisk-qs-btn {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.qs-download-link.magisk-qs-btn:hover {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: #a855f7;
+  color: #e9d5ff;
 }
 
 /* 警告提示及准备条件样式 */

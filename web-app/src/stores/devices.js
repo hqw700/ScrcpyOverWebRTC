@@ -86,7 +86,8 @@ export const useDeviceStore = defineStore('devices', () => {
       return {
         ...d,
         info: activeDev?.info || d.info,
-        firstSeen: activeDev?.firstSeen || d.firstSeen
+        firstSeen: activeDev?.firstSeen || d.firstSeen,
+        clientCount: activeDev?.clientCount ?? d.clientCount ?? 0
       }
     })
 
@@ -104,7 +105,8 @@ export const useDeviceStore = defineStore('devices', () => {
             info: devData.info,
             status: 'online',
             firstSeen: devData.firstSeen || resurrected.firstSeen,
-            lastSeen: new Date().toISOString()
+            lastSeen: new Date().toISOString(),
+            clientCount: devData.clientCount ?? resurrected.clientCount ?? 0
           })
         } else {
           // 全新上线的设备
@@ -114,7 +116,8 @@ export const useDeviceStore = defineStore('devices', () => {
             status: 'online',
             snapshot: null,
             firstSeen: devData.firstSeen || null,
-            lastSeen: new Date().toISOString()
+            lastSeen: new Date().toISOString(),
+            clientCount: devData.clientCount ?? 0
           })
         }
       }
@@ -127,6 +130,38 @@ export const useDeviceStore = defineStore('devices', () => {
   async function fetchDevices() {
     loading.value = true
     error.value = null
+    
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      try {
+        const { MOCK_DEVICES, startMockStatsGenerator } = await import('@/mock/demoEngine')
+        const activeList = MOCK_DEVICES.filter(d => d.status === 'online')
+        devices.value = activeList.map(d => ({
+          ...d,
+          info: d.info,
+          status: d.status
+        }))
+        const offlineList = MOCK_DEVICES.filter(d => d.status === 'offline')
+        offlineDevices.value = offlineList
+
+        if (!window.__mock_stats_started) {
+          window.__mock_stats_started = true
+          startMockStatsGenerator((updatedList) => {
+            updatedList.forEach(item => {
+              const target = devices.value.find(d => d.id === item.id)
+              if (target) {
+                target.stats = { ...item.stats }
+              }
+            })
+          })
+        }
+      } catch (e) {
+        console.error('Demo devices load error:', e)
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+
     try {
       const res = await fetch('/devices')
       const data = await res.json()
@@ -141,7 +176,8 @@ export const useDeviceStore = defineStore('devices', () => {
             info: item.device_info,
             online: item.online !== false,
             firstSeen: item.first_seen || null,
-            lastSeen: item.last_seen || null
+            lastSeen: item.last_seen || null,
+            clientCount: item.client_count || 0
           }
         })
         processDeviceList(deviceList)
@@ -191,7 +227,8 @@ export const useDeviceStore = defineStore('devices', () => {
         info: item.device_info || null,
         online: item.online !== false,
         firstSeen: item.first_seen || null,
-        lastSeen: item.last_seen || null
+        lastSeen: item.last_seen || null,
+        clientCount: item.client_count || 0
       }
     })
     processDeviceList(deviceList)
@@ -508,7 +545,9 @@ export const useDeviceStore = defineStore('devices', () => {
   // 全局下半屏控制台状态
   const showGlobalConsole = ref(false)
   const consoleDeviceId = ref('')
-  const globalConsoleHeight = ref(parseInt(localStorage.getItem('cloudphone_console_height') || '380', 10))
+  // 初始高度按当前视口钳制：避免大屏保存的高度在小屏上超出视口，
+  // 导致顶部拉伸手柄跑到屏幕外而无法缩小
+  const globalConsoleHeight = ref(clampConsoleHeight(parseInt(localStorage.getItem('cloudphone_console_height') || '380', 10)))
 
   // 离线设备筛选视图（侧边栏"离线设备"栏）：开启后设备列表只展示离线设备
   const showOfflineOnly = ref(false)
@@ -571,13 +610,29 @@ export const useDeviceStore = defineStore('devices', () => {
     consoleDeviceId.value = null
   }
 
+  // 钳制终端高度：上限跟随当前视口（至少留出顶部 100px 保证拉伸手柄可达）
+  function clampConsoleHeight(height) {
+    const maxHeight = typeof window !== 'undefined' ? Math.max(300, window.innerHeight - 100) : 1200
+    return Math.max(200, Math.min(maxHeight, height))
+  }
+
   function setConsoleHeight(height) {
-    const maxHeight = typeof window !== 'undefined' ? Math.max(600, window.innerHeight - 100) : 1200
-    const validHeight = Math.max(200, Math.min(maxHeight, height))
+    const validHeight = clampConsoleHeight(height)
     globalConsoleHeight.value = validHeight
     try {
       localStorage.setItem('cloudphone_console_height', String(validHeight))
     } catch(e) {}
+  }
+
+  // 窗口尺寸变化（如大屏切小屏）时重新钳制，防止终端比屏幕还大。
+  // 不写回 localStorage：保留用户在大屏上的偏好高度，回到大屏仍然生效。
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+      const clamped = clampConsoleHeight(globalConsoleHeight.value)
+      if (clamped !== globalConsoleHeight.value) {
+        globalConsoleHeight.value = clamped
+      }
+    })
   }
 
   const currentTask = ref(null)

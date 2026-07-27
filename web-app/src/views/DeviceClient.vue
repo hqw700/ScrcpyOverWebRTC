@@ -447,11 +447,15 @@ function saveSettings(newSettings) {
     isSavingSettingsSelf = false
   }
   
+  // 与手动“关闭面板再点连接”同效：先卸载面板触发完整断开清理（onUnmounted → disconnect），
+  // 等待 Agent 完成 scrcpy 停服/重启后再自动重开。
+  // 原地断开即连会撞上 Agent 侧停服/重启窗口，导致新推流会话起不来。
   if (currentId.value) {
-    webrtc.disconnect()
-    currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
-    deviceStore.setActiveWebRTC(webrtc)
-    setupWebRTC()
+    const id = currentId.value
+    deviceStore.clearActiveDevice()
+    setTimeout(() => {
+      deviceStore.setActiveDevice(id)
+    }, 1000)
   }
 }
 

@@ -34,6 +34,12 @@
         >
           快捷注册
         </button>
+        <button 
+          class="tab-btn card-tab-btn"
+          @click="showCardModal = true"
+        >
+          🔑 卡密直连
+        </button>
       </div>
 
       <div class="form-container">
@@ -97,6 +103,8 @@
         </form>
       </div>
     </div>
+    <!-- 卡密直连弹窗 -->
+    <CardConnectModal :visible="showCardModal" @close="showCardModal = false" />
   </div>
 </template>
 
@@ -106,7 +114,10 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+import CardConnectModal from '@/components/CardConnectModal.vue'
+
 const authStore = useAuthStore()
+const showCardModal = ref(false)
 
 const activeTab = ref('login')
 const loading = ref(false)

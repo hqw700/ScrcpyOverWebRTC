@@ -19,7 +19,7 @@
             placeholder="搜索设备或标签"
           >
         </div>
-        <div class="size-control">
+        <div class="size-control" v-show="viewMode === 'grid'">
           <span class="label">卡片</span>
           <input
             type="range"
@@ -32,31 +32,33 @@
           <span class="size-value">{{ cardSize }}px</span>
         </div>
 
-        <div class="preview-mode-switch">
-          <label class="switch-label" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
-            <input
-              type="checkbox"
-              v-model="deviceStore.globalPreviewMode"
-              class="switch-checkbox"
-            >
-            <span class="switch-text">高频预览</span>
-          </label>
-        </div>
+        <div class="preview-switches">
+          <div class="preview-mode-switch">
+            <label class="switch-label" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
+              <input
+                type="checkbox"
+                v-model="deviceStore.globalPreviewMode"
+                class="switch-checkbox"
+              >
+              <span class="switch-text">高频预览</span>
+            </label>
+          </div>
 
-        <div class="preview-mode-switch">
-          <label 
-            class="switch-label" 
-            :class="{ 'disabled': !deviceStore.globalPreviewMode }" 
-            title="开启后，可直接点击列表里的预览画面进行触控和按键控制，无需进入详情页 (需要先开启高频预览)"
-          >
-            <input
-              type="checkbox"
-              v-model="deviceStore.globalInteractiveMode"
-              :disabled="!deviceStore.globalPreviewMode"
-              class="switch-checkbox"
+          <div class="preview-mode-switch">
+            <label 
+              class="switch-label" 
+              :class="{ 'disabled': !deviceStore.globalPreviewMode }" 
+              title="开启后，可直接点击列表里的预览画面进行触控和按键控制，无需进入详情页 (需要先开启高频预览)"
             >
-            <span class="switch-text">预览直控</span>
-          </label>
+              <input
+                type="checkbox"
+                v-model="deviceStore.globalInteractiveMode"
+                :disabled="!deviceStore.globalPreviewMode"
+                class="switch-checkbox"
+              >
+              <span class="switch-text">预览直控</span>
+            </label>
+          </div>
         </div>
 
         <!-- 群控快捷工具栏 -->
@@ -94,6 +96,23 @@
         </div>
 
         <div class="header-actions">
+          <button class="deploy-btn secondary view-mode-btn" @click="toggleViewMode" :title="viewMode === 'grid' ? '切换到列表视图' : '切换到卡片视图'" aria-label="切换视图">
+            <svg v-if="viewMode === 'grid'" class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+            <svg v-else class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span class="btn-label">{{ viewMode === 'grid' ? '列表' : '卡片' }}</span>
+          </button>
           <button class="deploy-btn secondary mobile-tag-action" @click="openTagManager('full')" title="标签管理" aria-label="标签管理">
             <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
               <path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path>
@@ -316,6 +335,58 @@ cpctl restart</pre>
         </div>
 
         <div v-else>
+          <!-- 列表视图（参考 Android 端列表模式：缩略图 + 名称/型号/状态 + 箭头） -->
+          <template v-if="viewMode === 'list'">
+            <div v-if="deviceStore.showOfflineOnly" class="device-list-view">
+              <DeviceListItem
+                v-for="device in filteredOfflineDevices"
+                :key="device.id"
+                :device="device"
+                :tags="tagStore.getTagsForDevice(device.id)"
+                @connect="connectDevice"
+                @settings="openSettings"
+                @edit-tags="id => openTagManager('single', id)"
+                @share="openShareModal"
+              />
+            </div>
+            <template v-else>
+              <div v-if="filteredDevices.length > 0" class="device-list-view">
+                <DeviceListItem
+                  v-for="device in filteredDevices"
+                  :key="device.id"
+                  :device="device"
+                  :tags="tagStore.getTagsForDevice(device.id)"
+                  @connect="connectDevice"
+                  @settings="openSettings"
+                  @edit-tags="id => openTagManager('single', id)"
+                  @share="openShareModal"
+                />
+              </div>
+
+              <!-- 离线设备区块（数据来自服务端离线记录） -->
+              <div v-if="filteredOfflineDevices.length > 0" class="offline-section">
+                <div class="offline-section-header">
+                  <span class="offline-section-title">离线设备</span>
+                  <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
+                </div>
+                <div class="device-list-view">
+                  <DeviceListItem
+                    v-for="device in filteredOfflineDevices"
+                    :key="device.id"
+                    :device="device"
+                    :tags="tagStore.getTagsForDevice(device.id)"
+                    @connect="connectDevice"
+                    @settings="openSettings"
+                    @edit-tags="id => openTagManager('single', id)"
+                    @share="openShareModal"
+                  />
+                </div>
+              </div>
+            </template>
+          </template>
+
+          <!-- 卡片网格视图 -->
+          <template v-else>
           <!-- 离线筛选视图：只显示离线设备 -->
           <div
             v-if="deviceStore.showOfflineOnly"
@@ -346,6 +417,7 @@ cpctl restart</pre>
                 @connect="connectDevice"
                 @settings="openSettings"
                 @edit-tags="id => openTagManager('single', id)"
+                @share="openShareModal"
               />
             </div>
 
@@ -367,9 +439,11 @@ cpctl restart</pre>
                   @connect="connectDevice"
                   @settings="openSettings"
                   @edit-tags="id => openTagManager('single', id)"
+                  @share="openShareModal"
                 />
               </div>
             </div>
+          </template>
           </template>
         </div>
       </main>
@@ -392,6 +466,13 @@ cpctl restart</pre>
       :mode="tagManagerMode"
       @close="closeTagManager"
     />
+
+    <!-- 全局 ShareModal 弹窗 -->
+    <ShareModal
+      :visible="shareModalVisible"
+      :deviceId="shareTargetDeviceId"
+      @close="shareModalVisible = false"
+    />
   </div>
 </template>
 
@@ -401,8 +482,10 @@ import { useRouter } from 'vue-router'
 import { useDeviceStore } from '@/stores/devices'
 import { useTagStore } from '@/stores/tags'
 import DeviceCard from '@/components/DeviceCard.vue'
+import DeviceListItem from '@/components/DeviceListItem.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import TagManagerModal from '@/components/TagManagerModal.vue'
+import ShareModal from '@/components/ShareModal.vue'
 
 import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings } from '@/utils/settings'
 import { useGroupControlStore } from '@/stores/groupControl'
@@ -411,10 +494,27 @@ const router = useRouter()
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
 const groupControlStore = useGroupControlStore()
+
+const shareModalVisible = ref(false)
+const shareTargetDeviceId = ref('')
+
+function openShareModal(deviceId) {
+  shareTargetDeviceId.value = deviceId
+  shareModalVisible.value = true
+}
 const savedCardSize = localStorage.getItem('cloudphone_card_size')
 const cardSize = ref(savedCardSize ? parseInt(savedCardSize, 10) : 280)
 const searchQuery = ref('')
 const showTagDropdown = ref(false)
+
+// 视图模式：grid=卡片网格，list=列表（参考 Android 端的卡片/列表切换）
+const savedViewMode = localStorage.getItem('cloudphone_view_mode')
+const viewMode = ref(savedViewMode === 'list' ? 'list' : 'grid')
+
+function toggleViewMode() {
+  viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid'
+  localStorage.setItem('cloudphone_view_mode', viewMode.value)
+}
 
 function selectAllOnline() {
   groupControlStore.selectAllOnline(deviceStore.devices)
@@ -856,6 +956,10 @@ function handleOpenTagManagerEvent() {
   border-radius: 7px;
 }
 
+.preview-switches {
+  display: contents;
+}
+
 .preview-mode-switch {
   display: flex;
   align-items: center;
@@ -1022,6 +1126,13 @@ function handleOpenTagManagerEvent() {
   gap: 20px;
 }
 
+/* 列表视图 */
+.device-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .offline-section {
   margin-top: 28px;
   padding-top: 16px;
@@ -1123,9 +1234,11 @@ function handleOpenTagManagerEvent() {
     font-size: 12px;
   }
 
+  /* 第一行：搜索框 + 视图切换 + 标签管理 + 全局设置；
+     第二行：高频预览 / 预览直控 开关（各占两列，不再挤乱搜索栏） */
   .header-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 36px 36px;
+    grid-template-columns: minmax(0, 1fr) 36px 36px 36px;
     gap: 8px;
     align-items: center;
   }
@@ -1133,11 +1246,17 @@ function handleOpenTagManagerEvent() {
   .search-box {
     width: auto;
     height: 36px;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .header-actions {
     display: contents;
   }
+
+  .header-actions > .deploy-btn:nth-of-type(1) { grid-column: 2; grid-row: 1; }
+  .header-actions > .deploy-btn:nth-of-type(2) { grid-column: 3; grid-row: 1; }
+  .header-actions > .deploy-btn:nth-of-type(3) { grid-column: 4; grid-row: 1; }
 
   .mobile-tag-action {
     display: flex;
@@ -1159,9 +1278,30 @@ function handleOpenTagManagerEvent() {
   .deploy-btn .btn-label {
     display: none;
   }
-  
+
   .size-control {
     display: none !important;
+  }
+
+  .preview-switches {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .preview-mode-switch {
+    justify-content: center;
+    height: 34px;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .group-quick-actions {
+    grid-column: 1 / -1;
+    margin-right: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .content-layout {
@@ -1198,39 +1338,32 @@ function handleOpenTagManagerEvent() {
     display: none !important;
   }
 
+  /* 移动端主区域改为垂直滚动，设备网格/列表均自然向下滚动浏览 */
   .grid-container {
     flex: 1;
-    display: flex;
-    align-items: stretch;
-    overflow: hidden;
-  }
-
-  .device-grid {
-    /* 移动端采用左右滑动模式 */
-    display: flex !important;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    gap: 16px;
-    padding: 12px 8px 18px;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
+    min-height: 0;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
 
-  .device-grid::-webkit-scrollbar {
-    display: none; /* 隐藏滑动条 */
+  .device-grid {
+    /* 覆盖内联的 gridTemplateColumns，移动端固定双列竖向网格 */
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+    padding: 2px 2px 12px;
   }
 
   .device-grid > * {
-    /* 每个卡片宽度占据屏幕大部 */
-    min-width: 80vw;
-    max-width: 80vw;
-    height: calc(100% - 4px);
-    scroll-snap-align: center;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 3 / 4;
   }
-  
+
+  .device-list-view {
+    gap: 8px;
+    padding-bottom: 12px;
+  }
+
   .page-title {
     font-size: 16px;
   }

@@ -440,6 +440,18 @@ const props = defineProps({
   height: {
     type: String,
     default: '100%'
+  },
+  shareToken: {
+    type: String,
+    default: ''
+  },
+  sharePassword: {
+    type: String,
+    default: ''
+  },
+  accessMode: {
+    type: String,
+    default: 'full'
   }
 })
 
@@ -789,7 +801,9 @@ async function setupDeviceConnection(deviceId) {
         audio_low_latency: settings.audioLowLatency,
         debug: settings.debug,
         snapshot_interval: settings.snapshotInterval,
-        power_off: settings.powerOff
+        power_off: settings.powerOff,
+        // 只读分享：屏蔽触控/键盘/剪贴板等一切输入注入
+        view_only: props.accessMode === 'view_only'
       }
 
       webrtc.value = useWebRTC(deviceId, scrcpyOptions)
@@ -810,7 +824,7 @@ async function setupDeviceConnection(deviceId) {
       setTimeout(() => {
         if (webrtc.value && dummyVideo.value) {
           webrtc.value.setVideoGetter(() => dummyVideo.value)
-          webrtc.value.connect()
+          webrtc.value.connect(props.shareToken, props.sharePassword)
           webrtc.value.onCommandResult(onCommandResultHandler)
         }
       }, 50)

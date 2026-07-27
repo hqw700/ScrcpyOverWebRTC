@@ -41,14 +41,21 @@ window.fetch = async (input, init = {}) => {
 
   const response = await originalFetch(input, init)
   if (isLocal && response.status === 401) {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('auth_user')
-    try {
-      const { useAuthStore } = await import('./stores/auth')
-      const auth = useAuthStore()
-      auth.token = ''
-      auth.username = ''
-    } catch (e) {}
+    // 排除分享 API (/api/share/)、快照 (/snapshots/)、授权状态 (/api/auth-status) 以及登录注册接口
+    const isPublicOrShareApi = url.includes('/api/share/') || url.includes('/snapshots/') || url.includes('/api/auth-status')
+    if (!isPublicOrShareApi && !url.includes('/api/login') && !url.includes('/api/register')) {
+      try {
+        const { useAuthStore } = await import('./stores/auth')
+        const auth = useAuthStore()
+        // 只有非免密模式且接口为当前用户核心 API 时才注销 token
+        if (!auth.noAuthMode) {
+          localStorage.removeItem('auth_token')
+          localStorage.removeItem('auth_user')
+          auth.token = ''
+          auth.username = ''
+        }
+      } catch (e) {}
+    }
   }
   return response
 }

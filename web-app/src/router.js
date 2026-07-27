@@ -28,6 +28,13 @@ const routes = [
     components: {
       default: () => import('@/views/AdvancedPage.vue')
     }
+  },
+  {
+    path: '/share',
+    name: 'ShareDevice',
+    components: {
+      default: () => import('@/views/ShareView.vue')
+    }
   }
 ]
 

@@ -1,5 +1,7 @@
 <template>
-  <div v-if="!authStore.isLoggedIn" style="width: 100vw; height: 100vh;">
+  <!-- 分享免登录页：独立于后台布局与鉴权门，由 vue-router 直接渲染 -->
+  <router-view v-if="isSharePage" />
+  <div v-else-if="!authStore.isLoggedIn" style="width: 100vw; height: 100vh;">
     <Login />
   </div>
   <div v-else class="app-container" :class="{ 'is-resizing': isResizing }">
@@ -72,7 +74,7 @@
         </span>
       </button>
       <div class="nav-links">
-        <a href="javascript:void(0)" @click="navigateTo('/')" class="nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage }">
+        <a href="javascript:void(0)" @click="navigateTo('/')" class="nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showShareAdminPage }">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
             <line x1="12" y1="18" x2="12.01" y2="18"></line>
@@ -126,6 +128,13 @@
           </svg>
           <span class="nav-item-text">外设</span>
         </a>
+        <a href="javascript:void(0)" @click="navigateTo('/shares')" class="nav-item" :class="{ active: showShareAdminPage }" title="分享与卡密管理">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+          <span class="nav-item-text">分享</span>
+        </a>
         <a href="javascript:void(0)" @click="navigateTo('/admin')" class="nav-item" :class="{ active: showUserAdminPage }" v-if="authStore.role === 'admin'">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -144,7 +153,7 @@
           <span class="nav-item-text">退出</span>
         </a>
       </div>
-      <div class="nav-tag-group" v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showAdvancedPage">
+      <div class="nav-tag-group" v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showAdvancedPage && !showShareAdminPage">
         <div class="nav-tag-group-title">
           <span>标签</span>
           <button class="nav-tag-manage-btn" @click="openTagManager">
@@ -208,7 +217,7 @@
     <!-- 2. 主内容区域 -->
     <main class="main-content" id="main-layout-content">
       <header class="top-bar" v-if="!isMobile">
-        <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : '云虚机矩阵'))) }}</h1>
+        <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : (showShareAdminPage ? '分享与卡密管理' : '云虚机矩阵')))) }}</h1>
         <div class="top-bar-right">
           <!-- 帮助与支持下拉菜单 -->
           <div class="header-help-menu" @click.stop v-if="!authStore.noAuthMode">
@@ -284,8 +293,9 @@
       
       <section class="viewport">
         <transition name="fade" mode="out-in">
-          <DeviceList v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage" />
+          <DeviceList v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage && !showShareAdminPage" />
           <UserAdminPage v-else-if="showUserAdminPage" />
+          <ShareAdminPage v-else-if="showShareAdminPage" />
           <DeployPage v-else-if="showDeployPage" />
           <FileManagerPage v-else-if="showFilePage" />
           <Dashboard v-else-if="showMonitorPage" />
@@ -314,7 +324,7 @@
     <aside 
       class="control-panel-wrapper" 
       :class="{ 
-        'is-open': !!deviceStore.activeDeviceId && !showTerminalPage && !showDeployPage && !showMonitorPage,
+        'is-open': !!deviceStore.activeDeviceId && !showTerminalPage && !showDeployPage && !showMonitorPage && !(isMobile && showFilePage),
         'is-floating': isFloating && !isMobile,
         'is-mobile': isMobile
       }"
@@ -378,7 +388,7 @@
 
     <!-- 4. 移动端底部导航栏 (仅在主视图显示活跃虚机视频时才隐藏，在文件、终端或列表页均保持可见) -->
     <nav class="mobile-bottom-nav" v-if="isMobile && (showFilePage || showTerminalPage || showDeployPage || showMonitorPage || showUserAdminPage || showBatchPage || showAdvancedPage || !deviceStore.activeDeviceId)">
-      <button @click="navigateTo('/')" class="mobile-nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage }">
+      <button @click="navigateTo('/')" class="mobile-nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage && !showShareAdminPage }">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
           <line x1="12" y1="18" x2="12.01" y2="18"></line>
@@ -496,6 +506,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/devices'
 import { useTagStore } from '@/stores/tags'
 import { useAuthStore } from '@/stores/auth'
@@ -509,10 +520,15 @@ import Login from '@/views/Login.vue'
 import UserAdminPage from '@/views/UserAdminPage.vue'
 import BatchControlPage from '@/views/BatchControlPage.vue'
 import AdvancedPage from '@/views/AdvancedPage.vue'
+import ShareAdminPage from '@/views/ShareAdminPage.vue'
 
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
 const authStore = useAuthStore()
+
+const route = useRoute()
+// /share 为访客免登录分享页：渲染 router-view，不初始化后台数据与信令
+const isSharePage = computed(() => route.path === '/share')
 
 function handleLogout() {
   authStore.logout()
@@ -541,6 +557,7 @@ const showMonitorPage = ref(false)
 const showUserAdminPage = ref(false)
 const showBatchPage = ref(false)
 const showAdvancedPage = ref(false)
+const showShareAdminPage = ref(false)
 const isNavExpanded = ref(false)
 const showHelpMenu = ref(false)
 const showContactModal = ref(false)
@@ -738,7 +755,7 @@ function getTagDeviceCount(tagId) {
 }
 
 const initApp = () => {
-  if (authStore.isLoggedIn) {
+  if (authStore.isLoggedIn && !isSharePage.value) {
     authStore.fetchMe()
     tagStore.load()
     deviceStore.fetchDevices()
@@ -804,7 +821,19 @@ function closePanel() {
 }
 
 function navigateTo(path) {
-  if (path === '/deploy') {
+  // 先统一复位分享管理页标记，各分支只需关心自己管辖的标记
+  showShareAdminPage.value = false
+
+  if (path === '/shares') {
+    showDeployPage.value = false
+    showFilePage.value = false
+    showTerminalPage.value = false
+    showMonitorPage.value = false
+    showBatchPage.value = false
+    showUserAdminPage.value = false
+    showAdvancedPage.value = false
+    showShareAdminPage.value = true
+  } else if (path === '/deploy') {
     showDeployPage.value = true
     showFilePage.value = false
     showTerminalPage.value = false

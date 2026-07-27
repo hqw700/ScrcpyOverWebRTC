@@ -19,6 +19,11 @@
         class="snapshot-img"
         :class="{ 'is-landscape': isLandscape }"
       ></canvas>
+      <!-- 使用中遮罩：有客户端（含分享访客）接入时显示（样式参考群控“主控”蒙版） -->
+      <div v-if="device.clientCount > 0" class="in-use-overlay" :title="`当前有 ${device.clientCount} 个连接`">
+        <span class="in-use-text">使用中</span>
+        <span class="in-use-sub">{{ device.clientCount }} 个连接</span>
+      </div>
       <!-- 预览直控覆盖交互层 -->
       <div
         v-if="deviceStore.globalInteractiveMode && device.status === 'online'"
@@ -118,19 +123,23 @@
 
     <!-- 下拉菜单 -->
     <div v-if="showMenu" class="card-menu" @click.stop>
-      <button class="menu-item" @click="onSettings">
+      <button class="menu-item" @click.stop="onSettings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         连接设置
       </button>
-      <button class="menu-item" @click="onEditTags">
+      <button class="menu-item" @click.stop="onShareDevice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+        分享设备 / 卡密
+      </button>
+      <button class="menu-item" @click.stop="onEditTags">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
         编辑标签
       </button>
-      <button class="menu-item danger" @click="onQuitAgent" :disabled="device.status !== 'online'">
+      <button class="menu-item danger" @click.stop="onQuitAgent" :disabled="device.status !== 'online'">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v6M12 4.5a6 6 0 11-8 0"/></svg>
         退出 Agent
       </button>
-      <button v-if="device.status !== 'online'" class="menu-item danger" @click="onDeleteRecord">
+      <button v-if="device.status !== 'online'" class="menu-item danger" @click.stop="onDeleteRecord">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         移除记录
       </button>
@@ -159,7 +168,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['connect', 'settings', 'edit-tags'])
+const emit = defineEmits(['connect', 'settings', 'edit-tags', 'share'])
 const deviceStore = useDeviceStore()
 const groupControlStore = useGroupControlStore()
 const showMenu = ref(false)
@@ -251,6 +260,11 @@ function onCardClick() {
 
 function toggleMenu() {
   showMenu.value = !showMenu.value
+}
+
+function onShareDevice() {
+  showMenu.value = false
+  emit('share', props.device.id)
 }
 
 function onSettings() {
@@ -728,6 +742,23 @@ onMounted(() => {
     
     observer.observe(cardElement.value)
   }
+
+  // Demo 模式动画渲染
+  if (import.meta.env.VITE_DEMO_MODE === 'true' && props.device.status === 'online') {
+    let mockRipples = []
+    const demoRenderInterval = setInterval(() => {
+      if (previewCanvas.value) {
+        mockRipples = mockRipples.map(r => ({ ...r, radius: r.radius + 1.5, alpha: r.alpha - 0.05 })).filter(r => r.alpha > 0)
+        import('@/mock/demoEngine').then(({ renderMockScreenCanvas }) => {
+          renderMockScreenCanvas(previewCanvas.value, props.device.id, mockRipples)
+        })
+      }
+    }, 50)
+
+    onUnmounted(() => {
+      clearInterval(demoRenderInterval)
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -1018,6 +1049,40 @@ const sendKey = (keycode) => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 使用中遮罩 - 参考群控“主控”：半透明蒙版+大字（蓝色系以区分主控橙） */
+.in-use-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.in-use-text {
+  font-size: clamp(22px, 5vw, 44px);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.55);
+  letter-spacing: 0.15em;
+  user-select: none;
+  -webkit-text-stroke: 1px rgba(56, 189, 248, 0.4);
+}
+
+.in-use-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.1em;
+  user-select: none;
 }
 
 .snapshot-placeholder {

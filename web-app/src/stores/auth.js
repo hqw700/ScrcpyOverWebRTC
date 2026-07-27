@@ -2,11 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('auth_token') || '')
-  const username = ref(localStorage.getItem('auth_user') || '')
-  const role = ref(localStorage.getItem('auth_role') || '')
-  const assignedDevices = ref(JSON.parse(localStorage.getItem('auth_devices') || '[]'))
-  const noAuthMode = ref(false)
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true'
+  const token = ref(localStorage.getItem('auth_token') || (isDemo ? 'demo-token-xyz' : ''))
+  const username = ref(localStorage.getItem('auth_user') || (isDemo ? 'demo_admin' : ''))
+  const role = ref(localStorage.getItem('auth_role') || (isDemo ? 'admin' : ''))
+  const assignedDevices = ref(JSON.parse(localStorage.getItem('auth_devices') || (isDemo ? '["*"]' : '[]')))
+  const noAuthMode = ref(isDemo)
 
   const isLoggedIn = computed(() => noAuthMode.value || !!token.value)
   const isAdmin = computed(() => noAuthMode.value || role.value === 'admin')

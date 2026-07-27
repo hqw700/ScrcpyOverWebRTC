@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "rm -f ../assets/assets/wework.jpg && vite build",
+    "build:demo": "vite build --mode demo",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -9,6 +9,10 @@ export function useWebRTC(deviceId, options = {}) {
   const cameraSupport = ref(true)
   const agentVersion = ref('unknown')
 
+  // 只读分享模式：屏蔽一切输入注入（触控/滚动/键盘/文本/剪贴板）。
+  // 注：输入走 P2P datachannel，服务端无法过滤，只能客户端源头拦截。
+  const viewOnly = options.view_only === true
+
   let webrtcObj = null
   let ws = null
   let pc = null
@@ -54,14 +58,26 @@ export function useWebRTC(deviceId, options = {}) {
     return def
   }
 
-  function connect() {
+  function connect(shareTokenParam = null, sharePwdParam = '') {
     status.value = 'connecting'
     error.value = null
 
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      setTimeout(() => {
+        status.value = 'connected'
+      }, 300)
+      return
+    }
+
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const token = localStorage.getItem('auth_token') || ''
-    // 如果在开发模式（端口 3000），使用当前 host，依靠 Vite 代理
-    const wsUrl = `${wsProtocol}//${location.host}/connect_client?token=${encodeURIComponent(token)}`
+    let wsUrl = `${wsProtocol}//${location.host}/connect_client?token=${encodeURIComponent(token)}`
+    if (shareTokenParam) {
+      wsUrl = `${wsProtocol}//${location.host}/connect_client?share_token=${encodeURIComponent(shareTokenParam)}`
+      if (sharePwdParam) {
+        wsUrl += `&share_pwd=${encodeURIComponent(sharePwdParam)}`
+      }
+    }
     
     debugLog('[Signaling] Connecting to:', wsUrl)
     ws = new WebSocket(wsUrl)
@@ -551,7 +567,14 @@ function handleDeviceMessage(payload) {
     pc.ontrack = (evt) => {
       debugLog('[WebRTC] ontrack event:', evt.track.kind, evt.streams)
       if (evt.track.kind === 'audio') {
+        if (options.audio === false) return
         playAudioTrack(evt.track)
+        return
+      }
+
+      // 纯数据通道连接（如文件管理器专用连接）：不挂接视频，避免无谓的视频解码开销
+      if (options.video === false) {
+        debugLog('[WebRTC] video track ignored (options.video === false)')
         return
       }
 
@@ -862,6 +885,7 @@ function handleDeviceMessage(payload) {
   }
 
   function sendTouch(action, clientX, clientY, id = 0, rotatedCoord = null) {
+    if (viewOnly) return
     if (!inputChannel || inputChannel.readyState !== 'open') return
     const video = videoElementGetter ? videoElementGetter() : null
     if (!video || !video.videoWidth || !video.videoHeight) return
@@ -968,6 +992,7 @@ function handleDeviceMessage(payload) {
   }
 
   function sendScroll(clientX, clientY, scrollH, scrollV, rotatedCoord = null) {
+    if (viewOnly) return
     debugLog('[sendScroll] called', 'inputChannel:', inputChannel?.readyState, 'scrollH:', scrollH, 'scrollV:', scrollV)
     if (!inputChannel || inputChannel.readyState !== 'open') {
       debugWarn('[sendScroll] blocked: channel not open, state:', inputChannel?.readyState)
@@ -1081,6 +1106,7 @@ function handleDeviceMessage(payload) {
   }
 
   function setClipboard(text, options = false) {
+    if (viewOnly) return false
     const normalized = typeof options === 'boolean' ? { paste: options } : (options || {})
     if (clipboardChannel && clipboardChannel.readyState === 'open') {
       clipboardChannel.send(JSON.stringify({
@@ -1096,6 +1122,7 @@ function handleDeviceMessage(payload) {
   }
 
   function getClipboard() {
+    if (viewOnly) return false
     if (clipboardChannel && clipboardChannel.readyState === 'open') {
       clipboardChannel.send(JSON.stringify({
         type: 'get_clipboard'
@@ -1408,6 +1435,7 @@ function handleDeviceMessage(payload) {
   }
 
   function sendInjectText(text) {
+    if (viewOnly) return
     if (!inputChannel || inputChannel.readyState !== 'open') {
       console.warn('[DataChannel] sendInjectText failed: inputChannel is not open')
       return false
@@ -1426,6 +1454,7 @@ function handleDeviceMessage(payload) {
   }
 
   function sendInjectKeycode(action, keycode, repeat = 0, meta = 0) {
+    if (viewOnly) return
     if (!inputChannel || inputChannel.readyState !== 'open') {
       console.warn('[DataChannel] sendInjectKeycode failed: inputChannel is not open')
       return false

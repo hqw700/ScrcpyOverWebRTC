@@ -27,8 +27,6 @@
       </div>
     </header>
 
-    <video ref="dummyVideo" class="dummy-video" autoplay playsinline muted></video>
-
     <main class="fm-body">
       <section v-if="!selectedDeviceId" class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -178,10 +176,10 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
 import { useWebRTC } from '@/composables/useWebRTC'
+import { hashFileIncremental } from '@/utils/sha256'
 
 const deviceStore = useDeviceStore()
 const selectedDeviceId = ref('')
-const dummyVideo = ref(null)
 
 let webrtc = null
 let unwatchStatus = null
@@ -290,15 +288,14 @@ watch(selectedDeviceId, (newId) => {
   cleanWebRTC()
   if (!newId) return
 
-  if (deviceStore.activeDeviceId !== newId) {
-    deviceStore.setActiveDevice(newId)
-  }
-
+  // 仅当目标设备已在控制页打开时才复用共享连接；
+  // 不再主动 setActiveDevice —— 否则移动端全屏控制面板会被弹出来盖住文件页，
+  // 且面板关闭时共享连接随之断开，造成“选完设备/文件就断连”的问题。
   if (deviceStore.activeDeviceId === newId && deviceStore.activeWebRTC) {
     webrtc = deviceStore.activeWebRTC
     isSharedConnection = true
   } else {
-    webrtc = useWebRTC(newId, { audio: false })
+    webrtc = useWebRTC(newId, { audio: false, video: false })
     isSharedConnection = false
   }
 
@@ -319,8 +316,7 @@ watch(selectedDeviceId, (newId) => {
 
   if (!isSharedConnection) {
     setTimeout(() => {
-      if (!webrtc || !dummyVideo.value) return
-      webrtc.setVideoGetter(() => dummyVideo.value)
+      if (!webrtc) return
       webrtc.connect()
     }, 50)
   } else if (isFileChannelReady.value) {
@@ -333,6 +329,37 @@ watch(() => deviceStore.activeDeviceId, (newActiveId) => {
     selectedDeviceId.value = newActiveId
   }
 })
+
+// 文件通道断开时，将所有进行中的传输标记为失败，给用户明确反馈而不是无声卡死
+watch(isFileChannelReady, (ready) => {
+  if (ready) return
+  Object.values(uploadSessions).forEach(session => {
+    updateTransfer(session.id, { status: 'failed', progress: 100, message: '文件通道已断开' })
+    delete uploadSessions[session.destPath]
+  })
+  if (activeDownloadSession) {
+    failDownloadSession(activeDownloadSession, '文件通道已断开')
+  }
+  while (downloadQueue.length > 0) {
+    const session = downloadQueue.shift()
+    updateTransfer(session.id, { status: 'failed', progress: 100, message: '文件通道已断开' })
+    delete downloadSessions[session.path]
+  }
+  if (activeInstallSession) {
+    failInstallSession(activeInstallSession, '文件通道已断开')
+  }
+})
+
+// 移动端选择文件时页面会被切到后台，连接可能被系统或网络中断；
+// 回到前台时若是自有连接且已断开，则自动重连文件通道。
+function onVisibilityChange() {
+  if (document.visibilityState !== 'visible') return
+  if (!selectedDeviceId.value || !webrtc || isSharedConnection) return
+  if (['disconnected', 'error'].includes(webrtcStatus.value)) {
+    webrtc.disconnect()
+    webrtc.connect()
+  }
+}
 
 function formatFileSize(bytes) {
   if (!bytes) return '0 B'
@@ -579,10 +606,8 @@ function onFileDropped(e) {
 }
 
 async function calculateFileSHA256(file) {
-  const arrayBuffer = await file.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  // 分块增量计算，避免一次性把整个文件读入内存（移动端大文件会导致标签页被系统回收、连接断开）
+  return hashFileIncremental(file)
 }
 
 async function startUploadFile(file) {
@@ -644,7 +669,7 @@ async function sendNextChunks(session) {
   let lastLoaded = 0
 
   while (session.offset < file.size) {
-    if (!webrtc) break
+    if (!webrtc || !isFileChannelReady.value) break
     if (webrtc.getFileChannelBufferedAmount() > 512 * 1024) {
       await new Promise(resolve => setTimeout(resolve, 10))
       continue
@@ -652,7 +677,7 @@ async function sendNextChunks(session) {
     const start = session.offset
     const end = Math.min(start + chunkSize, file.size)
     const arrayBuffer = await file.slice(start, end).arrayBuffer()
-    if (!webrtc) break
+    if (!webrtc || !isFileChannelReady.value) break
     try {
       if (webrtc.sendFileChannelChunk(arrayBuffer)) {
         session.offset = end
@@ -690,6 +715,12 @@ async function sendNextChunks(session) {
       console.error('[FileChannel] Failed to send chunk, retrying:', err)
       await new Promise(resolve => setTimeout(resolve, 50))
     }
+  }
+
+  // 文件通道中途断开导致循环提前退出时，标记任务失败，避免一直停留在“传输中”空转
+  if (session.offset < file.size && uploadSessions[session.destPath]) {
+    updateTransfer(session.id, { status: 'failed', progress: 100, message: '文件通道已断开' })
+    delete uploadSessions[session.destPath]
   }
 }
 
@@ -951,9 +982,11 @@ onMounted(() => {
   if (deviceStore.activeDeviceId) {
     selectedDeviceId.value = deviceStore.activeDeviceId
   }
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   cleanWebRTC()
 })
 </script>
@@ -966,10 +999,6 @@ onUnmounted(() => {
   min-height: 0;
   color: #d6dde7;
   background: #0f1218;
-}
-
-.dummy-video {
-  display: none;
 }
 
 .fm-header {

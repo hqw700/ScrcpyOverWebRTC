@@ -2,7 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const isDemo = mode === 'demo'
   const proxyTarget = process.env.VITE_PROXY_TARGET || 'https://localhost:8443'
   return {
     plugins: [vue()],
@@ -44,8 +45,8 @@ export default defineConfig(() => {
       }
     },
     build: {
-      outDir: '../assets',
-      emptyOutDir: false
+      outDir: isDemo ? 'dist' : '../assets',
+      emptyOutDir: isDemo ? true : false
     }
   }
 })

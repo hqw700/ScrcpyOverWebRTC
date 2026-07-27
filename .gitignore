@@ -3,7 +3,7 @@ node_modules/
 
 # Build output
 dist/
-assets/
+/assets/
 
 # IDE
 .idea/

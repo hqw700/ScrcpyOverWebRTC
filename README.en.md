@@ -23,6 +23,7 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 - **Group Control**: High-sync rate group control, sub-machines support high frame rate previews.
 - **Magisk Module**: The Agent can be flashed as a Magisk / KernelSU / APatch module, running as a system service with auto-start on boot, and ships with the `cpctl` console for computer-free hot configuration.
 - **Android App**: The official App works as both controller and controlled end: as a controller, it connects to the dashboard to view and control cloud phones (multi-touch, hardware keys, camera passthrough); as a controlled end, its built-in Controlled Mode runs the Agent directly on the phone via Root or Shizuku (ADB) engines — no computer needed. With Standalone Mode enabled, even the server runs inside the phone.
+- **Full Device Compatibility**: Broadly compatible with physical Android phones (Rooted / Non-Rooted), Android emulators, redroid virtualized containers, and commercial cloud phone environments.
 
 ## 2. Quick Start
 

@@ -97,6 +97,24 @@ If the default ports on the host (like 8443, 3478) are occupied, forcing you to 
 
 *   **PUBLIC_IP**: Fill in the public IP if available, or the host's LAN IP for intranet usage.
 
+### 🔄 Docker Image Update & Version Upgrade
+Since persistent data is mounted to the host via `-v ./data:/app/data`, updating the container will not lose user accounts or device configurations. Run the following commands to perform a smooth upgrade to the latest version:
+
+```bash
+# 1. Stop and remove the old container
+docker stop cp-aio && docker rm cp-aio
+
+# 2. Pull the latest image and restart (using Host mode as an example)
+docker run -d \
+  --pull=always \
+  --restart=always \
+  --name cp-aio \
+  --net=host \
+  -v ./data:/app/data \
+  -e PUBLIC_IP=<Host_IP> \
+  buutuu/scrcpy-over-webrtc:latest
+```
+
 ---
 
 ### 2.3 Non-Docker Deployment (Standalone Binary)
@@ -143,9 +161,9 @@ Both Host mode and NAT/Bridge mode accept the following environment variables vi
 | `USE_TLS` | `true` | Enable HTTPS; set to `false` to run in plain HTTP mode |
 | `NO_AUTH` | - | Set to `true` to disable login authentication — **intranet debugging only; never enable it on public networks** |
 | `DEFAULT_SETTINGS` | See below | Default video quality parameters for newly connected devices (JSON) |
-| `EXTERNAL_SIGNALING_PORT` | Same as `SIGNALING_PORT` | The externally exposed signaling port for asymmetric port mapping (see 2.2 Strategy B) |
-| `EXTERNAL_TURN_PORT` | `3478` | The externally exposed TURN port for asymmetric port mapping (see 2.2 Strategy B) |
-| `COTURN_MIN_PORT` / `COTURN_MAX_PORT` | `50000` / `50100` | UDP port range used by the TURN relay; in Bridge mode it must match the `-p` mapping range (see 2.2 Strategy A) |
+| `EXTERNAL_SIGNALING_PORT` | Same as `SIGNALING_PORT` | The externally exposed signaling port for asymmetric port mapping |
+| `EXTERNAL_TURN_PORT` | `3478` | The externally exposed TURN port for asymmetric port mapping |
+| `COTURN_MIN_PORT` / `COTURN_MAX_PORT` | `50000` / `50100` | UDP port range used by the TURN relay; in Bridge mode it must match the `-p` mapping range |
 
 *   **DEFAULT_SETTINGS example**: `{"maxBitrate":4,"minBitrate":1,"fps":30,"size":1920,"bitrate":4}` — max bitrate (Mbps), min bitrate (Mbps), frame rate, long-edge resolution (px), and default bitrate.
 *   **Full example**:
@@ -176,8 +194,8 @@ Once the server is running, open the web dashboard and go to the **"Deploy New D
 2. The page provides a unified **"One-Click Deployment Package (`agent-deploy.zip`)"** for download. Download and extract it on your local computer.
 3. Connect the physical phone to the computer via USB and enable **"USB Debugging"** in developer options.
 4. Open your local terminal, navigate to the extracted directory, and run the dynamically generated one-click script command:
-   * **Linux / macOS**: `chmod +x run.sh && ./run.sh -id <Device_ID> -signaling ws://<Host_IP>:8443`
-   * **Windows CMD**: `run.bat -id <Device_ID> -signaling ws://<Host_IP>:8443`
+   * **Linux / macOS**: `chmod +x run.sh && ./run.sh -id <Device_ID> -signaling wss://<Host_IP>:8443`
+   * **Windows CMD**: `run.bat -id <Device_ID> -signaling wss://<Host_IP>:8443`
 
 ### 3.2 Magisk / KSU Flashable Module (Root, Auto-start on Boot)
 Ideal for devices that need to stay enrolled long-term and rejoin automatically after reboot. Once flashed, the Agent runs as a background system service — no computer connection required.
@@ -226,7 +244,8 @@ The frontend source code is fully open-source and located in the `web-app` direc
 3. **Local Development & Hot Reloading**:
    Start the dev server by specifying the backend IP and port (Vite proxy will forward API and WebSocket connections to the container automatically):
    ```bash
-   VITE_PROXY_TARGET=http://localhost:8443 npm run dev
+   # If the backend is running locally (Note: if HTTPS is enabled on the backend, use https://localhost:8443)
+   VITE_PROXY_TARGET=https://localhost:8443 npm run dev
    ```
 4. **Build Frontend**:
    ```bash
@@ -238,10 +257,15 @@ The frontend source code is fully open-source and located in the `web-app` direc
 
 > [!IMPORTANT]
 > **Release Package Notice**:
-> This open-source repository only hosts the frontend `web-app` source code. If you need the pre-compiled Go/C++ backend signaling and media binaries (`bin/` directory), physical Android Agent deployment packages, one-click startup scripts, and native server-free deployment versions, please download the fully packaged releases directly from the [Releases](https://github.com/hqw700/ScrcpyOverWebRTC/releases) page.
+> This open-source repository only hosts the frontend `web-app` source code. If you need the standalone non-Docker binary deployment package for physical servers, or the server-free deployment package (running entirely inside the Android phone), please download the official pre-packaged releases directly from the [Releases](https://github.com/hqw700/ScrcpyOverWebRTC/releases) page.
 
-## License
+## 📄 License & Disclaimer
 
-**MIT License** - Frontend `web-app` directory source code is open source.
-
-*Note: The binary core components inside the official Docker image are for educational and personal testing purposes only.*
+* **Frontend Source License**: The frontend `web-app` source code in this repository is licensed under the [MIT License](LICENSE). You are free to modify and perform secondary development.
+* **Third-Party Open-Source Projects & Components**:
+  * [scrcpy](https://github.com/Genymobile/scrcpy): Core audio/video capture and screen streaming engine (licensed under Apache-2.0).
+  * [Tango / ya-webadb](https://github.com/yume-chan/ya-webadb) (`@yume-chan/adb`): Native browser-based WebUSB / WebADB driverless debugging and Agent onboarding (licensed under MIT).
+  * [Pion WebRTC](https://github.com/pion/webrtc) / [xterm.js](https://github.com/xtermjs/xterm.js): WebRTC audio/video/data transport and web terminal Shell reverse proxy (licensed under MIT).
+* **Terms of Use & Disclaimer**:
+  1. Official pre-compiled binary components (including binary server, Agent deployment packages, and APK runtime) are provided strictly for **personal learning, technical research, and non-commercial testing** purposes.
+  2. Do NOT use this project or its derived versions for illegal activities, unauthorized automated risk-control evasion, or commercial resale services. The developers hold no legal liability for any non-compliant actions by users.

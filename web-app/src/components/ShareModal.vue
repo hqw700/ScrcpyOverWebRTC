@@ -49,14 +49,14 @@
                 <option :value="86400">24 小时 (1 天)</option>
                 <option :value="604800">7 天</option>
                 <option :value="0">♾️ 永久有效</option>
-                <option value="custom">⚙️ 自定义分钟</option>
+                <option value="custom">⚙️ 自定义天数</option>
               </select>
               <input 
                 v-if="expireOption === 'custom'" 
-                v-model.number="customMinutes" 
+                v-model.number="customDays" 
                 type="number" 
                 min="1" 
-                placeholder="输入有效分钟数..." 
+                placeholder="输入有效天数..." 
                 class="custom-input mt-2"
               />
             </div>
@@ -76,6 +76,18 @@
                   <span class="radio-desc">仅拉取实时画面，禁止触控与任何控制指令</span>
                 </label>
               </div>
+            </div>
+
+            <!-- 细粒度设置权限 -->
+            <div class="form-group">
+              <label>🎚️ 访客可修改的设置项</label>
+              <div class="perm-checks">
+                <label class="perm-check"><input type="checkbox" v-model="allowBitrate" /> 码率</label>
+                <label class="perm-check"><input type="checkbox" v-model="allowFps" /> 帧率</label>
+                <label class="perm-check"><input type="checkbox" v-model="allowResolution" /> 分辨率</label>
+                <label class="perm-check"><input type="checkbox" v-model="allowAudio" /> 音频</label>
+              </div>
+              <span class="addr-hint">取消勾选的项访客无法修改（服务端强制）；设置值可在「分享管理」⚙️ 配置中指定</span>
             </div>
 
             <!-- 可选访问密码 -->
@@ -203,8 +215,12 @@ const emit = defineEmits(['close'])
 
 const activeTab = ref('create')
 const expireOption = ref(86400)
-const customMinutes = ref(60)
+const customDays = ref(1)
 const accessMode = ref('full')
+const allowBitrate = ref(true)
+const allowFps = ref(true)
+const allowResolution = ref(true)
+const allowAudio = ref(true)
 const password = ref('')
 const description = ref('')
 const loading = ref(false)
@@ -230,7 +246,7 @@ async function createShare() {
 
   let seconds = Number(expireOption.value)
   if (expireOption.value === 'custom') {
-    seconds = (customMinutes.value || 60) * 60
+    seconds = (customDays.value || 1) * 86400
   }
 
   try {
@@ -242,7 +258,11 @@ async function createShare() {
         expire_seconds: seconds,
         access_mode: accessMode.value,
         password: password.value,
-        description: description.value
+        description: description.value,
+        forbid_bitrate: !allowBitrate.value,
+        forbid_fps: !allowFps.value,
+        forbid_resolution: !allowResolution.value,
+        forbid_audio: !allowAudio.value
       })
     })
 
@@ -505,6 +525,26 @@ watch(() => props.visible, (val) => {
   margin-top: 6px;
   font-size: 0.75rem;
   color: #64748b;
+}
+
+.perm-checks {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.perm-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  color: #c9d1d9;
+  cursor: pointer;
+}
+
+.perm-check input {
+  accent-color: #6366f1;
 }
 
 .mt-2 { margin-top: 8px; }

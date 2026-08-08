@@ -73,6 +73,13 @@
           :shareToken="shareInfo.token"
           :sharePassword="password"
           :accessMode="shareInfo.access_mode"
+          :guestSettings="shareInfo.guest_settings"
+          :forbidBitrate="!!shareInfo.forbid_bitrate"
+          :forbidFps="!!shareInfo.forbid_fps"
+          :forbidResolution="!!shareInfo.forbid_resolution"
+          :forbidAudio="!!shareInfo.forbid_audio"
+          :cardCode="shareInfo.card_code"
+          :remainingSeconds="remainingSeconds"
         />
 
         <!-- 只读模式水波纹 / 提示 Overlay -->
@@ -114,10 +121,12 @@ function reloadPage() {
 function formatCountdown(sec) {
   if (sec < 0) return '♾️ 永久有效'
   if (sec === 0) return '00:00:00 (已到期)'
-  const h = Math.floor(sec / 3600).toString().padStart(2, '0')
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600).toString().padStart(2, '0')
   const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0')
   const s = Math.floor(sec % 60).toString().padStart(2, '0')
-  return `${h}:${m}:${s}`
+  // 超过一天时前置天数，避免小时数堆叠（如 49:00:00）
+  return d > 0 ? `${d} 天 ${h}:${m}:${s}` : `${h}:${m}:${s}`
 }
 
 function startCountdown(seconds) {

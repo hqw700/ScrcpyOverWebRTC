@@ -16,6 +16,14 @@
     <!-- 卡密直连弹窗（原侧边栏“卡密”入口，并入本页） -->
     <CardConnectModal :visible="showCardModal" @close="showCardModal = false" />
 
+    <!-- 访客细粒度权限与设置值配置弹窗 -->
+    <ShareGuestSettingsModal
+      v-if="guestConfigFor"
+      :share="guestConfigFor"
+      @close="guestConfigFor = null"
+      @saved="onGuestConfigSaved"
+    />
+
     <!-- 使用提示 -->
     <div class="tips-card">
       <div class="tips-header" @click="tipsCollapsed = !tipsCollapsed">
@@ -26,6 +34,7 @@
         <li><b>两种发放方式</b>：分享链接（直接打开）和卡密提取码（点本页右上角「卡密连接」，或在登录页输入后兑换），两者等价，卡密只是链接的短码形式。</li>
         <li><b>访客免登录</b>：访客打开链接即进入单设备页面，无需账号，也看不到后台其他设备。</li>
         <li><b>权限模式</b>：<span class="tag-full">⚡ 完整控制</span> 允许触控/按键注入；<span class="tag-view">👁️ 仅观看</span> 只能看画面和听声音，所有控制指令在服务端直接丢弃。</li>
+        <li><b>细粒度权限</b>：每行「⚙️ 配置」可禁止访客修改码率/帧率/分辨率/音频，并配置访客端使用的设置值（默认以该虚机当前单独配置为底）；被禁项在访客设置面板置灰，服务端在信令层强制覆盖，访客无法绕过，下次连接生效。</li>
         <li><b>访问密码</b>：设置 PIN 后，链接和卡密渠道都需要输入密码才能进入。</li>
         <li><b>有效期与撤销</b>：到期自动失效（服务端每 5 分钟清理并踢断在线访客）；"延时"可在原到期时间上顺延（已过期的从当前时间起算）；"撤销"立即断开该分享的所有在线访客。</li>
         <li><b>服务器地址</b>：右上角可选择生成链接使用的地址，访客跨网访问时请选对应网段的 IP（支持 IPv6）。</li>
@@ -60,6 +69,7 @@
               <span :class="['mode-badge', item.access_mode]">
                 {{ item.access_mode === 'full' ? '⚡ 完整控制' : '👁️ 仅观看' }}
               </span>
+              <div v-if="lockSummary(item)" class="lock-summary">{{ lockSummary(item) }}</div>
             </td>
             <td>
               <span v-if="item.active_connections > 0" class="conn-badge online">
@@ -77,6 +87,7 @@
               <button class="table-btn copy-sm" @click="copyText(fullShareUrl(item.token_id), item.token_id)">
                 {{ copiedId === item.token_id ? '已复制 ✓' : '复制链接' }}
               </button>
+              <button class="table-btn config-sm" title="访客权限与设置值" @click="guestConfigFor = item">⚙️ 配置</button>
               <button v-if="parseExpire(item.expires_at)" class="table-btn extend-sm" @click.stop="openExtendMenu(item.token_id, $event)">
                 延时 ▾
               </button>
@@ -100,6 +111,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import CardConnectModal from '@/components/CardConnectModal.vue'
+import ShareGuestSettingsModal from '@/components/ShareGuestSettingsModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const shares = ref([])
 const loading = ref(false)
@@ -107,6 +120,7 @@ const copiedId = ref('')
 const serverAddresses = ref([])
 const selectedAddress = ref('')
 const showCardModal = ref(false)
+const guestConfigFor = ref(null)
 const extendMenuFor = ref('')
 const extendMenuPos = ref({ top: 0, left: 0 })
 const extendOptions = [
@@ -228,6 +242,21 @@ async function extendShare(tokenID, seconds) {
   }
 }
 
+// 细粒度权限锁定摘要：有禁止项时显示如 “🔒 码率·音频”
+function lockSummary(item) {
+  const parts = []
+  if (item.forbid_bitrate) parts.push('码率')
+  if (item.forbid_fps) parts.push('帧率')
+  if (item.forbid_resolution) parts.push('分辨率')
+  if (item.forbid_audio) parts.push('音频')
+  return parts.length ? `🔒 ${parts.join('·')}` : ''
+}
+
+function onGuestConfigSaved() {
+  guestConfigFor.value = null
+  fetchShares()
+}
+
 function parseExpire(expiresAt) {
   if (!expiresAt) return null
   const t = new Date(expiresAt)
@@ -258,6 +287,12 @@ function formatRemain(expiresAt) {
 let refreshTimer = null
 
 onMounted(() => {
+  // 分享管理仅管理员可用：普通用户直达此页时强制回首页
+  const authStore = useAuthStore()
+  if (!authStore.isAdmin) {
+    window.dispatchEvent(new CustomEvent('cloudphone-navigate', { detail: '/' }))
+    return
+  }
   fetchShares()
   fetchServerAddresses()
   refreshTimer = setInterval(fetchShares, 15000)
@@ -527,6 +562,23 @@ onUnmounted(() => {
   color: #fff;
 }
 
+.config-sm {
+  background: rgba(163, 113, 247, 0.12);
+  color: #a371f7;
+}
+
+.config-sm:hover {
+  background: #a371f7;
+  color: #fff;
+}
+
+.lock-summary {
+  font-size: 0.72rem;
+  color: #fbbf24;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
 .extend-menu {
   position: fixed;
   z-index: 60;
@@ -561,5 +613,87 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 50;
+}
+
+/* 移动端适配 (<=1024px)：头部换行堆叠、表格横向滚动、操作按钮收纳换行 */
+@media (max-width: 1024px) {
+  .share-admin-page {
+    padding: 12px;
+  }
+
+  /* 页头与操作行换行堆叠 */
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .page-header h2 {
+    font-size: 1.05rem;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .addr-select {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    font-size: 0.78rem;
+  }
+
+  .btn-card-connect,
+  .btn-refresh {
+    padding: 7px 12px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .tips-list {
+    padding: 0 12px 10px 26px;
+    font-size: 0.78rem;
+  }
+
+  .state-block {
+    padding: 28px 14px;
+  }
+
+  /* 数据表容器横向滚动，单元格压缩 */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .share-table {
+    font-size: 0.78rem;
+  }
+
+  .share-table th,
+  .share-table td {
+    padding: 8px 10px;
+  }
+
+  .desc-cell {
+    max-width: 120px;
+  }
+
+  /* 操作按钮收纳换行 */
+  .action-cell {
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 140px;
+  }
+
+  .table-btn {
+    padding: 4px 8px;
+    font-size: 0.74rem;
+  }
+
+  /* 延时菜单限宽防溢出 */
+  .extend-menu {
+    max-width: 94vw;
+  }
 }
 </style>

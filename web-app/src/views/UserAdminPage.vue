@@ -17,6 +17,7 @@
               <th>用户名</th>
               <th>角色</th>
               <th>在线状态</th>
+              <th>有效期</th>
               <th>已分配设备</th>
               <th>当前控制</th>
               <th>备注</th>
@@ -33,12 +34,17 @@
                 <span :class="['role-badge', user.role]">
                   {{ user.role === 'admin' ? '管理员' : '普通用户' }}
                 </span>
+                <div v-if="lockSummary(user)" class="lock-summary">{{ lockSummary(user) }}</div>
               </td>
               <td>
                 <div class="online-status-wrapper">
                   <span :class="['status-dot', { online: user.online }]"></span>
                   <span class="status-text">{{ user.online ? '在线' : '离线' }}</span>
                 </div>
+              </td>
+              <td>
+                <div class="expire-cell" :class="{ expired: isExpired(user.expires_at) }">{{ formatExpire(user.expires_at) }}</div>
+                <div class="remain-cell">{{ formatRemain(user.expires_at) }}</div>
               </td>
               <td>
                 <span class="device-count" @click="user.role !== 'admin' && selectUser(user)" :class="{ 'clickable': user.role !== 'admin' }" title="点击分配设备">
@@ -60,6 +66,7 @@
               </td>
               <td class="actions-cell">
                 <button class="action-btn-mini assign" @click="selectUser(user)" v-if="user.role !== 'admin'" title="分配设备">🔑</button>
+                <button class="action-btn-mini policy" @click="openPolicyModal(user)" v-if="user.role !== 'admin'" title="权限与有效期配置">⚙️</button>
                 <button class="action-btn-mini note" @click="openEditNoteModal(user)" title="编辑备注">📝</button>
                 <button class="action-btn-mini rename" @click="openRenameModal(user)" title="重命名用户">🏷️</button>
                 <button class="action-btn-mini reset-pwd" @click="openResetPwdModal(user)" title="重置密码">🔒</button>
@@ -106,6 +113,9 @@
                 <div class="dev-info">
                   <span class="dev-id">{{ dev.id }}</span>
                   <span class="dev-status">在线 (online)</span>
+                  <span v-if="deviceAssignees[dev.id]" class="dev-assigned" :title="deviceAssignees[dev.id].join('、')">
+                    已分配: {{ deviceAssignees[dev.id].join('、') }}
+                  </span>
                 </div>
               </label>
             </div>
@@ -176,6 +186,26 @@
                 <option value="user">普通用户</option>
                 <option value="admin">管理员</option>
               </select>
+            </div>
+            <div class="form-group">
+              <label>账号有效期</label>
+              <select v-model="createForm.expire_seconds">
+                <option :value="0">♾️ 永久有效</option>
+                <option :value="1800">30 分钟</option>
+                <option :value="3600">1 小时</option>
+                <option :value="43200">12 小时</option>
+                <option :value="86400">1 天</option>
+                <option :value="604800">7 天</option>
+                <option value="custom">⚙️ 自定义天数</option>
+              </select>
+              <input
+                v-if="createForm.expire_seconds === 'custom'"
+                v-model.number="createForm.customDays"
+                type="number"
+                min="1"
+                placeholder="输入有效天数..."
+                style="margin-top: 8px"
+              />
             </div>
             <div class="form-group">
               <label>备注</label>
@@ -263,6 +293,13 @@
         </div>
       </div>
     </transition>
+    <!-- 模态框 5：用户权限与有效期配置 -->
+    <UserPolicyModal
+      v-if="policyUser"
+      :user="policyUser"
+      @close="policyUser = null"
+      @saved="onPolicySaved"
+    />
   </div>
 </template>
 
@@ -270,6 +307,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDeviceStore } from '../stores/devices'
 import { useAuthStore } from '../stores/auth'
+import UserPolicyModal from '@/components/UserPolicyModal.vue'
 
 const deviceStore = useDeviceStore()
 const authStore = useAuthStore()
@@ -290,6 +328,7 @@ const showResetPwdModal = ref(false)
 const showEditNoteModal = ref(false)
 const showRenameModal = ref(false)
 const editingUser = ref(null)
+const policyUser = ref(null)
 const modalError = ref('')
 const modalSubmitting = ref(false)
 
@@ -301,7 +340,9 @@ const createForm = ref({
   username: '',
   password: '',
   role: 'user',
-  note: ''
+  note: '',
+  expire_seconds: 0,
+  customDays: 1
 })
 
 const resetPwdForm = ref({
@@ -317,6 +358,21 @@ const filteredOnlineDevices = computed(() => {
   const allOnline = deviceStore.devices
   if (!deviceSearch.value.trim()) return allOnline
   return allOnline.filter(d => d.id.toLowerCase().includes(deviceSearch.value.toLowerCase()))
+})
+
+// 设备 -> 已分配的其他用户名（排除当前正在编辑的用户与通配符 '*'）。
+// 用于分配面板上标注"这台机器已经被分给谁了"
+const deviceAssignees = computed(() => {
+  const map = {}
+  for (const u of users.value) {
+    if (selectedUser.value && u.username === selectedUser.value.username) continue
+    for (const id of u.assigned_devices || []) {
+      if (!id || id === '*') continue
+      if (!map[id]) map[id] = []
+      map[id].push(u.username)
+    }
+  }
+  return map
 })
 
 // 加载用户列表
@@ -426,10 +482,64 @@ function openCreateModal() {
     username: '',
     password: '',
     role: 'user',
-    note: ''
+    note: '',
+    expire_seconds: 0,
+    customDays: 1
   }
   modalError.value = ''
   showCreateModal.value = true
+}
+
+// --- 用户权限与有效期配置 ---
+function openPolicyModal(user) {
+  policyUser.value = user
+}
+
+function onPolicySaved() {
+  policyUser.value = null
+  fetchUsers()
+}
+
+// 细粒度权限锁定摘要：有禁止项时显示如 “🔒 码率·音频”
+function lockSummary(user) {
+  const parts = []
+  if (user.forbid_bitrate) parts.push('码率')
+  if (user.forbid_fps) parts.push('帧率')
+  if (user.forbid_resolution) parts.push('分辨率')
+  if (user.forbid_audio) parts.push('音频')
+  return parts.length ? `🔒 ${parts.join('·')}` : ''
+}
+
+function parseExpire(expiresAt) {
+  if (!expiresAt) return null
+  const t = new Date(expiresAt)
+  if (Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return null // Go 零值时间 = 永久
+  return t
+}
+
+function isExpired(expiresAt) {
+  const t = parseExpire(expiresAt)
+  return !!t && t.getTime() <= Date.now()
+}
+
+function formatExpire(expiresAt) {
+  const t = parseExpire(expiresAt)
+  if (!t) return '♾️ 永久'
+  if (t.getTime() <= Date.now()) return '已到期'
+  return t.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatRemain(expiresAt) {
+  const t = parseExpire(expiresAt)
+  if (!t) return ''
+  const ms = t.getTime() - Date.now()
+  if (ms <= 0) return ''
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  if (d > 0) return `剩余 ${d} 天 ${h} 小时`
+  if (h > 0) return `剩余 ${h} 小时 ${m} 分`
+  return `剩余 ${m} 分`
 }
 
 // 提交创建用户
@@ -442,10 +552,19 @@ async function submitCreateUser() {
   modalSubmitting.value = true
   modalError.value = ''
   try {
+    const expireSeconds = form.expire_seconds === 'custom'
+      ? Math.max(1, form.customDays || 1) * 86400
+      : Number(form.expire_seconds)
     const res = await fetch('/api/admin/users/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
+      body: JSON.stringify({
+        username: form.username,
+        password: form.password,
+        role: form.role,
+        note: form.note,
+        expire_seconds: expireSeconds
+      })
     })
     if (!res.ok) {
       const txt = await res.text()
@@ -932,6 +1051,38 @@ onUnmounted(() => {
   color: #ffffff;
 }
 
+.action-btn-mini.policy {
+  color: #a371f7;
+  border-color: rgba(163, 113, 247, 0.2);
+  background: rgba(163, 113, 247, 0.05);
+}
+
+.action-btn-mini.policy:hover {
+  background: #a371f7;
+  color: #ffffff;
+}
+
+.lock-summary {
+  font-size: 0.68rem;
+  color: #fbbf24;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+.expire-cell {
+  font-size: 0.82rem;
+}
+
+.expire-cell.expired {
+  color: #f85149;
+  font-weight: 600;
+}
+
+.remain-cell {
+  font-size: 0.7rem;
+  color: #8b949e;
+}
+
 .action-btn-mini.delete {
   color: #f85149;
   border-color: rgba(248, 81, 73, 0.2);
@@ -1104,6 +1255,15 @@ onUnmounted(() => {
 .dev-status {
   font-size: 11px;
   color: #10b981;
+}
+
+.dev-assigned {
+  font-size: 11px;
+  color: #fbbf24;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-list {
@@ -1420,5 +1580,117 @@ onUnmounted(() => {
 .slide-enter-from, .slide-leave-to {
   opacity: 0;
   transform: translateX(30px);
+}
+
+/* 移动端适配 (<=1024px)：左右面板纵向堆叠、表格横向滚动、弹窗限宽 */
+@media (max-width: 1024px) {
+  .admin-page-container {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+    padding: 8px;
+    gap: 12px;
+  }
+
+  .admin-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  /* 面板头部换行不挤压 */
+  .panel-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .header-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .panel-header h2,
+  .panel-header h3 {
+    font-size: 15px;
+  }
+
+  .create-user-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  /* 用户表格容器横向滚动，单元格压缩 */
+  .table-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .premium-table th {
+    padding: 8px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .premium-table td {
+    padding: 8px 8px;
+    font-size: 12.5px;
+  }
+
+  .avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+
+  .note-cell {
+    max-width: 80px;
+  }
+
+  /* 操作按钮收纳换行 */
+  .actions-cell {
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 96px;
+  }
+
+  .action-btn-mini {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* 分配面板限高，内部列表滚动 */
+  .assign-panel {
+    max-height: 72vh;
+  }
+
+  .assign-panel.empty {
+    min-height: 120px;
+  }
+
+  .assign-body {
+    max-height: 48vh;
+  }
+
+  .dev-assigned {
+    max-width: 120px;
+  }
+
+  .input-row {
+    flex-wrap: wrap;
+  }
+
+  /* 弹窗宽度 min(92vw, 原宽)，内边距压缩 */
+  .glass-modal {
+    width: min(92vw, 440px);
+    max-width: 92vw;
+    padding: 16px;
+  }
+
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 </style>

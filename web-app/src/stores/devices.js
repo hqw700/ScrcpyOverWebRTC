@@ -15,6 +15,11 @@ export const useDeviceStore = defineStore('devices', () => {
   const licenseExpiresAt = ref('')
   const licenseDaysRemaining = ref(0)
   const licenseStatus = ref('valid')
+  const licenseActivated = ref(false)          // 是否有验签通过的有效授权
+  const licenseCustomer = ref('')              // 已激活时的客户名
+  const licenseCurrentDevices = ref(0)         // 当前在线设备数（服务端口径）
+  const licensePromo = ref(false)              // 未激活且处于限时特惠期
+  const licensePostPromoMaxDevices = ref(10)   // 特惠结束后的免费额度
 
   const onlineDevices = computed(() => 
     [...devices.value]
@@ -87,7 +92,8 @@ export const useDeviceStore = defineStore('devices', () => {
         ...d,
         info: activeDev?.info || d.info,
         firstSeen: activeDev?.firstSeen || d.firstSeen,
-        clientCount: activeDev?.clientCount ?? d.clientCount ?? 0
+        clientCount: activeDev?.clientCount ?? d.clientCount ?? 0,
+        clients: activeDev?.clients ?? d.clients ?? []
       }
     })
 
@@ -106,7 +112,8 @@ export const useDeviceStore = defineStore('devices', () => {
             status: 'online',
             firstSeen: devData.firstSeen || resurrected.firstSeen,
             lastSeen: new Date().toISOString(),
-            clientCount: devData.clientCount ?? resurrected.clientCount ?? 0
+            clientCount: devData.clientCount ?? resurrected.clientCount ?? 0,
+            clients: devData.clients ?? resurrected.clients ?? []
           })
         } else {
           // 全新上线的设备
@@ -117,7 +124,8 @@ export const useDeviceStore = defineStore('devices', () => {
             snapshot: null,
             firstSeen: devData.firstSeen || null,
             lastSeen: new Date().toISOString(),
-            clientCount: devData.clientCount ?? 0
+            clientCount: devData.clientCount ?? 0,
+            clients: devData.clients ?? []
           })
         }
       }
@@ -177,7 +185,8 @@ export const useDeviceStore = defineStore('devices', () => {
             online: item.online !== false,
             firstSeen: item.first_seen || null,
             lastSeen: item.last_seen || null,
-            clientCount: item.client_count || 0
+            clientCount: item.client_count || 0,
+            clients: item.clients || []
           }
         })
         processDeviceList(deviceList)
@@ -228,7 +237,8 @@ export const useDeviceStore = defineStore('devices', () => {
         online: item.online !== false,
         firstSeen: item.first_seen || null,
         lastSeen: item.last_seen || null,
-        clientCount: item.client_count || 0
+        clientCount: item.client_count || 0,
+        clients: item.clients || []
       }
     })
     processDeviceList(deviceList)
@@ -340,6 +350,9 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  // group_control_event 发送失败告警节流（WS 未就绪时避免高频 touch move 刷爆控制台）
+  let lastGroupControlWarnTs = 0
+
   function sendGroupControlEvent(targetDeviceIds, event) {
     if (globalWs && globalWs.readyState === WebSocket.OPEN) {
       globalWs.send(JSON.stringify({
@@ -347,6 +360,13 @@ export const useDeviceStore = defineStore('devices', () => {
         target_device_ids: targetDeviceIds,
         event: event
       }))
+    } else {
+      // 诊断：预览直控/群控事件未下发时给出明确线索（2s 节流）
+      const now = Date.now()
+      if (now - lastGroupControlWarnTs > 2000) {
+        lastGroupControlWarnTs = now
+        console.warn(`[Store] group_control_event 未下发: globalWs ${globalWs ? 'readyState=' + globalWs.readyState : '为 null'}`, targetDeviceIds, event && event.type)
+      }
     }
   }
 
@@ -393,11 +413,16 @@ export const useDeviceStore = defineStore('devices', () => {
   }
 
   let globalWs = null
+  let licensePollTimer = null
 
   function initSignaling() {
     if (globalWs) return
 
     fetchLicenseStatus()
+    // 授权状态 60s 兜底轮询（WS 推送之外的保险；用单例定时器避免重连时叠加）
+    if (!licensePollTimer) {
+      licensePollTimer = setInterval(fetchLicenseStatus, 60000)
+    }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const token = localStorage.getItem('auth_token') || ''
@@ -438,6 +463,9 @@ export const useDeviceStore = defineStore('devices', () => {
               stopTrackingTask()
             }
           }
+        } else if (msg.message_type === 'license_update') {
+          // 服务端广播的授权状态变更（设备超限被拒、特惠到期降额等）
+          applyLicenseState(msg)
         } else if (msg.error === 'license_expired') {
           isLicenseExpired.value = true
           licenseErrorMsg.value = msg.reason || '当前版本已不受支持，请升级'
@@ -454,18 +482,28 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  // 将授权状态（/api/license_status 响应或 license_update 推送）统一填充到 store
+  function applyLicenseState(data) {
+    isLicenseExpired.value = !!data.license_expired
+    licenseErrorMsg.value = data.error_msg || ''
+    globalMachineID.value = data.machine_id || ''
+    licenseMaxDevices.value = data.max_devices || 50
+    licenseExpiresAt.value = data.expires_at || ''
+    licenseDaysRemaining.value = data.days_remaining || 0
+    licenseStatus.value = data.status || 'valid'
+    licenseActivated.value = !!data.activated
+    licenseCustomer.value = data.customer || ''
+    licenseCurrentDevices.value = data.current_devices || 0
+    licensePromo.value = !!data.promo
+    licensePostPromoMaxDevices.value = data.post_promo_max_devices || 10
+  }
+
   async function fetchLicenseStatus() {
     try {
       const res = await fetch('/api/license_status')
       if (res.ok) {
         const data = await res.json()
-        isLicenseExpired.value = data.license_expired
-        licenseErrorMsg.value = data.error_msg || ''
-        globalMachineID.value = data.machine_id || ''
-        licenseMaxDevices.value = data.max_devices || 50
-        licenseExpiresAt.value = data.expires_at || ''
-        licenseDaysRemaining.value = data.days_remaining || 0
-        licenseStatus.value = data.status || 'valid'
+        applyLicenseState(data)
       }
     } catch (e) {
       console.error('Failed to fetch license status:', e)
@@ -714,6 +752,12 @@ export const useDeviceStore = defineStore('devices', () => {
     licenseExpiresAt,
     licenseDaysRemaining,
     licenseStatus,
+    licenseActivated,
+    licenseCustomer,
+    licenseCurrentDevices,
+    licensePromo,
+    licensePostPromoMaxDevices,
+    applyLicenseState,
     fetchLicenseStatus,
     activateLicense,
     registerPreviewCallback,

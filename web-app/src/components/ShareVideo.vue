@@ -19,15 +19,12 @@
       @contextmenu.prevent
     ></video>
 
-    <!-- 开声音提示（有音轨且未开声音时显示） -->
-    <button
-      v-if="isConnected && localSettings.audio && !soundOn"
-      class="sound-hint"
-      @click.stop="enableSound"
-    >🔊 点击开启声音</button>
+    <!-- 开声音：点击画面任意位置即可解除静音（满足浏览器 autoplay 策略），
+         或通过悬浮菜单的"开启声音"切换 -->
 
     <!-- 连接中 / 等待信令 -->
     <div v-if="showConnecting" class="state-overlay">
+      <div v-if="connMetaText" class="conn-meta">{{ connMetaText }}</div>
       <div class="loading-spinner"></div>
       <p class="state-text">{{ statusText }}</p>
     </div>
@@ -99,7 +96,7 @@
       </div>
     </div>
 
-    <!-- 复用主控台连接设置面板 -->
+    <!-- 复用主控台连接设置面板（被禁维度置灰锁定；访客不开放预览/缩略图设置） -->
     <SettingsModal
       v-if="showSettingsModal"
       :settings="localSettings"
@@ -107,6 +104,8 @@
       :is-global="false"
       :is-custom="hasCustomShareSettings"
       :camera-support="cameraSupport"
+      :locked-sections="lockedSections"
+      :show-preview-tab="false"
       @close="showSettingsModal = false"
       @save="saveSettings"
       @reset="resetSettings"
@@ -124,10 +123,30 @@ const props = defineProps({
   deviceId: { type: String, required: true },
   shareToken: { type: String, default: '' },
   sharePassword: { type: String, default: '' },
-  accessMode: { type: String, default: 'full' }
+  accessMode: { type: String, default: 'full' },
+  // 分享细粒度权限：禁止访客修改的设置维度（服务端信令层同步强制）
+  forbidBitrate: { type: Boolean, default: false },
+  forbidFps: { type: Boolean, default: false },
+  forbidResolution: { type: Boolean, default: false },
+  forbidAudio: { type: Boolean, default: false },
+  // 分享者配置的访客端设置值（settings.js schema，null 表示未配置）
+  guestSettings: { type: Object, default: null },
+  // 蒙板展示用：卡密与分享剩余秒数（-1 = 永久）
+  cardCode: { type: String, default: '' },
+  remainingSeconds: { type: Number, default: -1 }
 })
 
 const isViewOnly = computed(() => props.accessMode === 'view_only')
+
+// 被禁维度 -> SettingsModal 锁定分区
+const lockedSections = computed(() => {
+  const arr = []
+  if (props.forbidBitrate) arr.push('bitrate')
+  if (props.forbidFps) arr.push('fps')
+  if (props.forbidResolution) arr.push('size')
+  if (props.forbidAudio) arr.push('audio')
+  return arr
+})
 
 const videoEl = ref(null)
 // 声音开关：默认静音以保证 autoplay 合规（无用户手势时浏览器禁止有声自动播放），
@@ -140,14 +159,31 @@ const cameraSupport = ref(true)
 const shareSettingsKey = computed(() => `cloudphone_share_settings_${props.deviceId}`)
 const shareDefaults = { ...defaultSettings, audio: true }
 
+// 设置维度 -> settings.js 键：被禁维度忽略访客本地值，以分享者配置为准
+const DIM_KEYS = {
+  bitrate: ['bitrate', 'minBitrate', 'maxBitrate', 'bwe'],
+  fps: ['fps'],
+  resolution: ['size'],
+  audio: ['audio', 'audioGain', 'audioSource', 'audioDup', 'audioLowLatency']
+}
+
 function loadShareSettings() {
+  // 分享者配置（服务端下发）优先于默认值
+  const base = { ...shareDefaults, ...(props.guestSettings || {}) }
   try {
     const stored = JSON.parse(localStorage.getItem(shareSettingsKey.value) || 'null')
     if (stored && typeof stored === 'object') {
-      return { ...shareDefaults, ...stored }
+      const forbidden = new Set()
+      if (props.forbidBitrate) DIM_KEYS.bitrate.forEach(k => forbidden.add(k))
+      if (props.forbidFps) DIM_KEYS.fps.forEach(k => forbidden.add(k))
+      if (props.forbidResolution) DIM_KEYS.resolution.forEach(k => forbidden.add(k))
+      if (props.forbidAudio) DIM_KEYS.audio.forEach(k => forbidden.add(k))
+      for (const [k, v] of Object.entries(stored)) {
+        if (!forbidden.has(k)) base[k] = v
+      }
     }
   } catch (e) {}
-  return { ...shareDefaults }
+  return base
 }
 
 const localSettings = ref(loadShareSettings())
@@ -265,6 +301,27 @@ const statusText = computed(() => {
 })
 const errorText = computed(() => error.value || '连接已断开')
 
+// 蒙板上方：当前访客（卡密）+ 分享剩余时间
+const connMetaText = computed(() => {
+  let text = props.cardCode ? `🔑 ${props.cardCode}` : ''
+  const sec = props.remainingSeconds
+  let remain = ''
+  if (sec < 0) {
+    remain = '♾️ 永久有效'
+  } else if (sec > 0) {
+    const d = Math.floor(sec / 86400)
+    const h = Math.floor((sec % 86400) / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = Math.floor(sec % 60)
+    if (d > 0) remain = `剩余 ${d} 天 ${h} 小时`
+    else if (h > 0) remain = `剩余 ${h} 小时 ${m} 分`
+    else if (m > 0) remain = `剩余 ${m} 分 ${s} 秒`
+    else remain = `剩余 ${s} 秒`
+  }
+  if (remain) text = text ? `${text} · ${remain}` : remain
+  return text
+})
+
 // --- 悬浮 FAB（拖动 + 点击展开，与主控台 mobile-fab 同一交互） ---
 const showFabMenu = ref(false)
 const fabStyle = ref({ right: '24px', bottom: '24px' })
@@ -345,8 +402,16 @@ function updateMedia() {
   isMobile.value = window.innerWidth <= 1024
 }
 
+// iOS Safari（及所有 iOS 浏览器内核）不支持任意元素的 Fullscreen API，
+// 仅能 <video> webkitEnterFullscreen；此时"全屏"按钮自动退化为 CSS 页面全屏
+const nativeFullscreenSupported = ref(!!document.fullscreenEnabled)
+
 function onToggleFullscreen() {
   showFabMenu.value = false
+  if (!nativeFullscreenSupported.value) {
+    onToggleWebFullscreen()
+    return
+  }
   if (!document.fullscreenElement) {
     // 若处于页面全屏，先退出，避免样式污染系统全屏元素
     if (isWebFullscreen.value) {
@@ -617,6 +682,12 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 
+.conn-meta {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 14px;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -644,29 +715,6 @@ onUnmounted(() => {
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
-}
-
-/* 开声音提示浮标 */
-.sound-hint {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 8px 18px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(56, 189, 248, 0.5);
-  border-radius: 20px;
-  color: #38bdf8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  animation: hint-pulse 2s infinite;
-}
-
-@keyframes hint-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.35); }
-  50% { box-shadow: 0 0 0 8px rgba(56, 189, 248, 0); }
 }
 
 /* 悬浮 FAB（与主控台 mobile-fab 同一视觉语言） */

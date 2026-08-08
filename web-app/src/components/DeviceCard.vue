@@ -19,8 +19,9 @@
         class="snapshot-img"
         :class="{ 'is-landscape': isLandscape }"
       ></canvas>
-      <!-- 使用中遮罩：有客户端（含分享访客）接入时显示（样式参考群控“主控”蒙版） -->
-      <div v-if="device.clientCount > 0" class="in-use-overlay" :title="`当前有 ${device.clientCount} 个连接`">
+      <!-- 使用中遮罩：顶部高亮条显示接入者（用户名/访客卡密）与剩余时间 -->
+      <div v-if="device.clientCount > 0" class="in-use-overlay" :title="inUseTitle">
+        <div v-if="primaryClientText" class="in-use-top">{{ primaryClientText }}</div>
         <span class="in-use-text">使用中</span>
         <span class="in-use-sub">{{ device.clientCount }} 个连接</span>
       </div>
@@ -52,9 +53,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
           </button>
         </div>
-        
-        <!-- 聚焦时中央的淡雅提示 -->
-        <div class="focus-indicator">⌨️ 输入已锁定</div>
       </div>
       <!-- 群控主控制遮罩（大字号+半透明） -->
       <div v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-full-overlay">
@@ -127,7 +125,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         连接设置
       </button>
-      <button class="menu-item" @click.stop="onShareDevice">
+      <button class="menu-item" @click.stop="onShareDevice" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
         分享设备 / 卡密
       </button>
@@ -153,6 +151,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
+import { useAuthStore } from '@/stores/auth'
 import { H264Decoder } from 'h264decoder'
 import { getDeviceSettings } from '@/utils/settings'
 import { useGroupControlStore } from '@/stores/groupControl'
@@ -171,8 +170,36 @@ const props = defineProps({
 const emit = defineEmits(['connect', 'settings', 'edit-tags', 'share'])
 const deviceStore = useDeviceStore()
 const groupControlStore = useGroupControlStore()
+const authStore = useAuthStore()
 const showMenu = ref(false)
 const imgLoaded = ref(false)
+
+// --- “使用中”遮罩：接入者（用户名/访客卡密）与剩余时间 ---
+const clientsInfo = computed(() => props.device.clients || [])
+
+function formatClientRemain(sec) {
+  if (sec === undefined || sec === null || sec < 0) return '永久'
+  if (sec === 0) return '已到期'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (d > 0) return `剩余 ${d} 天`
+  if (h > 0) return `剩余 ${h} 小时`
+  return `剩余 ${Math.max(1, m)} 分`
+}
+
+const primaryClientText = computed(() => {
+  const c = clientsInfo.value[0]
+  if (!c) return ''
+  const icon = c.kind === 'guest' ? '🔑' : '👤'
+  const extra = clientsInfo.value.length > 1 ? ` 等${clientsInfo.value.length}人` : ''
+  return `${icon} ${c.name} · ${formatClientRemain(c.remaining_seconds)}${extra}`
+})
+
+const inUseTitle = computed(() => {
+  const lines = clientsInfo.value.map(c => `${c.name}（${formatClientRemain(c.remaining_seconds)}）`)
+  return lines.length ? `当前接入：\n${lines.join('\n')}` : `当前有 ${props.device.clientCount} 个连接`
+})
 
 const isLandscape = computed(() => {
   // 建立响应式依赖
@@ -804,6 +831,9 @@ const getAbsoluteCoords = (e) => {
   const clientY = e.clientY - rect.top
   
   let videoW, videoH
+  // 声明在外层作用域：下方 [DirectControl Debug] 日志会引用，
+  // 若留在 else 块内会导致走 canvas/img 分支时 ReferenceError 中断整个事件下发
+  let rawW, rawH
   if (canvas && isPreviewActive.value && canvas.width && canvas.height) {
     videoW = canvas.width
     videoH = canvas.height
@@ -812,8 +842,8 @@ const getAbsoluteCoords = (e) => {
     videoH = img.naturalHeight
   } else {
     const display = props.device.info?.displays?.[0]
-    const rawW = display?.x_res || 1080
-    const rawH = display?.y_res || 1920
+    rawW = display?.x_res || 1080
+    rawH = display?.y_res || 1920
     videoW = isLandscape.value ? Math.max(rawW, rawH) : Math.min(rawW, rawH)
     videoH = isLandscape.value ? Math.min(rawW, rawH) : Math.max(rawW, rawH)
   }
@@ -849,51 +879,64 @@ const getAbsoluteCoords = (e) => {
   const normX = Math.max(0, Math.min(1, relativeX / actualW))
   const normY = Math.max(0, Math.min(1, relativeY / actualH))
   
+  // 触控协议以设备逻辑分辨率为基准下发（与主控页 useWebRTC.sendTouch 一致）。
+  // 注意不能用预览流/快照的分辨率（可能只有 360p），否则服务端按比例换算后落点会整体偏移缩放
+  const displayInfo = props.device.info?.displays?.[0]
+  const devW = displayInfo?.x_res || 1080
+  const devH = displayInfo?.y_res || 1920
+  const isDefaultLandscape = devW > devH
+  const isVideoLandscape = videoW > videoH
+  const isRotatedVideo = isVideoLandscape !== isDefaultLandscape
+  const targetW = isRotatedVideo ? devH : devW
+  const targetH = isRotatedVideo ? devW : devH
+
   let result = null
   if (isLandscape.value) { // 顺时针旋转 90 度
     const origNormX = normY
     const origNormY = 1 - normX
     
     result = {
-      x: Math.round(origNormX * videoW),
-      y: Math.round(origNormY * videoH),
-      w: videoW,
-      h: videoH,
+      x: Math.round(origNormX * targetW),
+      y: Math.round(origNormY * targetH),
+      w: targetW,
+      h: targetH,
       isRotated: true
     }
   } else { // 正常竖屏
     result = {
-      x: Math.round(normX * videoW),
-      y: Math.round(normY * videoH),
-      w: videoW,
-      h: videoH,
+      x: Math.round(normX * targetW),
+      y: Math.round(normY * targetH),
+      w: targetW,
+      h: targetH,
       isRotated: false
     }
   }
 
-  console.log(`[DirectControl Debug] [${props.device.id}] Coordinates Calc:`, {
-    isLandscape: isLandscape.value,
-    clientX: e.clientX,
-    clientY: e.clientY,
-    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-    relativeClick: { clientX, clientY },
-    videoContentBounds: { actualW, actualH, offsetX, offsetY },
-    normalized: { normX, normY },
-    rawResolution: { rawW, rawH },
-    videoResolution: { videoW, videoH },
-    computedCoords: result,
-    displaysInfo: display
-  })
+  // 调试日志（排查坐标映射问题时再打开）
+  // console.log(`[DirectControl Debug] [${props.device.id}] Coordinates Calc:`, {
+  //   isLandscape: isLandscape.value,
+  //   clientX: e.clientX,
+  //   clientY: e.clientY,
+  //   rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+  //   relativeClick: { clientX, clientY },
+  //   videoContentBounds: { actualW, actualH, offsetX, offsetY },
+  //   normalized: { normX, normY },
+  //   rawResolution: { rawW, rawH },
+  //   videoResolution: { videoW, videoH },
+  //   targetResolution: { targetW, targetH },
+  //   computedCoords: result
+  // })
 
   return result
 }
 
 const sendDeviceControl = (payload) => {
-  if (payload.type === 'touch' && payload.action !== 2) { // 过滤高频 Move，仅对 Down / Up 输出
-    console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
-  } else if (payload.type !== 'touch') {
-    console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
-  }
+  // 调试日志（排查下发链路问题时再打开）
+  // if (payload.type === 'touch' && payload.action !== 2) { // 过滤高频 Move，仅对 Down / Up 输出
+  //   console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
+  // } else if (payload.type !== 'touch') {
+  //   console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
+  // }
   deviceStore.sendGroupControlEvent([props.device.id], payload)
 }
 
@@ -1082,6 +1125,25 @@ const sendKey = (keycode) => {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.75);
   letter-spacing: 0.1em;
+  user-select: none;
+}
+
+.in-use-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 6px 8px;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.95), rgba(99, 102, 241, 0.95));
+  color: #0b1120;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(56, 189, 248, 0.45);
   user-select: none;
 }
 
@@ -1333,42 +1395,133 @@ const sendKey = (keycode) => {
   z-index: 50;
 }
 
-/* 移动端卡片优化 */
+/* 移动端卡片优化：高密度宫格小卡片（4 列时约 80-90px 宽） */
 @media (max-width: 1024px) {
   .device-card {
     height: 100%;
+    border-radius: 8px;
+    /* 允许三点菜单在小卡片上溢出显示 */
+    overflow: visible;
+  }
+  .device-card:hover {
+    /* 触屏无悬停态，去掉位移动画避免点击抖动 */
+    transform: none;
   }
   .preview-area {
     aspect-ratio: unset;
     flex: 1;
     min-height: 0;
+    border-radius: inherit;
   }
+  /* 悬浮页脚改为整卡定位容器：名称胶囊置顶、菜单按钮置底，本身不拦截点击 */
   .card-footer-overlay {
-    padding: 8px 10px;
+    top: 0;
+    bottom: 0;
+    background: none;
+    padding: 4px;
+    justify-content: flex-start;
+    pointer-events: none;
+  }
+  /* 顶部左侧名称胶囊：半透明黑底圆角，名称 + 状态徽标并排 */
+  .device-main-info {
+    margin-bottom: 0;
+    gap: 4px;
+    padding: 2px 6px;
+    max-width: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 999px;
+    backdrop-filter: blur(4px);
   }
   .device-id-text {
-    font-size: 13px;
-    max-width: 80px;
+    font-size: 10px;
+    max-width: none;
   }
   .status-badge {
-    font-size: 9px;
-    padding: 1px 4px;
+    font-size: 8px;
+    padding: 0 3px;
+    flex: 0 0 auto;
+  }
+  /* 小卡片只保留名称+状态：型号 / 最后在线 / 标签列表隐藏 */
+  .device-meta,
+  .device-tags {
+    display: none;
   }
   .vm-icon {
-    font-size: 32px;
+    font-size: 28px;
   }
-  .device-tags {
-    gap: 4px;
-    padding-right: 22px;
+  .play-hint {
+    font-size: 10px;
+    padding: 3px 8px;
   }
-  .device-tag {
-    max-width: 70px;
-    height: 18px;
-    padding: 0 6px;
-    font-size: 9px;
+  /* 使用中遮罩文字缩小，避免小卡片破版 */
+  .in-use-top {
+    font-size: 0.6rem;
+    padding: 2px 4px;
   }
+  .in-use-text {
+    font-size: clamp(14px, 4vw, 22px);
+  }
+  .in-use-sub {
+    font-size: 0.6rem;
+  }
+  /* 三点菜单：固定卡片底部左侧，半透明圆形黑底白图标 */
   .menu-btn {
+    left: 4px;
+    right: auto;
+    bottom: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     opacity: 1;
+    pointer-events: auto;
+  }
+  .menu-btn svg {
+    width: 12px;
+    height: 12px;
+    color: #fff;
+  }
+  /* 菜单从底部左侧按钮上方弹出 */
+  .card-menu {
+    left: 4px;
+    right: auto;
+    bottom: 32px;
+    min-width: 130px;
+  }
+  /* 群控勾选框移到右上（左上是名称胶囊），尺寸缩小 */
+  .group-select-overlay {
+    top: 4px;
+    left: auto;
+    right: 4px;
+    padding: 2px;
+    border-radius: 6px;
+  }
+  .group-select-checkbox {
+    width: 14px;
+    height: 14px;
+  }
+  .master-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+  }
+  .master-full-text {
+    font-size: clamp(18px, 5vw, 28px);
+  }
+  /* 直控虚拟按键栏缩小 */
+  .virtual-navbar {
+    top: 4px;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 14px;
+  }
+  .nav-btn {
+    width: 20px;
+    height: 20px;
+  }
+  .nav-btn svg {
+    width: 10px;
+    height: 10px;
   }
 }
 
@@ -1526,28 +1679,4 @@ const sendKey = (keycode) => {
   height: 14px;
 }
 
-/* 键盘锁定指示器 */
-.focus-indicator {
-  position: absolute;
-  bottom: 50px;
-  left: 50%;
-  transform: translate(-50%, 10px);
-  background: rgba(35, 134, 54, 0.85);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  opacity: 0;
-  transition: all 0.25s ease;
-  pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.interactive-overlay:focus .focus-indicator {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
 </style>

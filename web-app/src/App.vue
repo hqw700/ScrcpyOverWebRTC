@@ -32,7 +32,7 @@
             <textarea 
               id="license-input" 
               v-model="activationKey" 
-              placeholder="请粘贴由 generate_license.go 脚本或作者提供的激活码..."
+              placeholder="请粘贴购买后获得的激活码..."
               rows="4"
             ></textarea>
           </div>
@@ -49,8 +49,10 @@
         </div>
         
         <div class="license-block-footer">
-          <p>如需获取授权激活证书，请联系作者：</p>
+          <p>没有激活码？前往闲鱼购买「穿云投屏授权码服务」：</p>
           <div class="contact-links">
+            <a href="https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA" target="_blank" rel="noopener" class="footer-purchase-link">🛒 购买激活码</a>
+            <span class="footer-divider">|</span>
             <a href="mailto:cloudphone@qq.com" class="footer-email">cloudphone@qq.com</a>
             <span class="footer-divider">|</span>
             <a href="javascript:void(0)" @click="showContactModal = true" class="footer-contact-link">获取企业微信二维码</a>
@@ -89,7 +91,7 @@
           </svg>
           <span class="nav-item-text">大盘</span>
         </a>
-        <a href="javascript:void(0)" @click="navigateTo('/batch')" class="nav-item" :class="{ active: showBatchPage }">
+        <a href="javascript:void(0)" @click="navigateTo('/batch')" class="nav-item" :class="{ active: showBatchPage }" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="9" rx="1"></rect>
             <rect x="14" y="3" width="7" height="5" rx="1"></rect>
@@ -128,7 +130,7 @@
           </svg>
           <span class="nav-item-text">外设</span>
         </a>
-        <a href="javascript:void(0)" @click="navigateTo('/shares')" class="nav-item" :class="{ active: showShareAdminPage }" title="分享与卡密管理">
+        <a href="javascript:void(0)" @click="navigateTo('/shares')" class="nav-item" :class="{ active: showShareAdminPage }" title="分享与卡密管理" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
             <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
@@ -263,6 +265,16 @@
                       <div class="item-desc">云虚机搭建、直连教程及实机演示</div>
                     </div>
                   </a>
+                  <a href="javascript:void(0)" @click="showLicensePanel = true; showHelpMenu = false" class="help-dropdown-item">
+                    <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <div class="item-text">
+                      <div class="item-title">授权管理</div>
+                      <div class="item-desc">查看授权状态、用量、机器码与激活</div>
+                    </div>
+                  </a>
                   <a href="javascript:void(0)" @click="showContactModal = true; showHelpMenu = false" class="help-dropdown-item">
                     <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -287,6 +299,12 @@
             <span class="user-role-badge" :class="authStore.role">
               {{ authStore.role === 'admin' ? '管理员' : '普通用户' }}
             </span>
+            <span
+              v-if="accountExpiryText"
+              class="expiry-chip"
+              :class="{ expired: accountExpired }"
+              :title="accountExpiry ? '到期时间: ' + accountExpiry.toLocaleString('zh-CN', { hour12: false }) : ''"
+            >⏳ {{ accountExpiryText }}</span>
           </div>
         </div>
       </header>
@@ -403,7 +421,7 @@
         </svg>
         <span class="mobile-nav-text">大盘</span>
       </button>
-      <button @click="navigateTo('/batch')" class="mobile-nav-item" :class="{ active: showBatchPage }">
+      <button @click="navigateTo('/batch')" class="mobile-nav-item" :class="{ active: showBatchPage }" v-if="authStore.isAdmin">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="9" rx="1"></rect>
           <rect x="14" y="3" width="7" height="5" rx="1"></rect>
@@ -443,64 +461,17 @@
           <button class="contact-close-btn" @click="showContactModal = false">✕</button>
           <div class="contact-card-title">联系作者</div>
           <a class="contact-card-email" href="mailto:cloudphone@qq.com">cloudphone@qq.com</a>
+          <a class="contact-card-purchase" href="https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA" target="_blank" rel="noopener">🛒 闲鱼购买激活码「穿云投屏授权码服务」</a>
           <div class="contact-card-body">
-            <img src="/assets/wework.jpg" alt="企业微信名片" class="contact-qrcode-img" @click="handleContactImgClick" />
+            <img src="/assets/wework.jpg" alt="企业微信名片" class="contact-qrcode-img" />
             <p class="contact-card-tip">扫码添加企业微信，进行技术交流与项目反馈</p>
-          </div>
-          <div class="contact-card-divider" v-if="showEggPanel"></div>
-          <div class="contact-license-section" v-if="showEggPanel">
-            <button class="toggle-license-btn" @click="showLicensePanel = !showLicensePanel">
-              {{ showLicensePanel ? '收起授权管理' : '系统授权管理 (查看机器码/激活)' }}
-            </button>
-            <div v-if="showLicensePanel" class="license-panel-body">
-              <div class="license-status-display">
-                <div class="status-item">
-                  <span class="status-label">激活状态:</span>
-                  <span :class="['status-value', deviceStore.licenseStatus === 'valid' ? 'status-valid' : 'status-expired']">
-                    {{ deviceStore.licenseStatus === 'valid' ? '正常激活' : '授权过期' }}
-                  </span>
-                </div>
-                <div class="status-item" v-if="deviceStore.licenseStatus === 'valid'">
-                  <span class="status-label">剩余有效期:</span>
-                  <span class="status-value highlight">{{ deviceStore.licenseDaysRemaining }} 天</span>
-                </div>
-                <div class="status-item">
-                  <span class="status-label">最大虚机限制:</span>
-                  <span class="status-value highlight">{{ deviceStore.licenseMaxDevices }} 台</span>
-                </div>
-                <div class="status-item" v-if="deviceStore.licenseExpiresAt">
-                  <span class="status-label">过期日期:</span>
-                  <span class="status-value">{{ deviceStore.licenseExpiresAt }}</span>
-                </div>
-              </div>
-              <div class="license-info-row small">
-                <span class="info-label">机器码:</span>
-                <div class="machine-id-container small">
-                  <code>{{ deviceStore.globalMachineID || '正在获取...' }}</code>
-                  <button class="small-copy-btn" @click="copyMachineID" :disabled="!deviceStore.globalMachineID">
-                    {{ copySuccess ? '已复制' : '复制' }}
-                  </button>
-                </div>
-              </div>
-              <div class="license-input-group small">
-                <input 
-                  type="text" 
-                  v-model="activationKey" 
-                  placeholder="请输入授权激活码..." 
-                  class="license-short-input"
-                />
-                <button class="short-activate-btn" :disabled="isActivating || !activationKey.trim()" @click="submitActivation">
-                  {{ isActivating ? '激活' : '激活' }}
-                </button>
-              </div>
-              <div v-if="activationError" class="activation-error-msg small">
-                {{ activationError }}
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </transition>
+
+    <!-- 系统授权管理面板 -->
+    <LicensePanel :visible="showLicensePanel" @close="showLicensePanel = false" />
   </div>
 </template>
 
@@ -521,6 +492,7 @@ import UserAdminPage from '@/views/UserAdminPage.vue'
 import BatchControlPage from '@/views/BatchControlPage.vue'
 import AdvancedPage from '@/views/AdvancedPage.vue'
 import ShareAdminPage from '@/views/ShareAdminPage.vue'
+import LicensePanel from '@/components/LicensePanel.vue'
 
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
@@ -566,19 +538,32 @@ const activationKey = ref('')
 const isActivating = ref(false)
 const activationError = ref(null)
 const copySuccess = ref(false)
-const showLicensePanel = ref(localStorage.getItem('license_egg_unlocked') === 'true')
-const contactImgClickCount = ref(0)
-const showEggPanel = ref(localStorage.getItem('license_egg_unlocked') === 'true')
+const showLicensePanel = ref(false)
 
-function handleContactImgClick() {
-  if (showEggPanel.value) return
-  contactImgClickCount.value++
-  if (contactImgClickCount.value >= 5) {
-    showEggPanel.value = true
-    showLicensePanel.value = true
-    localStorage.setItem('license_egg_unlocked', 'true')
-  }
-}
+// 当前账号有效期（/api/me 下发；零值时间 = 永久不显示）
+// nowTick 每秒驱动一次，让倒计时实时走动而不是只在刷新时更新
+const nowTick = ref(Date.now())
+let expiryTimer = null
+
+const accountExpiry = computed(() => {
+  const p = authStore.userPolicy
+  if (!p || !p.expires_at) return null
+  const t = new Date(p.expires_at)
+  if (Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return null
+  return t
+})
+const accountExpired = computed(() => !!accountExpiry.value && accountExpiry.value.getTime() <= nowTick.value)
+const accountExpiryText = computed(() => {
+  const t = accountExpiry.value
+  if (!t) return ''
+  const ms = t.getTime() - nowTick.value
+  if (ms <= 0) return '已到期'
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000).toString().padStart(2, '0')
+  const m = Math.floor((ms % 3600000) / 60000).toString().padStart(2, '0')
+  const s = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0')
+  return d > 0 ? `剩余 ${d} 天 ${h}:${m}:${s}` : `剩余 ${h}:${m}:${s}`
+})
 
 watch(showContactModal, (val) => {
   if (val) {
@@ -609,7 +594,6 @@ async function submitActivation() {
   isActivating.value = false
   if (res.success) {
     activationKey.value = ''
-    showLicensePanel.value = false
     alert('系统激活成功！授权已实时重载并应用。')
   } else {
     activationError.value = res.error
@@ -793,6 +777,11 @@ onMounted(async () => {
   await authStore.checkNoAuthStatus()
   initApp()
   fetchVersion()
+  // 拉取当前用户的管控策略（含账号有效期，顶栏倒计时显示用）
+  if (authStore.token && !authStore.userPolicy) {
+    authStore.fetchMe()
+  }
+  expiryTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
   window.addEventListener('resize', updateMedia)
   window.addEventListener('click', closeHelpMenu)
   window.addEventListener('cloudphone-navigate', handleNavigateEvent)
@@ -805,6 +794,7 @@ watch(() => authStore.isLoggedIn, (newVal) => {
   }
 })
 onUnmounted(() => {
+  if (expiryTimer) clearInterval(expiryTimer)
   window.removeEventListener('resize', updateMedia)
   window.removeEventListener('click', closeHelpMenu)
   window.removeEventListener('cloudphone-navigate', handleNavigateEvent)
@@ -821,6 +811,10 @@ function closePanel() {
 }
 
 function navigateTo(path) {
+  // 普通用户禁用页面：分享管理、群控（直接访问路径时强制回首页）
+  if (!authStore.isAdmin && (path === '/shares' || path === '/batch')) {
+    path = '/'
+  }
   // 先统一复位分享管理页标记，各分支只需关心自己管辖的标记
   showShareAdminPage.value = false
 
@@ -1116,6 +1110,27 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .nav-item.active { opacity: 1; color: var(--accent); background: rgba(88,166,255,0.1); }
 .nav-item.logout-nav-item:hover { opacity: 1; color: #f85149; background: rgba(248,81,73,0.1); }
 
+/* 顶栏用户名旁的账号有效期倒计时 */
+.expiry-chip {
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.expiry-chip.expired {
+  background: rgba(248, 81, 73, 0.12);
+  border-color: rgba(248, 81, 73, 0.35);
+  color: #f85149;
+}
+
 .top-bar-right {
   display: flex;
   align-items: center;
@@ -1344,6 +1359,20 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   flex-shrink: 0;
 }
 .contact-card-email:hover {
+  text-decoration: underline;
+}
+
+.contact-card-purchase {
+  display: inline-flex;
+  align-self: center;
+  margin: -8px 0 16px;
+  color: #d29922;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.contact-card-purchase:hover {
   text-decoration: underline;
 }
 
@@ -1781,10 +1810,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   margin-bottom: 16px;
 }
 
-.license-info-row.small {
-  margin-bottom: 10px;
-}
-
 .info-label {
   display: block;
   font-size: 13px;
@@ -1795,11 +1820,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .machine-id-container {
   display: flex;
   gap: 8px;
-}
-
-.machine-id-container.small code {
-  font-size: 11px;
-  padding: 4px 8px;
 }
 
 .machine-id-container code {
@@ -1816,7 +1836,7 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   overflow-x: auto;
 }
 
-.copy-code-btn, .machine-id-container.small button {
+.copy-code-btn {
   background: #21262d;
   border: 1px solid #30363d;
   border-radius: 6px;
@@ -1829,19 +1849,13 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   transition: all 0.2s;
 }
 
-.copy-code-btn:hover, .machine-id-container.small button:hover {
+.copy-code-btn:hover {
   background: #30363d;
   border-color: #8b949e;
 }
 
 .license-input-group {
   margin-bottom: 20px;
-}
-
-.license-input-group.small {
-  margin-bottom: 12px;
-  display: flex;
-  gap: 8px;
 }
 
 .license-input-group label {
@@ -1865,19 +1879,8 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   outline: none;
 }
 
-.license-input-group textarea:focus, .license-short-input:focus {
+.license-input-group textarea:focus {
   border-color: var(--accent);
-}
-
-.license-short-input {
-  flex: 1;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  color: #c9d1d9;
-  padding: 6px 10px;
-  font-size: 12px;
-  outline: none;
 }
 
 .activate-btn {
@@ -1897,25 +1900,9 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   background: #2ea44f;
 }
 
-.activate-btn:disabled, .short-activate-btn:disabled {
+.activate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.short-activate-btn {
-  background: #238636;
-  border: 1px solid #2ea44f;
-  border-radius: 6px;
-  color: #ffffff;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.short-activate-btn:hover:not(:disabled) {
-  background: #2ea44f;
 }
 
 .activation-error-msg {
@@ -1927,17 +1914,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   font-size: 12px;
   margin-bottom: 16px;
   text-align: center;
-}
-
-.activation-error-msg.small {
-  color: #f85149;
-  background: none;
-  border: none;
-  margin-top: 6px;
-  margin-bottom: 0;
-  padding: 0;
-  font-size: 11px;
-  text-align: left;
 }
 
 .license-block-footer {
@@ -1964,6 +1940,16 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   text-decoration: none;
 }
 
+.footer-purchase-link {
+  color: #d29922;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footer-purchase-link:hover {
+  text-decoration: underline;
+}
+
 .footer-email:hover, .footer-contact-link:hover {
   text-decoration: underline;
 }
@@ -1975,85 +1961,5 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .footer-contact-link {
   color: #8b949e;
   text-decoration: none;
-}
-
-/* 联系作者弹窗中的授权扩展板块 */
-.contact-card-divider {
-  height: 1px;
-  background: #30363d;
-  margin: 20px 0 16px;
-  width: 100%;
-}
-
-.contact-license-section {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.toggle-license-btn {
-  background: none;
-  border: none;
-  color: #8b949e;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 8px;
-  transition: color 0.2s;
-}
-
-.toggle-license-btn:hover {
-  color: var(--accent);
-}
-
-.license-panel-body {
-  width: 100%;
-  margin-top: 12px;
-  text-align: left;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.license-status-display {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-
-.status-label {
-  color: #8b949e;
-}
-
-.status-value {
-  color: #c9d1d9;
-  font-weight: 500;
-}
-
-.status-value.status-valid {
-  color: #3fb950;
-}
-
-.status-value.status-expired {
-  color: #f85149;
-}
-
-.status-value.highlight {
-  color: #58a6ff;
 }
 </style>

@@ -288,6 +288,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
+import { useAuthStore } from '@/stores/auth'
 import { useWebRTC } from '@/composables/useWebRTC'
 
 const deviceStore = useDeviceStore()
@@ -854,6 +855,12 @@ const translateStatus = (status) => {
 }
 
 onMounted(() => {
+  // 群控为管理员专属：普通用户直达此页时强制回首页
+  const authStore = useAuthStore()
+  if (!authStore.isAdmin) {
+    window.dispatchEvent(new CustomEvent('cloudphone-navigate', { detail: '/' }))
+    return
+  }
   fetchCloudFiles()
 })
 
@@ -1766,5 +1773,171 @@ onUnmounted(() => {
   font-size: 14px;
   color: #8b949e;
   max-width: 400px;
+}
+
+/* 移动端适配 (<=1024px)：侧栏与主区纵向堆叠、工具条换行、网格收窄 */
+@media (max-width: 1024px) {
+  .batch-control-page {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 64px);
+    overflow-y: auto;
+  }
+
+  /* 侧边设备选择器改为顶部通栏 */
+  .batch-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #30363d;
+    flex-shrink: 0;
+  }
+
+  .sidebar-header {
+    padding: 14px 16px;
+  }
+
+  .tag-selector-section {
+    padding: 10px 16px;
+  }
+
+  .device-list-scroll {
+    flex: none;
+    max-height: 220px;
+  }
+
+  /* 顶部工具条允许换行，标签按钮组可横向滚动 */
+  .batch-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .tab-buttons {
+    overflow-x: auto;
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .tab-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sync-status {
+    font-size: 12px;
+  }
+
+  .tab-viewport {
+    padding: 12px;
+    gap: 14px;
+    overflow: visible;
+  }
+
+  /* 主控画面区与从机网格/控制侧栏纵向堆叠 */
+  .control-pane-layout,
+  .master-screen-wrapper {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .screen-container {
+    min-height: 300px;
+  }
+
+  .master-control-sidebar {
+    width: 100%;
+    padding: 14px;
+  }
+
+  /* 从机/操作网格收窄，375px 下至少两列 */
+  .control-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
+  }
+
+  .action-btn {
+    padding: 8px;
+    font-size: 11px;
+  }
+
+  /* 表单卡片与按钮压缩 */
+  .task-form-card {
+    padding: 16px;
+  }
+
+  .task-form-card h4 {
+    font-size: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .button-actions-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .action-btn-primary,
+  .action-btn-danger {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .upload-dropzone {
+    padding: 20px 12px;
+  }
+
+  /* 任务仪表盘头部换行堆叠 */
+  .task-dashboard-section {
+    padding: 14px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .global-progress {
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .stat-item {
+    align-items: flex-start;
+  }
+
+  .stat-item .value {
+    font-size: 16px;
+  }
+
+  /* 子任务表格容器横向滚动，压缩单元格 */
+  .subtask-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .subtask-table th,
+  .subtask-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .error-text {
+    max-width: 160px;
+  }
+
+  /* 日志弹窗限宽 */
+  .log-modal-card {
+    width: 94vw;
+    max-width: 94vw;
+    height: 80%;
+  }
 }
 </style>

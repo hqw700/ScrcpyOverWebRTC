@@ -103,6 +103,67 @@ export const MOCK_DEVICES = [
   }
 ]
 
+// 程序化补足到 100 台：用于高密度宫格/大盘等界面开发验证
+// （手写的前 6 台保留精细字段；生成的机器带随机型号/标签/状态/指标）
+const DEMO_MODELS = [
+  { model: "Google Pixel 7 Pro", abi: "arm64-v8a", sdk: "33", androidVersion: "13.0" },
+  { model: "Samsung Galaxy S23 (redroid)", abi: "x86_64", sdk: "33", androidVersion: "13.0" },
+  { model: "Xiaomi 14 (Magisk Service)", abi: "arm64-v8a", sdk: "34", androidVersion: "14.0" },
+  { model: "OnePlus 12 (Shizuku Engine)", abi: "arm64-v8a", sdk: "34", androidVersion: "14.0" },
+  { model: "Redroid Container Node", abi: "x86_64", sdk: "31", androidVersion: "12.0" }
+]
+const DEMO_TAG_POOL = [["高强组"], ["redroid", "容器"], ["Magisk保活"], ["Shizuku免Root"], ["高画质"], ["测试组"], ["游戏组"], []]
+
+function pad3(n) {
+  return String(n).padStart(3, "0")
+}
+
+function seededRand(seed) {
+  // 简单可复现伪随机（刷新页面布局稳定，便于 UI 对比）
+  let s = seed
+  return () => {
+    s = (s * 1103515245 + 12345) % 2147483648
+    return s / 2147483648
+  }
+}
+
+for (let i = MOCK_DEVICES.length + 1; i <= 100; i++) {
+  const rand = seededRand(i * 9973)
+  const spec = DEMO_MODELS[Math.floor(rand() * DEMO_MODELS.length)]
+  const online = rand() > 0.12 // 约 88% 在线
+  const hoursAgo = Math.floor(rand() * 72)
+  const lastSeen = new Date(Date.UTC(2026, 6, 24, 12) - hoursAgo * 3600000).toISOString()
+  const dev = {
+    id: `CloudPhone-VM-${pad3(i)}`,
+    info: {
+      model: spec.model,
+      abi: spec.abi,
+      sdk: spec.sdk,
+      androidVersion: spec.androidVersion,
+      ip: `10.8.${Math.floor(i / 250)}.${i % 250 + 1}`,
+      sn: `CP-VM-${pad3(i)}`
+    },
+    status: online ? "online" : "offline",
+    tags: DEMO_TAG_POOL[Math.floor(rand() * DEMO_TAG_POOL.length)],
+    firstSeen: "2026-07-20T08:00:00Z",
+    lastSeen,
+    stats: online
+      ? {
+          cpu: +(10 + rand() * 60).toFixed(1),
+          mem: +(35 + rand() * 40).toFixed(1),
+          disk: +(20 + rand() * 50).toFixed(1),
+          temp: +(33 + rand() * 12).toFixed(1),
+          netUp: Math.floor(200 + rand() * 3000),
+          netDown: Math.floor(500 + rand() * 7000)
+        }
+      : { cpu: 0, mem: 0, disk: 0, temp: 0, netUp: 0, netDown: 0 }
+  }
+  if (!online) {
+    dev.lastOffline = lastSeen
+  }
+  MOCK_DEVICES.push(dev)
+}
+
 /**
  * 在线设备高频差分性能指标模拟更新
  */

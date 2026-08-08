@@ -961,4 +961,113 @@ function showOfflineDetail(device) {
   border-radius: 3px;
   font-weight: 600;
 }
+
+/* 移动端适配 (<=1024px)：卡片两列、图表与矩阵纵向堆叠、标题行允许换行 */
+@media (max-width: 1024px) {
+  .dashboard-container {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  /* 摘要卡片改 2 列网格，压缩间距与字号 */
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .summary-card {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .card-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .card-label {
+    font-size: 11px;
+  }
+
+  .card-value {
+    font-size: 15px;
+  }
+
+  .card-stats {
+    display: none;
+  }
+
+  /* 汇总信息栏允许换行 */
+  .global-bar {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  /* 图表区与矩阵区保持纵向堆叠并压缩内边距 */
+  .chart-section,
+  .matrix-section {
+    padding: 14px;
+  }
+
+  /* 标题行纵向换行，避免与下拉框互相挤压 */
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .title-area {
+    flex-wrap: wrap;
+  }
+
+  .chart-title {
+    font-size: 14px;
+  }
+
+  .chart-subtitle {
+    font-size: 11px;
+  }
+
+  .chart-wrapper {
+    height: 220px;
+    overflow-x: auto;
+  }
+
+  .matrix-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .legend-group {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 11px;
+  }
+
+  /* 设备矩阵方块收窄，保证 375px 至少两列 */
+  .matrix-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+  }
+
+  .device-tile {
+    padding: 8px;
+  }
+
+  .tile-id {
+    max-width: 70px;
+    font-size: 11px;
+  }
+
+  .tile-val {
+    font-size: 15px;
+  }
+
+  .no-devices-placeholder {
+    padding: 24px 12px;
+  }
+}
 </style>

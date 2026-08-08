@@ -8,6 +8,9 @@ export const useAuthStore = defineStore('auth', () => {
   const role = ref(localStorage.getItem('auth_role') || (isDemo ? 'admin' : ''))
   const assignedDevices = ref(JSON.parse(localStorage.getItem('auth_devices') || (isDemo ? '["*"]' : '[]')))
   const noAuthMode = ref(isDemo)
+  // 当前用户的设置管控策略（/api/me 下发，null = 未加载）：
+  // { forbid_bitrate, forbid_fps, forbid_resolution, forbid_audio, settings, expires_at }
+  const userPolicy = ref(null)
 
   const isLoggedIn = computed(() => noAuthMode.value || !!token.value)
   const isAdmin = computed(() => noAuthMode.value || role.value === 'admin')
@@ -81,6 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
       role.value = ''
       assignedDevices.value = []
       noAuthMode.value = false
+      userPolicy.value = null
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
       localStorage.removeItem('auth_role')
@@ -131,6 +135,16 @@ export const useAuthStore = defineStore('auth', () => {
           localStorage.setItem('ai_model', data.ai_config.ai_model || '')
           localStorage.setItem('ai_provider', data.ai_config.ai_provider || '')
         }
+
+        // 缓存用户的设置管控策略（画质/音频锁定 + 管理员配置值 + 账号有效期）
+        userPolicy.value = {
+          forbid_bitrate: !!data.forbid_bitrate,
+          forbid_fps: !!data.forbid_fps,
+          forbid_resolution: !!data.forbid_resolution,
+          forbid_audio: !!data.forbid_audio,
+          settings: data.settings || null,
+          expires_at: data.expires_at || null
+        }
       }
     } catch (e) {
       console.error('Fetch me error:', e)
@@ -161,6 +175,7 @@ export const useAuthStore = defineStore('auth', () => {
     role,
     assignedDevices,
     noAuthMode,
+    userPolicy,
     isLoggedIn,
     isAdmin,
     login,

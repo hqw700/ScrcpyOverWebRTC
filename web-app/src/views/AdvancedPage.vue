@@ -1308,4 +1308,150 @@ button:disabled {
   font-family: monospace;
   color: #66fcf1;
 }
+
+/* 移动端适配 (<=1024px)：侧栏与主面板纵向堆叠、表单控件全宽、栅格单列 */
+@media (max-width: 1024px) {
+  .advanced-container {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  /* 左侧设备选择面板改为顶部通栏 */
+  .sidebar-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #272733;
+    padding: 14px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .panel-header {
+    margin-bottom: 12px;
+  }
+
+  .device-list-container {
+    flex: none;
+    max-height: 180px;
+    margin-bottom: 12px;
+  }
+
+  .device-item {
+    padding: 8px 10px;
+    margin-bottom: 6px;
+  }
+
+  .batch-control-status {
+    margin-top: 0;
+    padding-top: 12px;
+  }
+
+  .batch-checklist {
+    max-height: 120px;
+  }
+
+  /* 选项卡头部可横向滚动 */
+  .tabs-header {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-btn {
+    padding: 12px 16px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tab-content {
+    padding: 14px;
+  }
+
+  /* GPS 分区纵向堆叠，地图高度收窄 */
+  .map-and-controls {
+    gap: 14px;
+  }
+
+  .map-wrapper {
+    flex: none;
+    min-height: 260px;
+    height: 40vh;
+  }
+
+  .gps-controls-card {
+    padding: 14px;
+  }
+
+  /* 坐标表单栅格改单列，控件全宽 */
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .form-group input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .btn-group {
+    flex-wrap: wrap;
+  }
+
+  .primary-btn,
+  .accent-btn,
+  .danger-btn {
+    flex: 1;
+    padding: 10px 14px;
+  }
+
+  /* 出行模式按钮允许换行 */
+  .mode-select {
+    flex-wrap: wrap;
+  }
+
+  .mode-btn {
+    min-width: 90px;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  /* 传感器分区保持纵向堆叠并压缩 */
+  .sensor-cols {
+    gap: 14px;
+  }
+
+  .sensor-3d-panel {
+    padding: 14px;
+  }
+
+  .phone-3d-container {
+    width: 140px;
+    height: 250px;
+    margin: 16px 0;
+  }
+
+  .preset-actions-row {
+    flex-wrap: wrap;
+  }
+
+  .preset-btn {
+    min-width: 90px;
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .slider-group-box {
+    padding: 12px;
+  }
+
+  .slider-row label {
+    width: 64px;
+    font-size: 11px;
+  }
+
+  .val-display {
+    width: 56px;
+    font-size: 11px;
+  }
+}
 </style>

@@ -79,6 +79,7 @@
         <!-- 加载/错误覆盖层 -->
         <div v-if="showOverlay" class="panel-overlay">
           <div class="overlay-box">
+            <div v-if="connMetaText" class="conn-meta">{{ connMetaText }}</div>
             <template v-if="['connecting', 'signaling', 'waiting_offer', 'connecting_webrtc'].includes(currentWebRTC.status.value)">
               <div class="mini-spinner"></div>
               <p>{{ loadingText }}</p>
@@ -108,7 +109,7 @@
           </button>
           
           <div class="mobile-fab-menu" :class="{ 'show': showMobileMenu, 'align-left': isFabOnLeft, 'align-top': isFabOnTop }">
-            <button class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
+            <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
               {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
             </button>
@@ -190,7 +191,7 @@
     <!-- PC 右侧控制栏 -->
     <div v-if="!isMobile" class="control-sidebar">
       <div class="sidebar-group">
-        <button class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
+        <button v-if="authStore.isAdmin" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="9" rx="1"></rect>
             <rect x="14" y="3" width="7" height="5" rx="1"></rect>
@@ -302,6 +303,8 @@
       :is-connected="true"
       :camera-support="cameraSupport"
       :is-custom="hasCustomSettings(currentId)"
+      :locked-sections="policyLocked"
+      :show-preview-tab="authStore.isAdmin"
       @close="showSettingsModal = false" 
       @save="saveSettings" 
       @reset="resetSettings"
@@ -317,7 +320,8 @@ import { useDeviceStore } from '@/stores/devices'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { useKeymapStore } from '@/stores/keymap'
 import { KeymapEngine } from '@/utils/keymapEngine'
-import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings } from '@/utils/settings'
+import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections } from '@/utils/settings'
+import { useAuthStore } from '@/stores/auth'
 import { useGroupControlStore } from '@/stores/groupControl'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
 import ScreenshotModal from '@/components/ScreenshotModal.vue'
@@ -411,8 +415,18 @@ const screenshotData = ref(null)
 const showSettingsModal = ref(false)
 const cameraSupport = ref(true)
 
-const localSettings = ref(getDeviceSettings(currentId.value))
+// 用户级设置管控：管理员配置的锁定项（码率/帧率/分辨率/音频）在 UI 置灰，服务端同步强制
+const authStore = useAuthStore()
+const policyLocked = computed(() => policyLockedSections(authStore.userPolicy))
+
+const localSettings = ref(applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy))
 const pageAudioMuted = ref(Boolean(localSettings.value.pageAudioMuted))
+
+if (!authStore.userPolicy && authStore.token) {
+  authStore.fetchMe().then(() => {
+    localSettings.value = applyPolicyToSettings(localSettings.value, authStore.userPolicy)
+  })
+}
 
 const scrcpyOptions = computed(() => {
   return {
@@ -466,7 +480,7 @@ function resetSettings() {
   } finally {
     isSavingSettingsSelf = false
   }
-  localSettings.value = getDeviceSettings(currentId.value) // Loads global settings now
+  localSettings.value = applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy) // Loads global settings now
   pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
   if (currentId.value) {
     webrtc.disconnect()
@@ -792,7 +806,7 @@ function onVideoResize() { checkAndRecommendLayout() }
 watch(currentId, (newId) => {
   if (newId) {
     webrtc.disconnect()
-    localSettings.value = getDeviceSettings(newId)
+    localSettings.value = applyPolicyToSettings(getDeviceSettings(newId), authStore.userPolicy)
     pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
     currentWebRTC.value = useWebRTC(newId, scrcpyOptions.value)
     deviceStore.setActiveWebRTC(webrtc)
@@ -902,7 +916,7 @@ function handleSettingsUpdated(event) {
   const updatedId = event.detail?.deviceId
   if (!updatedId || updatedId === currentId.value) {
     console.log('[DeviceClient] Settings updated globally or for current device, reloading...')
-    localSettings.value = getDeviceSettings(currentId.value)
+    localSettings.value = applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy)
     pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
     if (currentId.value) {
       webrtc.disconnect()
@@ -933,6 +947,7 @@ onMounted(() => {
   document.addEventListener('paste', onGlobalPaste)
   document.addEventListener('wheel', onGlobalWheel, { passive: false })
   layoutInterval = setInterval(checkAndRecommendLayout, 2000)
+  nowTickTimer = setInterval(() => { nowTick.value = Date.now() }, 30000)
   window.addEventListener('resize', updateMobileState)
   window.addEventListener('focus', onWindowFocus)
 })
@@ -963,6 +978,7 @@ onUnmounted(() => {
   document.removeEventListener('wheel', onGlobalWheel)
   if (layoutInterval) clearInterval(layoutInterval)
   if (statsInterval) clearInterval(statsInterval)
+  if (nowTickTimer) clearInterval(nowTickTimer)
   window.removeEventListener('resize', updateMobileState)
   window.removeEventListener('focus', onWindowFocus)
 })
@@ -1013,6 +1029,30 @@ const statusText = computed(() => {
 const loadingText = computed(() => {
   if (currentWebRTC.value.status.value === 'waiting_offer') return '等待设备...'
   return '建立连接...'
+})
+
+// 蒙板上方：当前连接用户 + 账号剩余有效期（每 30s 刷新一次显示）
+const nowTick = ref(Date.now())
+let nowTickTimer = null
+
+function formatDuration(ms) {
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  if (d > 0) return `${d} 天 ${h} 小时`
+  if (h > 0) return `${h} 小时 ${m} 分`
+  return `${Math.max(1, m)} 分钟`
+}
+
+const connMetaText = computed(() => {
+  const name = authStore.username
+  if (!name) return ''
+  const p = authStore.userPolicy
+  const t = p && p.expires_at ? new Date(p.expires_at) : null
+  if (!t || Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return `👤 ${name}`
+  const ms = t.getTime() - nowTick.value
+  if (ms <= 0) return `👤 ${name} · 账号已到期`
+  return `👤 ${name} · 剩余 ${formatDuration(ms)}`
 })
 
 const showOverlay = computed(() => currentWebRTC.value.status.value !== 'connected')
@@ -1079,7 +1119,15 @@ function retry() {
   webrtc.connect()
 }
 
+// iOS Safari（及所有 iOS 浏览器内核）不支持任意元素的 Fullscreen API，
+// 此时"全屏"按钮自动退化为 CSS 页面全屏
+const nativeFullscreenSupported = ref(!!document.fullscreenEnabled)
+
 function toggleFullscreen() {
+  if (!nativeFullscreenSupported.value) {
+    toggleWebFullscreen()
+    return
+  }
   if (!document.fullscreenElement) {
     // 如果处于网页全屏，先退出网页全屏，避免样式污染系统全屏元素
     if (isWebFullscreen.value) {
@@ -1572,6 +1620,7 @@ function onTouchEnd(e) {
 }
 
 .overlay-box { text-align: center; padding: 24px; }
+.conn-meta { font-size: 12px; color: #8b949e; margin-bottom: 12px; }
 .mini-spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

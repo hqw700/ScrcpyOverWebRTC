@@ -16,7 +16,7 @@
             <svg class="tab-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
             <span class="tab-label">视频</span>
           </button>
-          <button :class="['tab-btn', { active: activeTab === 'preview' }]" @click="activeTab = 'preview'">
+          <button v-if="showPreviewTab" :class="['tab-btn', { active: activeTab === 'preview' }]" @click="activeTab = 'preview'">
             <svg class="tab-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
             <span class="tab-label">缩略预览</span>
           </button>
@@ -34,24 +34,24 @@
           <!-- 🎥 视频面板 -->
           <div v-if="activeTab === 'video'" class="tab-pane">
             <div class="form-group">
-              <label>分辨率限制 (Max Size)</label>
-              <input type="number" v-model.number="localSettings.size" min="0" step="100" />
+              <label>分辨率限制 (Max Size) <span v-if="isLocked('size')" class="lock-tag">🔒 分享者已锁定</span></label>
+              <input type="number" v-model.number="localSettings.size" min="0" step="100" :disabled="isLocked('size')" />
               <small class="hint">0 为无限制。例如：1080 表示限制屏幕最长边为 1080px</small>
             </div>
 
             <div class="form-group">
-              <label>帧率控制 (Max FPS)</label>
-              <input type="number" v-model.number="localSettings.fps" min="0" max="120" />
+              <label>帧率控制 (Max FPS) <span v-if="isLocked('fps')" class="lock-tag">🔒 分享者已锁定</span></label>
+              <input type="number" v-model.number="localSettings.fps" min="0" max="120" :disabled="isLocked('fps')" />
               <small class="hint">0 为无限制，推荐设置为 30 或 60 帧以保障流畅度</small>
             </div>
 
             <div class="form-group form-group-row">
               <div class="group-info">
-                <label>开启 BWE 拥塞控制</label>
+                <label>开启 BWE 拥塞控制 <span v-if="isLocked('bitrate')" class="lock-tag">🔒 分享者已锁定</span></label>
                 <small class="hint">动态评估带宽并自适应码率</small>
               </div>
               <div class="toggle-switch">
-                <input type="checkbox" id="bwe-toggle" v-model="localSettings.bwe" />
+                <input type="checkbox" id="bwe-toggle" v-model="localSettings.bwe" :disabled="isLocked('bitrate')" />
                 <label for="bwe-toggle"></label>
               </div>
             </div>
@@ -60,12 +60,12 @@
             <div v-if="localSettings.bwe" class="sub-section">
               <div class="form-group">
                 <label>最低码率下限 (Min Bitrate - Mbps)</label>
-                <input type="number" v-model.number="localSettings.minBitrate" min="1" step="1" />
+                <input type="number" v-model.number="localSettings.minBitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
                 <small class="hint">弱网环境下的画质兜底，默认：8 Mbps</small>
               </div>
               <div class="form-group">
                 <label>最高码率上限 (Max Bitrate - Mbps)</label>
-                <input type="number" v-model.number="localSettings.maxBitrate" min="1" step="1" />
+                <input type="number" v-model.number="localSettings.maxBitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
                 <small class="hint">极佳网络下的画质上限，默认：20 Mbps</small>
               </div>
             </div>
@@ -73,7 +73,7 @@
             <!-- BWE 关闭：固定码率设定 -->
             <div v-else class="form-group">
               <label>固定画面码率 (Bitrate - Mbps)</label>
-              <input type="number" v-model.number="localSettings.bitrate" min="1" step="1" />
+              <input type="number" v-model.number="localSettings.bitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
               <small class="hint">固定网络开销码率，默认：4 Mbps</small>
             </div>
 
@@ -84,8 +84,8 @@
             </div>
           </div>
 
-          <!-- 📊 大盘预览面板 -->
-          <div v-if="activeTab === 'preview'" class="tab-pane">
+          <!-- 📊 大盘预览面板（普通用户与分享访客隐藏：预览与缩略图频率都影响虚机负载） -->
+          <div v-if="activeTab === 'preview' && showPreviewTab" class="tab-pane">
             <div class="form-group-divider">高频实时预览</div>
 
             <div class="form-group">
@@ -128,11 +128,11 @@
           <div v-if="activeTab === 'audio'" class="tab-pane">
             <div class="form-group form-group-row">
               <div class="group-info">
-                <label>开启音频 (Opus)</label>
+                <label>开启音频 (Opus) <span v-if="isLocked('audio')" class="lock-tag">🔒 分享者已锁定</span></label>
                 <small class="hint">回传云手机系统声音 (开启后默认设为 output)</small>
               </div>
               <div class="toggle-switch">
-                <input type="checkbox" id="audio-toggle" v-model="localSettings.audio" />
+                <input type="checkbox" id="audio-toggle" v-model="localSettings.audio" :disabled="isLocked('audio')" />
                 <label for="audio-toggle"></label>
               </div>
             </div>
@@ -140,7 +140,7 @@
             <div v-if="localSettings.audio" class="sub-section animate-slide-down">
               <div class="form-group">
                 <label>音频来源 (Audio Source)</label>
-                <select v-model="localSettings.audioSource" class="select-input">
+                <select v-model="localSettings.audioSource" class="select-input" :disabled="isLocked('audio')">
                   <option value="output">output (捕获扬声器声音，物理手机静音)</option>
                   <option value="playback">playback (保留本地声音，限 Android 13+)</option>
                 </select>
@@ -154,14 +154,14 @@
                   <small class="hint">仅 playback 模式且系统路由支持时有效</small>
                 </div>
                 <div class="toggle-switch">
-                  <input type="checkbox" id="audio-dup-toggle" v-model="localSettings.audioDup" />
+                  <input type="checkbox" id="audio-dup-toggle" v-model="localSettings.audioDup" :disabled="isLocked('audio')" />
                   <label for="audio-dup-toggle"></label>
                 </div>
               </div>
 
               <div class="form-group">
                 <label>音量增益</label>
-                <input type="number" v-model.number="localSettings.audioGain" min="0.5" max="3" step="0.25" />
+                <input type="number" v-model.number="localSettings.audioGain" min="0.5" max="3" step="0.25" :disabled="isLocked('audio')" />
                 <small class="hint">默认 1.0。支持 0.5 - 3.0 倍范围音量缩放</small>
               </div>
 
@@ -294,6 +294,17 @@ const props = defineProps({
   cameraSupport: {
     type: Boolean,
     default: true
+  },
+  // 被锁定的设置分区（'bitrate' | 'fps' | 'size' | 'audio'），
+  // 用于分享访客场景：对应控件置灰，值以分享者配置为准
+  lockedSections: {
+    type: Array,
+    default: () => []
+  },
+  // 是否显示“缩略预览”页签（高频预览/缩略图频率影响虚机负载，普通用户与访客隐藏）
+  showPreviewTab: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -301,6 +312,10 @@ const emit = defineEmits(['close', 'save', 'reset'])
 
 const localSettings = ref({ ...props.settings })
 const activeTab = ref('video')
+
+function isLocked(section) {
+  return props.lockedSections.includes(section)
+}
 
 // 监听开启音频，当勾选 audio 时，如果 audioSource 没有设置，自动赋予默认值 'output'
 watch(() => localSettings.value.audio, (newVal) => {
@@ -571,6 +586,25 @@ function resetToGlobal() {
   font-size: 11px;
   color: #8b949e;
   line-height: 1.4;
+}
+
+/* 分享访客锁定项：置灰 + 锁标记 */
+.lock-tag {
+  font-size: 11px;
+  font-weight: 400;
+  color: #fbbf24;
+  margin-left: 6px;
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toggle-switch input:disabled + label {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* 输入框与选择菜单美化 */

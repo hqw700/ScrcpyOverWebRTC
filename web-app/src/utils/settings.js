@@ -107,3 +107,43 @@ export function deleteDeviceSettings(deviceId) {
     localStorage.removeItem(`cloudphone_settings_${deviceId}`)
   }
 }
+
+// --- 用户级设置管控策略（管理员在用户管理中配置，服务端信令层同步强制） ---
+
+// 设置维度 -> settings 键
+export const POLICY_DIM_KEYS = {
+  bitrate: ['bitrate', 'minBitrate', 'maxBitrate', 'bwe'],
+  fps: ['fps'],
+  resolution: ['size'],
+  audio: ['audio', 'audioGain', 'audioSource', 'audioDup', 'audioLowLatency']
+}
+
+// policy(authStore.userPolicy) -> SettingsModal 的 lockedSections 数组
+export function policyLockedSections(policy) {
+  if (!policy) return []
+  const arr = []
+  if (policy.forbid_bitrate) arr.push('bitrate')
+  if (policy.forbid_fps) arr.push('fps')
+  if (policy.forbid_resolution) arr.push('size')
+  if (policy.forbid_audio) arr.push('audio')
+  return arr
+}
+
+// 将管控策略叠加到本地设置上：被禁维度使用管理员配置值
+// （无配置值时保留本地显示值，服务端仍会剥离并回落设备默认）
+export function applyPolicyToSettings(settings, policy) {
+  if (!policy) return settings
+  const enforced = policy.settings || {}
+  const merged = { ...settings }
+  const applyDim = (forbidden, keys) => {
+    if (!forbidden) return
+    for (const k of keys) {
+      if (enforced[k] !== undefined) merged[k] = enforced[k]
+    }
+  }
+  applyDim(policy.forbid_bitrate, POLICY_DIM_KEYS.bitrate)
+  applyDim(policy.forbid_fps, POLICY_DIM_KEYS.fps)
+  applyDim(policy.forbid_resolution, POLICY_DIM_KEYS.resolution)
+  applyDim(policy.forbid_audio, POLICY_DIM_KEYS.audio)
+  return merged
+}

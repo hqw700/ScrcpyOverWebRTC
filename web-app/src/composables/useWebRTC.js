@@ -1415,7 +1415,6 @@ function handleDeviceMessage(payload) {
     }
     aiCommandPromises.clear()
     status.value = 'disconnected'
-    adbSendQueue = []
 
     if (webrtcObj) {
       webrtcObj._adbInstance = null

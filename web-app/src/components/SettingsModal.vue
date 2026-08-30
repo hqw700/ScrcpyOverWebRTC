@@ -78,6 +78,15 @@
             </div>
 
             <div class="form-group">
+              <label>视频渲染引擎 (Render Engine)</label>
+              <select v-model="localSettings.renderEngine" class="select-input">
+                <option value="video">📺 标准 HTML5 模式 (推荐 / &lt;video&gt; 标签 / 兼容性最佳 / 支持画中画)</option>
+                <option value="webcodecs">🚀 WebCodecs 极速锁相模式 (实验性 / Canvas 显存直通 / 极低延迟)</option>
+              </select>
+              <small class="hint">标准模式兼容所有设备与画中画；WebCodecs 模式绕过浏览器 DOM 调度与 JitterBuffer，直通显示器 VSync 锁相渲染</small>
+            </div>
+
+            <div class="form-group">
               <label>编码器参数 (video_codec_options)</label>
               <input type="text" v-model="localSettings.videoCodecOptions" placeholder="例如: intra-refresh-period=30,i-frame-interval=2" />
               <small class="hint">用于控制 scrcpy 视频流的编码量化参数，留空则由 Agent 默认决定</small>

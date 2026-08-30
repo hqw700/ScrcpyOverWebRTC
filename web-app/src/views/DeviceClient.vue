@@ -23,10 +23,38 @@
           <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
         </button>
 
+        <!-- WebCodecs 极速锁相 Canvas 渲染器 -->
+        <canvas
+          v-show="isWebCodecs"
+          ref="canvasElement"
+          class="video-stream"
+          :class="{
+            'hwc-rotated-90': isHwcRotated90,
+            'hwc-rotated-270': isHwcRotated270
+          }"
+          :style="hwcRotatedVideoStyle"
+          @mousedown="onMouseDown"
+          @mousemove="onMouseMove"
+          @mouseup="onMouseUp"
+          @mouseleave="onMouseLeave"
+          @wheel.prevent="onWheel"
+          @contextmenu.prevent
+          @touchstart.prevent="onTouchStart"
+          @touchmove.prevent="onTouchMove"
+          @touchend.prevent="onTouchEnd"
+          @touchcancel.prevent="onTouchEnd"
+        />
+
+        <!-- HTML5 <video> 兼容渲染器 (回退/画中画) -->
         <video
+          v-show="!isWebCodecs"
           ref="videoElement"
           autoplay
           playsinline
+          webkit-playsinline
+          disableremoteplayback
+          controlslist="nodownload nofullscreen noremoteplayback noplaybackrate"
+          x-webkit-airplay="deny"
           :muted="!localSettings.audio"
           class="video-stream"
           @mousedown="onMouseDown"
@@ -399,6 +427,7 @@ const goBackToList = () => {
 }
 
 const videoElement = ref(null)
+const canvasElement = ref(null)
 const hiddenInput = ref(null)
 const containerRef = ref(null)
 const isFullscreen = ref(false)
@@ -602,6 +631,7 @@ const webrtc = new Proxy({}, {
     return true
   }
 })
+const isWebCodecs = computed(() => Boolean(currentWebRTC.value?.isWebCodecsActive?.value))
 deviceStore.setActiveWebRTC(webrtc)
 
 const keymapStore = useKeymapStore()
@@ -835,6 +865,13 @@ function setupWebRTC() {
   }
 
   webrtc.setVideoGetter(() => videoElement.value)
+  webrtc.setCanvasGetter(() => canvasElement.value)
+  if (webrtc && webrtc.onFrameSize) {
+    webrtc.onFrameSize((w, h) => {
+      videoNaturalSize.value = { width: w, height: h }
+      checkAndRecommendLayout()
+    })
+  }
   webrtc.setAudioMuted(pageAudioMuted.value)
   webrtc.connect()
   
@@ -1064,12 +1101,18 @@ const needRotateCoords = computed(() => isMobile.value && isVideoLandscape.value
 const videoNaturalSize = ref({ width: 0, height: 0 })
 
 function checkAndRecommendLayout() {
-  const video = videoElement.value
-  if (!video || !video.videoWidth) return
-  const ratio = video.videoWidth / video.videoHeight
-  const landscape = video.videoWidth > video.videoHeight
+  const activeMedia = (webrtc && webrtc.isWebCodecsActive && webrtc.isWebCodecsActive.value && canvasElement.value) ? canvasElement.value : videoElement.value
+  if (!activeMedia) return
+  const videoW = activeMedia.videoWidth || activeMedia.width || videoNaturalSize.value.width || 0
+  const videoH = activeMedia.videoHeight || activeMedia.height || videoNaturalSize.value.height || 0
+  if (!videoW || !videoH) return
+  const isPhysical = videoW > videoH
+  const rot = webrtc.deviceRotation ? webrtc.deviceRotation.value : 0
+  const isHwc = (rot === 90 || rot === 270) && !isPhysical
+  const landscape = isPhysical || isHwc
+  const ratio = isHwc ? (videoH / videoW) : (videoW / videoH)
   isVideoLandscape.value = landscape
-  videoNaturalSize.value = { width: video.videoWidth, height: video.videoHeight }
+  videoNaturalSize.value = { width: videoW, height: videoH }
   emit('recommend-layout', { isLandscape: landscape, ratio: ratio })
 }
 
@@ -1077,13 +1120,13 @@ function checkAndRecommendLayout() {
 function rotateCoords(clientX, clientY) {
   if (!needRotateCoords.value) return { x: clientX, y: clientY }
   
-  const video = videoElement.value
-  if (!video) return { x: clientX, y: clientY }
+  const activeMedia = (webrtc && webrtc.isWebCodecsActive && webrtc.isWebCodecsActive.value && canvasElement.value) ? canvasElement.value : videoElement.value
+  if (!activeMedia) return { x: clientX, y: clientY }
   
   const screenW = window.innerWidth
   const screenH = window.innerHeight
-  const videoW = videoNaturalSize.value.width
-  const videoH = videoNaturalSize.value.height
+  const videoW = activeMedia.videoWidth || activeMedia.width || videoNaturalSize.value.width
+  const videoH = activeMedia.videoHeight || activeMedia.height || videoNaturalSize.value.height
   
   if (!videoW || !videoH) return { x: clientX, y: clientY }
   

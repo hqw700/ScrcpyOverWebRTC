@@ -6,7 +6,8 @@
         <h2 class="section-title">网页一键 USB 部署</h2>
 
         <div class="webusb-warning">
-          ⚠️ 注意：本网页 USB 部署基于 WebUSB 协议，<b>不支持无线或网络 ADB 调试模式</b>，物理手机必须使用数据线直接连接当前电脑的 USB 端口。
+          ⚠️ <b>使用须知</b>：本网页 USB 部署基于 WebUSB 协议，<b>不支持无线或网络 ADB 调试模式</b>，物理手机必须使用数据线直接连接当前电脑的 USB 端口。<br>
+          💡 <b>防坑提醒</b>：若连接时提示 <i>"already in use" (设备被占用)</i>，通常是电脑后台运行了本地 ADB 或手机助手，只需在电脑终端中执行 <code>adb kill-server</code> 释放占用即可。
         </div>
 
         <div class="form-group">
@@ -144,7 +145,7 @@
               <div class="manual-download-col">
                 <h3 class="manual-subtitle">第一步：下载 ADB 部署包</h3>
                 <div class="download-row">
-                  <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="download-card-btn gold-card">
+                  <a href="/agent/agent-deploy.pkg" download="agent-deploy.zip" class="download-card-btn gold-card">
                     <div class="card-title">⚡ ADB 一键部署资源包 (ZIP)</div>
                     <div class="card-desc">包含全平台 Agent 二进制、核心投屏库及一键脚本，解压即可通过 ADB 运行。</div>
                   </a>
@@ -205,7 +206,7 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
               <div class="manual-download-col">
                 <h3 class="manual-subtitle">第一步：下载 Magisk 模块包</h3>
                 <div class="download-row">
-                  <a href="/agent/cloudphone-agent-magisk.zip" download="cloudphone-agent-magisk.zip" class="download-card-btn magisk-card">
+                  <a href="/agent/cloudphone-agent-magisk.pkg" download="cloudphone-agent-magisk.zip" class="download-card-btn magisk-card">
                     <div class="card-title">📱 Magisk / KSU 刷机模块 (ZIP)</div>
                     <div class="card-desc">专属模块压缩包，内置全架构支持、守护进程以及 cpctl 控制台工具。</div>
                   </a>
@@ -225,7 +226,7 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                   <div class="guide-step-item">
                     <span class="step-num">2</span>
                     <div class="step-content">
-                      <p><b>配置信令服务器地址</b>（支持以下任一方式）：</p>
+                      <p><b>配置信令服务器与 ICE 中转地址</b>（支持以下任一方式）：</p>
                       <div class="deploy-script-tabs">
                         <div class="script-box-title" style="color: #a855f7;">方式 A：命令行一键配置 (手机终端 / ADB shell)</div>
                         <div class="code-container">
@@ -234,8 +235,9 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                         </div>
                       </div>
                       <p style="margin-top: 10px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
-                        • <b>方式 B (交互式菜单)</b>：在手机终端中运行 <code>su</code> 接着运行 <code>cpctl</code> 打开交互控制台选择项4修改。<br>
-                        • <b>方式 C (编辑配置文件)</b>：使用 MT管理器编辑 <code>/data/adb/modules/cloudphone-agent/config.conf</code>，保存后在 Magisk 模块界面<b>连续点击 2 次 Action 按钮</b>重载生效。
+                        • <b>设置 ICE 中转服务器 (可选)</b>：<code>cpctl set CP_AGENT_ICE_SERVERS "&lt;turn/stun地址&gt;"</code>（若仅局域网内直连可设为空 <code>""</code>）。<br>
+                        • <b>方式 B (交互式菜单)</b>：在手机终端中运行 <code>su</code> 接着运行 <code>cpctl</code> 打开交互控制台选择项 4（可配置信令地址、ICE Servers、设备 ID 及码率）。<br>
+                        • <b>方式 C (编辑配置文件)</b>：使用 MT管理器编辑 <code>/data/adb/modules/cloudphone-agent/config.conf</code>，修改 <code>CP_AGENT_SIGNALING</code> 或 <code>CP_AGENT_ICE_SERVERS</code> 等字段，保存后在 Magisk 模块界面<b>连续点击 2 次 Action 按钮</b>重载生效。
                       </p>
                     </div>
                   </div>
@@ -376,10 +378,13 @@ const batCommand = computed(() => {
 // 响应式生成 Magisk / KSU 的命令
 const magiskCommand = computed(() => {
   const host = signalingIp.value
+  const ip = host.split(':')[0] || '127.0.0.1'
   const protocol = form.signalingUrl.startsWith('ws://') ? 'ws' : 'wss'
   const sig = `${protocol}://${host}`
+  const iceServersVal = form.iceServers || `turn:cloudphone_user:cloudphone_secure_password@${ip}:3478?transport=udp,stun:${ip}:3478`
+  const iceCmd = iceServersVal ? `\ncpctl set CP_AGENT_ICE_SERVERS "${iceServersVal}"` : ''
   const devIdCmd = form.deviceId ? `\ncpctl set CP_AGENT_ID "${form.deviceId}"` : ''
-  return `su\ncpctl set CP_AGENT_SIGNALING "${sig}"${devIdCmd}\ncpctl restart`
+  return `su\ncpctl set CP_AGENT_SIGNALING "${sig}"${iceCmd}${devIdCmd}\ncpctl restart`
 })
 
 // 一键复制命令到剪贴板

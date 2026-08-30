@@ -458,7 +458,7 @@
                 <div class="qs-step-block">
                   <div class="qs-step-title">第一步：下载 ADB 部署包 (包含全架构 Agent 及一键执行脚本)</div>
                   <div class="qs-download-row">
-                    <a href="/agent/agent-deploy.zip" download="agent-deploy.zip" class="qs-download-link">
+                    <a href="/agent/agent-deploy.pkg" download="agent-deploy.zip" class="qs-download-link">
                       <svg class="qs-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
@@ -497,7 +497,7 @@ run.bat -id "{{ quickstartDeviceId || 'device_01' }}" -signaling "{{ signalingPr
                 <div class="qs-step-block">
                   <div class="qs-step-title">第一步：下载 Magisk 模块刷机包 (物理真机已 Root 环境)</div>
                   <div class="qs-download-row">
-                    <a href="/agent/cloudphone-agent-magisk.zip" download="cloudphone-agent-magisk.zip" class="qs-download-link magisk-qs-btn">
+                    <a href="/agent/cloudphone-agent-magisk.pkg" download="cloudphone-agent-magisk.zip" class="qs-download-link magisk-qs-btn">
                       <svg class="qs-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
                         <line x1="12" y1="18" x2="12.01" y2="18"></line>
@@ -515,7 +515,8 @@ run.bat -id "{{ quickstartDeviceId || 'device_01' }}" -signaling "{{ signalingPr
                   <div class="qs-terminal">
                     <pre class="qs-code-text"># 手机刷入模块重启后，在手机终端或 ADB shell 执行以下命令设置地址并重启服务:
 su
-cpctl set CP_AGENT_SIGNALING "{{ signalingProtocol }}{{ quickstartSignaling }}"<template v-if="quickstartDeviceId">
+cpctl set CP_AGENT_SIGNALING "{{ signalingProtocol }}{{ quickstartSignaling }}"
+cpctl set CP_AGENT_ICE_SERVERS "{{ computedIceServers }}"<template v-if="quickstartDeviceId">
 cpctl set CP_AGENT_ID "{{ quickstartDeviceId }}"</template>
 cpctl restart</pre>
                     <button class="qs-copy-btn" @click="copyCommandText">复制运行指令</button>
@@ -1152,8 +1153,9 @@ function copyCommandText() {
       cmd = `run.bat -id "${quickstartDeviceId.value || 'device_01'}" -signaling "${signalingProtocol.value}${quickstartSignaling.value}" -ice-servers "${computedIceServers.value}"`
     }
   } else if (quickstartMode.value === 'magisk') {
+    const iceCmd = computedIceServers.value ? `\ncpctl set CP_AGENT_ICE_SERVERS "${computedIceServers.value}"` : ''
     const devIdCmd = quickstartDeviceId.value ? `\ncpctl set CP_AGENT_ID "${quickstartDeviceId.value}"` : ''
-    cmd = `su\ncpctl set CP_AGENT_SIGNALING "${signalingProtocol.value}${quickstartSignaling.value}"${devIdCmd}\ncpctl restart`
+    cmd = `su\ncpctl set CP_AGENT_SIGNALING "${signalingProtocol.value}${quickstartSignaling.value}"${iceCmd}${devIdCmd}\ncpctl restart`
   }
   copyText(cmd)
 }

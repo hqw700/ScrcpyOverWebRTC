@@ -23,16 +23,9 @@
       <!-- 切换 Tab -->
       <div class="tab-header">
         <button 
-          :class="['tab-btn', { active: activeTab === 'login' }]" 
-          @click="switchTab('login')"
+          class="tab-btn active" 
         >
           安全登录
-        </button>
-        <button 
-          :class="['tab-btn', { active: activeTab === 'register' }]" 
-          @click="switchTab('register')"
-        >
-          快捷注册
         </button>
         <button 
           class="tab-btn card-tab-btn"
@@ -84,23 +77,15 @@
             <span class="input-line"></span>
           </div>
 
-          <div v-if="activeTab === 'register'" class="input-group">
-            <input 
-              type="password" 
-              v-model="form.confirmPassword" 
-              required 
-              placeholder=" " 
-              id="confirm-input"
-            />
-            <label for="confirm-input">确认密码 / Confirm Password</label>
-            <span class="input-line"></span>
-          </div>
-
           <button type="submit" class="submit-btn" :disabled="loading">
             <span v-if="loading" class="spinner"></span>
-            <span v-else>{{ activeTab === 'login' ? '登 录' : '注 册' }}</span>
+            <span v-else>登 录</span>
           </button>
         </form>
+
+        <div class="form-footer-tip">
+          <span>💡 公网自主注册已关闭，如需账号请联系管理员分配</span>
+        </div>
       </div>
     </div>
     <!-- 卡密直连弹窗 -->
@@ -119,24 +104,14 @@ import CardConnectModal from '@/components/CardConnectModal.vue'
 const authStore = useAuthStore()
 const showCardModal = ref(false)
 
-const activeTab = ref('login')
 const loading = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 
 const form = reactive({
   username: '',
-  password: '',
-  confirmPassword: ''
+  password: ''
 })
-
-function switchTab(tab) {
-  activeTab.value = tab
-  errorMsg.value = ''
-  successMsg.value = ''
-  form.password = ''
-  form.confirmPassword = ''
-}
 
 async function handleSubmit() {
   errorMsg.value = ''
@@ -157,26 +132,10 @@ async function handleSubmit() {
   loading.value = true
 
   try {
-    if (activeTab.value === 'login') {
-      await authStore.login(username, password)
-      router.push('/')
-    } else {
-      if (password !== form.confirmPassword) {
-        errorMsg.value = '两次输入的密码不一致'
-        loading.value = false
-        return
-      }
-      await authStore.register(username, password)
-      successMsg.value = '注册成功！请切换到登录页进行登录'
-      form.password = ''
-      form.confirmPassword = ''
-      // 延迟 1.5 秒自动切回登录 Tab
-      setTimeout(() => {
-        switchTab('login')
-      }, 1500)
-    }
+    await authStore.login(username, password)
+    router.push('/')
   } catch (err) {
-    errorMsg.value = err.message || '操作失败，请重试'
+    errorMsg.value = err.message || '登录失败，请检查账号密码'
   } finally {
     loading.value = false
   }
@@ -463,5 +422,13 @@ async function handleSubmit() {
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+
+.form-footer-tip {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
 }
 </style>

@@ -23,6 +23,7 @@ export const defaultSettings = {
   previewSize: 360,
   previewDecoder: 'wasm',
   previewBitrate: 1,
+  renderEngine: 'video',
   stayAwake: false
 }
 
@@ -53,6 +54,7 @@ function parseSettings(parsed) {
   if (parsed.previewSize === undefined) parsed.previewSize = defaultSettings.previewSize
   if (parsed.previewDecoder === undefined) parsed.previewDecoder = defaultSettings.previewDecoder
   if (parsed.previewBitrate === undefined) parsed.previewBitrate = defaultSettings.previewBitrate
+  if (parsed.renderEngine === undefined) parsed.renderEngine = defaultSettings.renderEngine
   if (parsed.stayAwake === undefined) parsed.stayAwake = defaultSettings.stayAwake
   return parsed
 }

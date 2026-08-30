@@ -53,9 +53,7 @@
           <div class="contact-links">
             <a href="https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA" target="_blank" rel="noopener" class="footer-purchase-link">🛒 购买激活码</a>
             <span class="footer-divider">|</span>
-            <a href="mailto:cloudphone@qq.com" class="footer-email">cloudphone@qq.com</a>
-            <span class="footer-divider">|</span>
-            <a href="javascript:void(0)" @click="showContactModal = true" class="footer-contact-link">获取企业微信二维码</a>
+            <a href="mailto:cloudphone@qq.com" class="footer-email">📧 联系邮箱: cloudphone@qq.com</a>
           </div>
         </div>
       </div>
@@ -275,16 +273,14 @@
                       <div class="item-desc">查看授权状态、用量、机器码与激活</div>
                     </div>
                   </a>
-                  <a href="javascript:void(0)" @click="showContactModal = true; showHelpMenu = false" class="help-dropdown-item">
+                  <a href="mailto:cloudphone@qq.com" @click="showHelpMenu = false" class="help-dropdown-item">
                     <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="9" cy="7" r="4"></circle>
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
                     </svg>
                     <div class="item-text">
                       <div class="item-title">联系作者</div>
-                      <div class="item-desc">企业微信二维码名片，欢迎技术交流与反馈</div>
+                      <div class="item-desc">邮箱：cloudphone@qq.com</div>
                     </div>
                   </a>
                 </div>
@@ -454,22 +450,6 @@
       </button>
     </nav>
     
-    <!-- 联系作者弹窗 (企业微信名片) -->
-    <transition name="fade">
-      <div v-if="showContactModal" class="contact-modal-overlay" @click="showContactModal = false">
-        <div class="contact-modal-card" @click.stop>
-          <button class="contact-close-btn" @click="showContactModal = false">✕</button>
-          <div class="contact-card-title">联系作者</div>
-          <a class="contact-card-email" href="mailto:cloudphone@qq.com">cloudphone@qq.com</a>
-          <a class="contact-card-purchase" href="https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA" target="_blank" rel="noopener">🛒 闲鱼购买激活码「穿云投屏授权码服务」</a>
-          <div class="contact-card-body">
-            <img src="/assets/wework.jpg" alt="企业微信名片" class="contact-qrcode-img" />
-            <p class="contact-card-tip">扫码添加企业微信，进行技术交流与项目反馈</p>
-          </div>
-        </div>
-      </div>
-    </transition>
-
     <!-- 系统授权管理面板 -->
     <LicensePanel :visible="showLicensePanel" @close="showLicensePanel = false" />
   </div>
@@ -532,8 +512,6 @@ const showAdvancedPage = ref(false)
 const showShareAdminPage = ref(false)
 const isNavExpanded = ref(false)
 const showHelpMenu = ref(false)
-const showContactModal = ref(false)
-
 const activationKey = ref('')
 const isActivating = ref(false)
 const activationError = ref(null)
@@ -563,12 +541,6 @@ const accountExpiryText = computed(() => {
   const m = Math.floor((ms % 3600000) / 60000).toString().padStart(2, '0')
   const s = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0')
   return d > 0 ? `剩余 ${d} 天 ${h}:${m}:${s}` : `剩余 ${h}:${m}:${s}`
-})
-
-watch(showContactModal, (val) => {
-  if (val) {
-    deviceStore.fetchLicenseStatus()
-  }
 })
 
 function copyMachineID() {
@@ -1246,134 +1218,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .pop-enter-from, .pop-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.95);
-}
-
-/* 联系作者弹窗样式 */
-.contact-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.contact-modal-card {
-  background: #161b22;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  width: min(440px, 90vw);
-  max-height: 90vh;
-  padding: 24px;
-  position: relative;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-  text-align: center;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-.contact-close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
-  border: none;
-  color: #8b949e;
-  font-size: 16px;
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-  z-index: 10;
-}
-
-.contact-close-btn:hover {
-  color: #c9d1d9;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.contact-card-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #e6edf3;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-
-.contact-card-body {
-  flex: 1;
-  overflow-y: auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-right: 4px;
-}
-
-/* 自定义滚动条使体验更高级 */
-.contact-card-body::-webkit-scrollbar {
-  width: 4px;
-}
-.contact-card-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-.contact-card-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.contact-qrcode-img {
-  width: min(360px, 80vw);
-  height: auto;
-  border-radius: 6px;
-  border: 3px solid #fff;
-  margin: 0 auto 16px;
-  display: block;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  flex-shrink: 0;
-}
-
-.contact-card-tip {
-  font-size: 12px;
-  color: #8b949e;
-  line-height: 1.5;
-  margin: 0;
-  flex-shrink: 0;
-}
-
-.contact-card-email {
-  display: inline-flex;
-  align-self: center;
-  margin: -8px 0 16px;
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  flex-shrink: 0;
-}
-.contact-card-email:hover {
-  text-decoration: underline;
-}
-
-.contact-card-purchase {
-  display: inline-flex;
-  align-self: center;
-  margin: -8px 0 16px;
-  color: #d29922;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  flex-shrink: 0;
-}
-.contact-card-purchase:hover {
-  text-decoration: underline;
 }
 
 /* fade 动画效果 */

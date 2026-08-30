@@ -173,9 +173,13 @@ export function useDeploy() {
       log('部署完成!')
       return true
     } catch (e) {
-      deployError.value = e.message
+      let msg = e.message || String(e)
+      if (/already in use/i.test(msg) || /already in used/i.test(msg) || /already claimed/i.test(msg) || /unable to claim/i.test(msg) || /device busy/i.test(msg)) {
+        msg = `USB 设备被其他程序占用 (通常是本地电脑运行了 ADB 或手机助手抢占了 USB 接口)。\n💡 解决方案：请在电脑终端 (CMD / Terminal) 执行 "adb kill-server" 并退出其他手机管家后重试。`
+      }
+      deployError.value = msg
       deployStatus.value = '部署失败'
-      log(`错误: ${e.message}`)
+      log(`错误: ${msg}`)
       return false
     } finally {
       isDeploying.value = false

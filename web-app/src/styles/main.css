@@ -162,3 +162,24 @@ button {
   opacity: 0;
   transform: translateY(-20px);
 }
+
+/* 彻底抑制 Edge / Chrome 浏览器自动注入的视频增强、画中画、音频翻译及悬浮工具栏 */
+video::-webkit-media-controls {
+  display: none !important;
+}
+video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+video::-webkit-media-controls-panel {
+  display: none !important;
+}
+video::-internal-media-controls-overlay-cast-button {
+  display: none !important;
+}
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+}
+video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+}
+

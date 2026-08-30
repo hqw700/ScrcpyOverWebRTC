@@ -1,11 +1,33 @@
 <template>
   <div class="share-video-container" ref="containerRef">
-    <!-- 视频画面（始终静音自动播放以满足浏览器 autoplay 策略；首次点击页面再开声音） -->
+    <!-- WebCodecs 极速锁相 Canvas 画面 -->
+    <canvas
+      v-show="isWebCodecs"
+      ref="canvasEl"
+      class="share-video"
+      @click="onVideoAreaClick"
+      @mousedown="onMouseDown"
+      @mousemove="onMouseMove"
+      @mouseup="onMouseUp"
+      @mouseleave="onMouseLeave"
+      @touchstart.prevent="onTouchStart"
+      @touchmove.prevent="onTouchMove"
+      @touchend.prevent="onTouchEnd"
+      @wheel.prevent="onWheel"
+      @contextmenu.prevent
+    ></canvas>
+
+    <!-- HTML5 传统视频画面 (回退模式) -->
     <video
+      v-show="!isWebCodecs"
       ref="videoEl"
       class="share-video"
       autoplay
       playsinline
+      webkit-playsinline
+      disableremoteplayback
+      controlslist="nodownload nofullscreen noremoteplayback noplaybackrate"
+      x-webkit-airplay="deny"
       :muted="!soundOn"
       @click="onVideoAreaClick"
       @mousedown="onMouseDown"
@@ -149,6 +171,7 @@ const lockedSections = computed(() => {
 })
 
 const videoEl = ref(null)
+const canvasEl = ref(null)
 // 声音开关：默认静音以保证 autoplay 合规（无用户手势时浏览器禁止有声自动播放），
 // 用户首次点击页面/按钮后开声音
 const soundOn = ref(false)
@@ -191,6 +214,7 @@ const hasCustomShareSettings = computed(() => localStorage.getItem(shareSettings
 
 // --- WebRTC 连接（配置变更时整页刷新生效，见 saveSettings） ---
 const webrtc = shallowRef(null)
+const isWebCodecs = computed(() => Boolean(webrtc.value?.isWebCodecsActive?.value))
 const status = ref('disconnected')
 const error = ref(null)
 let stopWatchers = []
@@ -224,6 +248,7 @@ function createConnection() {
     watch(inst.cameraSupport, v => { cameraSupport.value = v !== false }, { immediate: true })
   ]
   inst.setVideoGetter(() => videoEl.value)
+  inst.setCanvasGetter(() => canvasEl.value)
   inst.connect(props.shareToken, props.sharePassword)
 }
 

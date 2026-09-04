@@ -138,7 +138,7 @@
             <div class="form-group form-group-row">
               <div class="group-info">
                 <label>开启音频 (Opus) <span v-if="isLocked('audio')" class="lock-tag">🔒 分享者已锁定</span></label>
-                <small class="hint">回传云手机系统声音 (开启后默认设为 output)</small>
+                <small class="hint">回传云手机声音 (开启后默认设为 output)</small>
               </div>
               <div class="toggle-switch">
                 <input type="checkbox" id="audio-toggle" v-model="localSettings.audio" :disabled="isLocked('audio')" />
@@ -152,8 +152,10 @@
                 <select v-model="localSettings.audioSource" class="select-input" :disabled="isLocked('audio')">
                   <option value="output">output (捕获扬声器声音，物理手机静音)</option>
                   <option value="playback">playback (保留本地声音，限 Android 13+)</option>
+                  <option value="mic">mic (麦克风声音拾音 - 推荐安防监控环境监听)</option>
                 </select>
-                <small class="hint" v-if="localSettings.audioSource === 'playback'">不影响真机本地外放，但仅能捕获允许内录的 App 音频</small>
+                <small class="hint" v-if="localSettings.audioSource === 'mic'">直接采集手机麦克风环境声音，非常适合安防与机房监听</small>
+                <small class="hint" v-else-if="localSettings.audioSource === 'playback'">不影响真机本地外放，但仅能捕获允许内录的 App 音频</small>
                 <small class="hint" v-else>能捕获最完整的系统声音，但会接管真机物理扬声器</small>
               </div>
 
@@ -331,6 +333,15 @@ watch(() => localSettings.value.audio, (newVal) => {
   if (newVal) {
     if (!localSettings.value.audioSource) {
       localSettings.value.audioSource = 'output'
+    }
+  }
+})
+
+// 监听工作模式切换，切换为监控模式时补齐默认镜头
+watch(() => localSettings.value.videoSource, (newSource) => {
+  if (newSource === 'camera') {
+    if (!localSettings.value.cameraFacing) {
+      localSettings.value.cameraFacing = 'back'
     }
   }
 })

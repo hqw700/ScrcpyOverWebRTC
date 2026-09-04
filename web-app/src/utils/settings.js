@@ -24,7 +24,14 @@ export const defaultSettings = {
   previewDecoder: 'wasm',
   previewBitrate: 1,
   renderEngine: 'video',
-  stayAwake: false
+  stayAwake: false,
+  videoSource: 'display',
+  cameraFacing: 'back',
+  cameraId: '',
+  cameraSize: '',
+  cameraFps: 0,
+  cameraHighSpeed: false,
+  cameraAr: ''
 }
 
 function parseSettings(parsed) {
@@ -56,6 +63,13 @@ function parseSettings(parsed) {
   if (parsed.previewBitrate === undefined) parsed.previewBitrate = defaultSettings.previewBitrate
   if (parsed.renderEngine === undefined) parsed.renderEngine = defaultSettings.renderEngine
   if (parsed.stayAwake === undefined) parsed.stayAwake = defaultSettings.stayAwake
+  if (parsed.videoSource === undefined) parsed.videoSource = defaultSettings.videoSource
+  if (parsed.cameraFacing === undefined) parsed.cameraFacing = defaultSettings.cameraFacing
+  if (parsed.cameraId === undefined) parsed.cameraId = defaultSettings.cameraId
+  if (parsed.cameraSize === undefined) parsed.cameraSize = defaultSettings.cameraSize
+  if (parsed.cameraFps === undefined) parsed.cameraFps = defaultSettings.cameraFps
+  if (parsed.cameraHighSpeed === undefined) parsed.cameraHighSpeed = defaultSettings.cameraHighSpeed
+  if (parsed.cameraAr === undefined) parsed.cameraAr = defaultSettings.cameraAr
   return parsed
 }
 
@@ -65,6 +79,7 @@ export function getDeviceSettings(deviceId) {
     const storedGlobal = localStorage.getItem('cloudphone_settings')
     if (storedGlobal) {
       globalSettings = { ...globalSettings, ...parseSettings(JSON.parse(storedGlobal)) }
+      globalSettings.videoSource = 'display'
       localStorage.setItem('cloudphone_settings', JSON.stringify(globalSettings))
     }
   } catch(e) {}
@@ -75,7 +90,8 @@ export function getDeviceSettings(deviceId) {
     const storedDev = localStorage.getItem(`cloudphone_settings_${deviceId}`)
     if (storedDev) {
       const devSettings = { ...globalSettings, ...parseSettings(JSON.parse(storedDev)) }
-      localStorage.setItem(`cloudphone_settings_${deviceId}`, JSON.stringify(devSettings))
+      // 默认持久化配置中视频源恒为屏幕 display，避免单机配置残留导致卡片误连摄像头
+      devSettings.videoSource = 'display'
       return devSettings
     }
   } catch(e) {}
@@ -84,15 +100,17 @@ export function getDeviceSettings(deviceId) {
 }
 
 export function saveDeviceSettings(deviceId, newSettings) {
+  // 持久化存储时，视频源始终默认为 display（相机镜头/分辨率等参数完整保留），仅由运行时意图动态激活 camera
+  const settingsToStore = { ...newSettings, videoSource: 'display' }
   if (!deviceId) {
-    localStorage.setItem('cloudphone_settings', JSON.stringify(newSettings))
+    localStorage.setItem('cloudphone_settings', JSON.stringify(settingsToStore))
     fetch('/api/default_settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSettings)
+      body: JSON.stringify(settingsToStore)
     }).catch(err => console.warn('Failed to sync global settings to server:', err))
   } else {
-    localStorage.setItem(`cloudphone_settings_${deviceId}`, JSON.stringify(newSettings))
+    localStorage.setItem(`cloudphone_settings_${deviceId}`, JSON.stringify(settingsToStore))
   }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cloudphone-settings-updated', { detail: { deviceId } }))
@@ -107,7 +125,44 @@ export function hasCustomSettings(deviceId) {
 export function deleteDeviceSettings(deviceId) {
   if (deviceId) {
     localStorage.removeItem(`cloudphone_settings_${deviceId}`)
+    localStorage.removeItem(`cloudphone_camera_pref_${deviceId}`)
   }
+}
+
+// --- 摄像头监控专属偏好记忆（按单机隔离，独立于屏幕连接配置） ---
+export const defaultCameraPreferences = {
+  cameraFacing: 'back',
+  cameraId: '',
+  cameraSize: '1920x1080',
+  cameraFps: 30,
+  cameraZoomRatio: 1.0,
+  cameraOrientation: 'auto',
+  audioSource: 'mic'
+}
+
+export function getCameraPreferences(deviceId) {
+  let pref = { ...defaultCameraPreferences }
+  if (!deviceId) return pref
+  try {
+    const stored = localStorage.getItem(`cloudphone_camera_pref_${deviceId}`)
+    if (stored) {
+      pref = { ...pref, ...JSON.parse(stored) }
+      // 清洗残留的非法/过时物理镜头ID（如 2 或 3），防止 scrcpy 启动时抛出 Camera not found 崩溃
+      if (pref.cameraId && pref.cameraId !== '0' && pref.cameraId !== '1') {
+        pref.cameraId = ''
+      }
+    }
+  } catch (e) {}
+  return pref
+}
+
+export function saveCameraPreferences(deviceId, pref) {
+  if (!deviceId) return
+  try {
+    const current = getCameraPreferences(deviceId)
+    const updated = { ...current, ...pref }
+    localStorage.setItem(`cloudphone_camera_pref_${deviceId}`, JSON.stringify(updated))
+  } catch (e) {}
 }
 
 // --- 用户级设置管控策略（管理员在用户管理中配置，服务端信令层同步强制） ---

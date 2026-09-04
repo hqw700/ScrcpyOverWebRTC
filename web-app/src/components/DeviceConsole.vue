@@ -756,9 +756,8 @@ async function setupDeviceConnection(deviceId) {
   webrtcError.value = null
   
   // 检查是否已有活跃的控制面板 WebRTC 实例
-  let activeInstance = null
-  if (deviceStore.activeDeviceId === deviceId && deviceStore.activeWebRTC) {
-    activeInstance = deviceStore.activeWebRTC
+  let activeInstance = deviceStore.getWebRTC(deviceId)
+  if (activeInstance) {
     console.log('[Console] Reusing active WebRTC session for device:', deviceId)
   }
   
@@ -802,6 +801,13 @@ async function setupDeviceConnection(deviceId) {
         debug: settings.debug,
         snapshot_interval: settings.snapshotInterval,
         power_off: settings.powerOff,
+        video_source: settings.videoSource,
+        camera_facing: settings.cameraFacing,
+        camera_id: settings.cameraId,
+        camera_size: settings.cameraSize,
+        camera_fps: settings.cameraFps,
+        camera_high_speed: settings.cameraHighSpeed,
+        camera_ar: settings.cameraAr,
         // 只读分享：屏蔽触控/键盘/剪贴板等一切输入注入
         view_only: props.accessMode === 'view_only'
       }
@@ -1501,12 +1507,12 @@ watch(() => props.deviceId, (newId) => {
 })
 
 // 监听活动连接的重建，保持同步
-watch(() => deviceStore.activeWebRTC, (newVal) => {
-  if (props.deviceId && deviceStore.activeDeviceId === props.deviceId) {
+watch(() => deviceStore.activeWebRTCMap, (newMap) => {
+  if (props.deviceId && newMap.has(props.deviceId)) {
     console.log('[Console] Active WebRTC changed, updating console connection...')
     setupDeviceConnection(props.deviceId)
   }
-})
+}, { deep: true })
 
 function startResizingConsole(e) {
   e.preventDefault()

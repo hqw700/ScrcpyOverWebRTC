@@ -1,22 +1,58 @@
 <template>
-  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape }">
+  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape, 'is-web-fullscreen': isWebFullscreen, 'is-camera-surveillance': isCameraMode }">
     <!-- 主内容区 (视频部分) -->
     <div class="device-client-main">
       <!-- 主视频容器 -->
       <div class="video-wrapper" ref="containerRef">
+        <!-- 监控专属 OSD 水印状态栏 -->
+        <div v-if="isCameraMode" class="camera-osd-bar">
+          <div class="osd-left">
+            <span class="osd-badge live-dot">● 实时监控</span>
+            <span class="osd-item osd-title" :title="currentId">{{ currentId }}</span>
+            <span class="osd-divider">|</span>
+            <span class="osd-item osd-lens">📷 {{ currentLensName }}</span>
+            <span class="osd-divider">|</span>
+            <span class="osd-item osd-res">{{ currentResText }}</span>
+            <span class="osd-divider" v-if="videoStats">|</span>
+            <span class="osd-item osd-fps" v-if="videoStats">{{ videoStats.fps }}fps</span>
+            <span class="osd-item osd-bitrate" v-if="videoStats">{{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}</span>
+          </div>
+
+          <div class="osd-center" v-if="isRecording">
+            <span class="osd-rec-badge">
+              <span class="rec-blink-dot"></span>
+              REC {{ formattedRecordingTime }}
+            </span>
+          </div>
+
+          <div class="osd-right">
+            <span class="osd-item osd-battery" v-if="deviceBatteryText" :class="{ 'temp-warn': isBatteryTempHigh }">
+              {{ deviceBatteryText }}
+            </span>
+            <span class="osd-item osd-clock">{{ cameraClock }}</span>
+          </div>
+        </div>
+
         <!-- 移动端退出按钮 (右上角) -->
         <button v-if="isMobile" class="mobile-close-fab" @click="deviceStore.clearActiveDevice()" title="关闭连接">
           ✕
         </button>
 
         <!-- 悬浮全屏按钮 (移入视频容器内，保证全屏时可见) -->
-        <button class="fullscreen-fab" @click="toggleFullscreen" title="全屏">
+        <button class="fullscreen-fab" @click="toggleFullscreen" title="系统全屏">
           <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
         </button>
 
         <!-- 页面全屏按钮 -->
-        <button v-if="!isMobile" class="webfullscreen-fab" @click="toggleWebFullscreen" :title="isWebFullscreen ? '退出页面全屏' : '页面全屏'">
-          <svg class="icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+        <button 
+          v-if="!isMobile" 
+          class="webfullscreen-fab" 
+          :class="{ 'is-active': isWebFullscreen }" 
+          @click="toggleWebFullscreen" 
+          :title="isWebFullscreen ? '退出页面全屏 (按 Esc 键)' : '页面全屏'"
+        >
+          <svg v-if="isWebFullscreen" class="icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg v-else class="icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
         </button>
         <!-- 画中画按钮 -->
         <button v-if="!isMobile && pictureInPictureSupported" class="pip-fab" @click="togglePictureInPicture" :title="isPiP ? '退出画中画' : '画中画'">
@@ -29,15 +65,16 @@
           ref="canvasElement"
           class="video-stream"
           :class="{
-            'hwc-rotated-90': isHwcRotated90,
-            'hwc-rotated-270': isHwcRotated270
+            'hwc-rotated-90': isHwcRotated90 && !isCameraMode,
+            'hwc-rotated-270': isHwcRotated270 && !isCameraMode
           }"
-          :style="hwcRotatedVideoStyle"
+          :style="videoStreamStyle"
           @mousedown="onMouseDown"
           @mousemove="onMouseMove"
           @mouseup="onMouseUp"
           @mouseleave="onMouseLeave"
           @wheel.prevent="onWheel"
+          @dblclick="onCameraDblClick"
           @contextmenu.prevent
           @touchstart.prevent="onTouchStart"
           @touchmove.prevent="onTouchMove"
@@ -55,13 +92,15 @@
           disableremoteplayback
           controlslist="nodownload nofullscreen noremoteplayback noplaybackrate"
           x-webkit-airplay="deny"
-          :muted="!localSettings.audio"
+          muted
           class="video-stream"
+          :style="videoStreamStyle"
           @mousedown="onMouseDown"
           @mousemove="onMouseMove"
           @mouseup="onMouseUp"
           @mouseleave="onMouseLeave"
           @wheel.prevent="onWheel"
+          @dblclick="onCameraDblClick"
           @contextmenu.prevent
           @touchstart.prevent="onTouchStart"
           @touchmove.prevent="onTouchMove"
@@ -72,6 +111,7 @@
         />
 
         <textarea
+          v-if="!isCameraMode"
           ref="hiddenInput"
           class="hidden-keyboard-input"
           autocomplete="off"
@@ -87,8 +127,8 @@
         ></textarea>
 
 
-        <!-- 视频流状态面板 (左上角) -->
-        <div v-if="videoStats && localSettings.showStats !== false" class="stats-badge">
+        <!-- 视频流状态面板 (常规模式左上角) -->
+        <div v-if="videoStats && localSettings.showStats !== false && !isCameraMode" class="stats-badge">
           <span class="stat-fps">{{ videoStats.fps }}fps</span>
           <span class="stat-delimiter">|</span>
           <span class="stat-delay" title="网络延迟(RTT) + 缓冲(JB) + 解码 + 云端处理">E2E ~{{ videoStats.e2eDelay }}ms</span>
@@ -137,87 +177,141 @@
           </button>
           
           <div class="mobile-fab-menu" :class="{ 'show': showMobileMenu, 'align-left': isFabOnLeft, 'align-top': isFabOnTop }">
-            <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
-              {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
-            </button>
-            <div class="fab-divider"></div>
-            <button class="fab-item" @click="quickKey('input keyevent 26'); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> 电源
-            </button>
-            <button class="fab-item" @click="quickKey('input keyevent 3'); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> 首页
-            </button>
-            <button class="fab-item" @click="quickKey('input keyevent 4'); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> 返回
-            </button>
-            <button class="fab-item" @click="quickKey('input keyevent 24'); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="9" x2="19" y2="15"></line><line x1="16" y1="12" x2="22" y2="12"></line></svg> 音量+
-            </button>
-            <button class="fab-item" @click="quickKey('input keyevent 25'); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="12" x2="15" y2="12"></line></svg> 音量-
-            </button>
-            <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
-              <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-              <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
-              {{ pageAudioMuted ? '取消静音' : '页面静音' }}
-            </button>
-            <button class="fab-item" @click="toggleConsole(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> 终端
-            </button>
-            <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> 按键映射
-            </button>
-            <button class="fab-item" @click="keymapStore.toggleKeyHints(); showMobileMenu=false">
-              <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              <svg v-else class="icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-              {{ keymapStore.showKeyHints ? '隐藏提示' : '显示提示' }}
-            </button>
-            <button class="fab-item" @click="showSettingsModal = true; showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 设置
-            </button>
-            <button class="fab-item" @click="sendClipboardToDevice(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg> 送剪贴板
-            </button>
-            <button class="fab-item" @click="getClipboardFromDevice(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24">
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                <path d="M12 11v6M9 14l3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
-              </svg> 收剪贴板
-            </button>
-            
-            <div class="fab-divider" v-if="customButtons.length > 0"></div>
-            <div v-for="(btn, idx) in customButtons" :key="idx" class="fab-item-wrapper">
-              <button class="fab-item custom-item" @click="quickKey(btn.cmd); showMobileMenu=false" :title="btn.cmd">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> {{ btn.name }}
+            <!-- 监控模式下的快捷悬浮菜单 -->
+            <template v-if="isCameraMode">
+              <div class="fab-section-title">镜头选择</div>
+              <button 
+                v-for="lens in availableLenses" 
+                :key="lens.key" 
+                class="fab-item" 
+                :class="{ 'cam-active': isLensActive(lens) }" 
+                @click="selectLens(lens); showMobileMenu=false"
+              >
+                {{ lens.icon }} {{ lens.shortName || lens.name }}
               </button>
-              <button class="fab-item-delete" @click.stop="removeCustomButton(idx)" title="删除此按键">×</button>
-            </div>
-            <button class="fab-item add-btn" @click="addCustomButton">
-              <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 添加按键
-            </button>
-            
-            <div class="fab-divider"></div>
-            <button class="fab-item danger" @click="goBackToList(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg> 断开连接
-            </button>
-            <button class="fab-item danger" @click="quitAgent(); showMobileMenu=false">
-              <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> 退出 Agent
-            </button>
+              <div class="fab-divider"></div>
+              <div class="fab-section-title">硬件分辨率</div>
+              <div class="fab-res-row">
+                <button 
+                  v-for="res in ['3840x2160', '1920x1080', '1280x720', '640x480']" 
+                  :key="res" 
+                  class="fab-item mini-res" 
+                  :class="{ 'cam-active': (localSettings.cameraSize === res) || (!localSettings.cameraSize && res === '1920x1080') }" 
+                  @click="selectResolution(res); showMobileMenu=false"
+                >
+                  {{ res === '3840x2160' ? '4K' : (res === '1920x1080' ? '1080P' : (res === '1280x720' ? '720P' : '480P')) }}
+                </button>
+              </div>
+              <div class="fab-divider"></div>
+              <button class="fab-item" @click="rotateCamera(); showMobileMenu=false">
+                🔄 旋转 90° (当前 {{ cameraRotation }}°)
+              </button>
+              <button class="fab-item" :class="{ 'cam-active': cameraMirrored }" @click="toggleMirror(); showMobileMenu=false">
+                ↔️ 水平镜像
+              </button>
+              <button class="fab-item" @click="takeCameraSnapshot(); showMobileMenu=false">
+                📸 高清抓拍 (JPG)
+              </button>
+              <button class="fab-item" :class="{ 'recording': isRecording }" @click="toggleCameraRecording(); showMobileMenu=false">
+                <span class="rec-dot" v-if="isRecording"></span>
+                🔴 {{ isRecording ? `停止录像 (${formattedRecordingTime})` : '本地即时录像' }}
+              </button>
+              <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
+                {{ pageAudioMuted ? '🔊 开启声音监听' : '🔇 静音' }}
+              </button>
+              <div class="fab-divider"></div>
+              <button class="fab-item" @click="showSettingsModal = true; showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 监控设置
+              </button>
+              <button class="fab-item danger" @click="goBackToList(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg> 断开监控
+              </button>
+            </template>
+
+            <!-- 常规云手机快捷菜单 -->
+            <template v-else>
+              <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+                {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
+              </button>
+              <div class="fab-divider"></div>
+              <button class="fab-item" @click="quickKey('input keyevent 26'); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> 电源
+              </button>
+              <button class="fab-item" @click="quickKey('input keyevent 3'); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> 首页
+              </button>
+              <button class="fab-item" @click="quickKey('input keyevent 4'); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> 返回
+              </button>
+              <button class="fab-item" @click="quickKey('input keyevent 24'); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="9" x2="19" y2="15"></line><line x1="16" y1="12" x2="22" y2="12"></line></svg> 音量+
+              </button>
+              <button class="fab-item" @click="quickKey('input keyevent 25'); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="12" x2="15" y2="12"></line></svg> 音量-
+              </button>
+              <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
+                <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
+                {{ pageAudioMuted ? '取消静音' : '页面静音' }}
+              </button>
+              <button class="fab-item" @click="toggleConsole(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> 终端
+              </button>
+              <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> 按键映射
+              </button>
+              <button class="fab-item" @click="keymapStore.toggleKeyHints(); showMobileMenu=false">
+                <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                <svg v-else class="icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                {{ keymapStore.showKeyHints ? '隐藏提示' : '显示提示' }}
+              </button>
+              <button class="fab-item" @click="showSettingsModal = true; showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 设置
+              </button>
+              <button class="fab-item" @click="sendClipboardToDevice(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg> 送剪贴板
+              </button>
+              <button class="fab-item" @click="getClipboardFromDevice(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                  <path d="M12 11v6M9 14l3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+                </svg> 收剪贴板
+              </button>
+              
+              <div class="fab-divider" v-if="customButtons.length > 0"></div>
+              <div v-for="(btn, idx) in customButtons" :key="idx" class="fab-item-wrapper">
+                <button class="fab-item custom-item" @click="quickKey(btn.cmd); showMobileMenu=false" :title="btn.cmd">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> {{ btn.name }}
+                </button>
+                <button class="fab-item-delete" @click.stop="removeCustomButton(idx)" title="删除此按键">×</button>
+              </div>
+              <button class="fab-item add-btn" @click="addCustomButton">
+                <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 添加按键
+              </button>
+              
+              <div class="fab-divider"></div>
+              <button class="fab-item danger" @click="goBackToList(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg> 断开连接
+              </button>
+              <button class="fab-item danger" @click="quitAgent(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> 退出 Agent
+              </button>
+            </template>
             <div class="fab-agent-version" :title="'Agent 完整版本号: ' + agentVersion">
               Agent {{ agentVersion.split('-')[0] }}
             </div>
           </div>
         </div>
 
-        <!-- 按键映射编辑器 -->
-        <KeymapEditor :video-element="videoElement" />
+        <!-- 按键映射编辑器 (仅常规模式) -->
+        <KeymapEditor v-if="!isCameraMode" :video-element="videoElement" />
       </div>
     </div>
 
-    <!-- PC 右侧控制栏 -->
-    <div v-if="!isMobile" class="control-sidebar">
+    <!-- PC 右侧控制栏 (常规云手机模式) -->
+    <div v-if="!isMobile && !isMini && !isCameraMode" class="control-sidebar">
       <div class="sidebar-group">
         <button v-if="authStore.isAdmin" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -263,7 +357,7 @@
           <span class="btn-text">映射</span>
         </button>
         <button class="sidebar-btn" @click="keymapStore.toggleKeyHints()" :title="keymapStore.showKeyHints ? '隐藏按键提示' : '显示按键提示'">
-          <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg v-if="keymapStore.showKeyHints" class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           <svg v-else class="icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
           <span class="btn-text">提示</span>
         </button>
@@ -315,7 +409,153 @@
       </div>
     </div>
 
+    <!-- PC 右侧监控专属控制栏 (摄像头监控模式) -->
+    <div v-if="!isMobile && !isMini && isCameraMode" class="camera-sidebar">
+      <div class="camera-sidebar-title">
+        <svg viewBox="0 0 24 24" class="sidebar-title-icon" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+          <circle cx="12" cy="13" r="4"></circle>
+        </svg>
+        <span>监控控制台</span>
+      </div>
 
+      <div class="camera-sidebar-scroll">
+        <!-- 1. 镜头切换 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>镜头选择</span>
+            <span class="cam-badge">{{ currentLensName }}</span>
+          </div>
+          <div class="cam-btn-grid">
+            <button 
+              v-for="lens in availableLenses" 
+              :key="lens.key" 
+              class="cam-btn" 
+              :class="{ active: isLensActive(lens) }"
+              @click="selectLens(lens)"
+              :title="lens.name"
+            >
+              <span class="cam-btn-icon">{{ lens.icon }}</span>
+              <span class="cam-btn-label">{{ lens.shortName || lens.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 硬件分辨率 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>硬件分辨率</span>
+            <span class="cam-badge">{{ currentResText }}</span>
+          </div>
+          <div class="cam-btn-grid res-grid">
+            <button 
+              v-for="res in ['3840x2160', '1920x1080', '1280x720', '640x480']" 
+              :key="res" 
+              class="cam-btn res-btn" 
+              :class="{ active: (localSettings.cameraSize === res) || (!localSettings.cameraSize && res === '1920x1080') }"
+              @click="selectResolution(res)"
+            >
+              {{ res === '3840x2160' ? '4K' : (res === '1920x1080' ? '1080P' : (res === '1280x720' ? '720P' : '480P')) }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. PTZ 数字变焦 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>PTZ 数字变焦</span>
+            <span class="cam-badge zoom-val">{{ cameraZoom.toFixed(1) }}x</span>
+          </div>
+          <div class="zoom-slider-row">
+            <input 
+              type="range" 
+              min="1.0" 
+              max="10.0" 
+              step="0.1" 
+              v-model.number="cameraZoom" 
+              class="zoom-range" 
+              @input="onZoomSliderChange"
+            />
+          </div>
+          <div class="cam-btn-grid zoom-presets">
+            <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 1.0 }" @click="setZoom(1.0)">1.0x</button>
+            <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 2.0 }" @click="setZoom(2.0)">2.0x</button>
+            <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 3.0 }" @click="setZoom(3.0)">3.0x</button>
+            <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 5.0 }" @click="setZoom(5.0)">5.0x</button>
+            <button class="cam-btn reset-btn" @click="resetPTZ" title="复位缩放和平移">复位</button>
+          </div>
+        </div>
+
+        <!-- 4. 画面方向与校正 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>画面校正</span>
+            <span class="cam-badge">{{ cameraRotation }}° {{ cameraMirrored ? '镜像' : '' }}</span>
+          </div>
+          <div class="cam-btn-grid">
+            <button class="cam-btn" @click="rotateCamera" title="顺时针旋转90度 (适配吊装/侧装)">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span>旋转 90°</span>
+            </button>
+            <button class="cam-btn" :class="{ active: cameraMirrored }" @click="toggleMirror" title="水平镜像翻转 (矫正前置自拍)">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v20M7 8l-4 4 4 4M17 8l4 4-4 4"></path></svg>
+              <span>水平镜像</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. 环境音监听 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>环境声音监听</span>
+            <span class="cam-badge" :class="{ 'audio-on': !pageAudioMuted }">{{ pageAudioMuted ? '已静音' : '监听中' }}</span>
+          </div>
+          <div class="audio-control-row">
+            <button class="cam-btn audio-toggle-btn" :class="{ active: !pageAudioMuted }" @click="togglePageMute">
+              <svg v-if="!pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
+              <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+              <span>{{ pageAudioMuted ? '开启声音监听' : '关闭声音监听' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 6. 抓拍与即时录像 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>安防存证</span>
+          </div>
+          <div class="cam-btn-grid">
+            <button class="cam-btn snapshot-btn" @click="takeCameraSnapshot" title="抓拍当前高清帧并保存为JPG">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+              <span>高清抓拍</span>
+            </button>
+            <button 
+              class="cam-btn record-btn" 
+              :class="{ recording: isRecording }" 
+              @click="toggleCameraRecording"
+              :title="isRecording ? '点击停止录像并下载' : '开启本地录像'"
+            >
+              <span class="rec-dot"></span>
+              <span>{{ isRecording ? `停止 (${formattedRecordingTime})` : '本地录像' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 7. 系统设置与退出 -->
+        <div class="cam-section bottom-section">
+          <div class="cam-btn-grid">
+            <button class="cam-btn" @click="showSettingsModal = true" title="高级监控与编码设置">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <span>设置</span>
+            </button>
+            <button class="cam-btn danger-btn" @click="goBackToList" title="退出监控返回列表">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <span>断开</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 截图预览弹窗 -->
     <ScreenshotModal 
@@ -348,7 +588,7 @@ import { useDeviceStore } from '@/stores/devices'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { useKeymapStore } from '@/stores/keymap'
 import { KeymapEngine } from '@/utils/keymapEngine'
-import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections } from '@/utils/settings'
+import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections, getCameraPreferences, saveCameraPreferences } from '@/utils/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupControlStore } from '@/stores/groupControl'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
@@ -360,6 +600,18 @@ const props = defineProps({
   deviceId: {
     type: String,
     default: null
+  },
+  isMini: {
+    type: Boolean,
+    default: false
+  },
+  isFocused: {
+    type: Boolean,
+    default: false
+  },
+  audioMuted: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -368,6 +620,44 @@ const emit = defineEmits(['recommend-layout', 'close'])
 const deviceStore = useDeviceStore()
 const currentId = computed(() => props.deviceId)
 const groupControlStore = useGroupControlStore()
+
+// 多机直连环境下的焦点判定与音频判定
+const effectiveFocused = computed(() => 
+  props.isFocused || 
+  deviceStore.focusedDeviceId === currentId.value || 
+  deviceStore.activeDeviceIds.length <= 1
+)
+const effectiveAudioMuted = computed(() => {
+  if (props.audioMuted) return true
+  return pageAudioMuted.value
+})
+
+// --- Demo 模式动态仿真 Canvas 驱动 ---
+const demoRipples = ref([])
+let demoAnimationId = null
+
+function runDemoLoop() {
+  if (import.meta.env.VITE_DEMO_MODE !== 'true') return
+  import('@/mock/demoEngine').then(({ renderMockScreenCanvas }) => {
+    function loop() {
+      const cvs = canvasElement.value
+      if (cvs) {
+        if (!cvs.width || cvs.width < 300) cvs.width = 360
+        if (!cvs.height || cvs.height < 500) cvs.height = 640
+        
+        demoRipples.value.forEach(r => {
+          r.radius += 2.5
+          r.alpha -= 0.04
+        })
+        demoRipples.value = demoRipples.value.filter(r => r.alpha > 0)
+        
+        renderMockScreenCanvas(cvs, currentId.value, demoRipples.value)
+      }
+      demoAnimationId = requestAnimationFrame(loop)
+    }
+    loop()
+  })
+}
 
 // --- 群控从机渲染与事件分发逻辑 ---
 const lastSentMoveTime = {} // pointerId -> timestamp
@@ -417,12 +707,10 @@ function bindWebRTCEvents(webrtcInstance) {
 function toggleGroupControl() {
   const active = !groupControlStore.isGroupControlActive
   groupControlStore.toggleGroupControl(active, currentId.value)
-  if (active) {
-    deviceStore.globalPreviewMode = true
-  }
 }
 
 const goBackToList = () => {
+  deviceStore.setDeviceMode(currentId.value, 'display')
   deviceStore.clearActiveDevice()
 }
 
@@ -448,7 +736,22 @@ const cameraSupport = ref(true)
 const authStore = useAuthStore()
 const policyLocked = computed(() => policyLockedSections(authStore.userPolicy))
 
-const localSettings = ref(applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy))
+const currentSessionMode = deviceStore.getDeviceMode(currentId.value)
+const initialSettings = getDeviceSettings(currentId.value)
+initialSettings.videoSource = currentSessionMode
+
+if (currentSessionMode === 'camera') {
+  const camPref = getCameraPreferences(currentId.value)
+  initialSettings.cameraFacing = camPref.cameraFacing
+  initialSettings.cameraId = camPref.cameraId
+  initialSettings.cameraSize = camPref.cameraSize
+  initialSettings.cameraFps = camPref.cameraFps
+  initialSettings.cameraZoomRatio = camPref.cameraZoomRatio || 1.0
+  initialSettings.cameraOrientation = camPref.cameraOrientation || 'auto'
+  initialSettings.audioSource = camPref.audioSource || 'mic'
+}
+
+const localSettings = ref(applyPolicyToSettings(initialSettings, authStore.userPolicy))
 const pageAudioMuted = ref(Boolean(localSettings.value.pageAudioMuted))
 
 if (!authStore.userPolicy && authStore.token) {
@@ -475,9 +778,338 @@ const scrcpyOptions = computed(() => {
     power_off: localSettings.value.powerOff,
     video_codec_options: localSettings.value.videoCodecOptions,
     camera: localSettings.value.camera,
-    stay_awake: localSettings.value.stayAwake
+    stay_awake: localSettings.value.stayAwake,
+    video_source: localSettings.value.videoSource,
+    camera_facing: localSettings.value.cameraFacing,
+    camera_id: localSettings.value.cameraId,
+    camera_size: localSettings.value.cameraSize,
+    camera_fps: localSettings.value.cameraFps,
+    camera_high_speed: localSettings.value.cameraHighSpeed,
+    camera_ar: localSettings.value.cameraAr,
+    camera_zoom: localSettings.value.cameraZoomRatio || 1.0,
+    camera_orientation: localSettings.value.cameraOrientation || 'auto'
   }
 })
+
+// --- 📷 摄像头监控专属状态与控制 ---
+const isCameraMode = computed(() => localSettings.value?.videoSource === 'camera')
+
+const currentDevice = computed(() => {
+  return deviceStore.devices.find(d => d.id === currentId.value)
+})
+
+const availableLenses = computed(() => {
+  const detected = currentDevice.value?.info?.cameras
+  if (Array.isArray(detected) && detected.length > 0) {
+    return detected.map(cam => {
+      let icon = '📷'
+      let shortName = cam.name || `镜头 ${cam.id}`
+      const zoom = cam.zoom || (cam.type === 'ultra_wide' ? 0.5 : (cam.type === 'telephoto' ? 5.0 : 1.0))
+      if (cam.type === 'ultra_wide' || (cam.focal_length && cam.focal_length < 2.8) || zoom < 0.9) {
+        icon = '🌐'
+        shortName = zoom <= 0.6 ? `${zoom.toFixed(1)}x 广角` : '超广角'
+      } else if (cam.type === 'telephoto' || (cam.focal_length && cam.focal_length >= 7.0) || zoom >= 2.5) {
+        icon = '🔭'
+        shortName = `${zoom.toFixed(1)}x 长焦`
+      } else if (cam.facing === 'front') {
+        icon = '🤳'
+        shortName = '前置自拍'
+      } else if (cam.facing === 'external') {
+        icon = '🔌'
+        shortName = '外接镜头'
+      } else if (cam.id === '0' || cam.type === 'main') {
+        icon = '📷'
+        shortName = '1.0x 主摄'
+      }
+      return {
+        key: `${cam.facing}_${cam.type || cam.id}_${zoom}`,
+        id: cam.id || '0',
+        facing: cam.facing || 'back',
+        zoom,
+        name: cam.name || `${cam.facing} camera`,
+        shortName,
+        icon
+      }
+    })
+  }
+
+  // 默认物理/虚拟镜头预设（后置所有多摄统一走 Camera 0 + 硬件 zoomRatio，绝不传递不存在的 2/3 导致崩溃）
+  return [
+    { key: 'back_main', id: '0', facing: 'back', zoom: 1.0, name: '后置主摄 (1.0x)', shortName: '1.0x 主摄', icon: '📷' },
+    { key: 'back_wide', id: '0', facing: 'back', zoom: 0.5, name: '后置超广角 (0.5x)', shortName: '0.5x 广角', icon: '🌐' },
+    { key: 'back_tele', id: '0', facing: 'back', zoom: 5.0, name: '后置长焦镜头', shortName: '长焦镜头', icon: '🔭' },
+    { key: 'front_1', id: '1', facing: 'front', zoom: 1.0, name: '前置自拍镜头', shortName: '前置自拍', icon: '🤳' },
+    { key: 'external', id: '', facing: 'external', zoom: 1.0, name: '外接摄像头', shortName: '外接镜头', icon: '🔌' }
+  ]
+})
+
+function isLensActive(lens) {
+  if (localSettings.value.cameraFacing !== lens.facing) return false
+  if (lens.facing === 'back') {
+    const currentZoom = localSettings.value.cameraZoomRatio || 1.0
+    const targetZoom = lens.zoom || 1.0
+    return Math.abs(currentZoom - targetZoom) < 0.15
+  }
+  return !localSettings.value.cameraId || localSettings.value.cameraId === lens.id
+}
+
+const currentLensName = computed(() => {
+  const matched = availableLenses.value.find(l => isLensActive(l))
+  if (matched) return matched.shortName || matched.name
+  if (localSettings.value.cameraFacing === 'front') return '前置自拍'
+  if (localSettings.value.cameraFacing === 'external') return '外接镜头'
+  return '后置主摄'
+})
+
+const currentResText = computed(() => {
+  const s = localSettings.value.cameraSize
+  if (!s) return '1080P'
+  if (s === '3840x2160') return '4K'
+  if (s === '1920x1080') return '1080P'
+  if (s === '1280x720') return '720P'
+  if (s === '640x480') return '480P'
+  return s
+})
+
+function selectLens(lens) {
+  if (isLensActive(lens)) return
+  localSettings.value.cameraFacing = lens.facing
+  localSettings.value.cameraId = lens.id || ''
+  cameraMirrored.value = (lens.facing === 'front')
+  if (lens.zoom) {
+    localSettings.value.cameraZoomRatio = lens.zoom
+    cameraZoom.value = 1.0
+  }
+  saveCameraPreferences(currentId.value, {
+    cameraFacing: lens.facing,
+    cameraId: lens.id || '',
+    cameraZoomRatio: lens.zoom || 1.0
+  })
+  reconnectStream(`正在切换至 [${lens.shortName || lens.name}]...`)
+}
+
+function selectResolution(res) {
+  if (localSettings.value.cameraSize === res) return
+  localSettings.value.cameraSize = res
+  saveCameraPreferences(currentId.value, {
+    cameraSize: res
+  })
+  const label = res === '3840x2160' ? '4K' : (res === '1920x1080' ? '1080P' : (res === '1280x720' ? '720P' : '480P'))
+  reconnectStream(`正在切换分辨率至 [${label}]...`)
+}
+
+function reconnectStream(msg = '正在切换参数并重新建连...') {
+  if (isCameraMode.value) {
+    saveCameraPreferences(currentId.value, {
+      cameraFacing: localSettings.value.cameraFacing,
+      cameraId: localSettings.value.cameraId,
+      cameraSize: localSettings.value.cameraSize,
+      cameraFps: localSettings.value.cameraFps,
+      cameraZoomRatio: localSettings.value.cameraZoomRatio || 1.0,
+      cameraOrientation: localSettings.value.cameraOrientation || 'auto',
+      audioSource: localSettings.value.audioSource
+    })
+  }
+
+  if (currentId.value) {
+    webrtc.disconnect()
+    setTimeout(() => {
+      currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
+      deviceStore.setActiveWebRTC(webrtc)
+      setupWebRTC()
+    }, 800)
+  }
+}
+
+// PTZ 数字变焦与视口平移漫游
+const cameraZoom = ref(1.0)
+const cameraPanX = ref(0)
+const cameraPanY = ref(0)
+const isCameraPanning = ref(false)
+const panStartPoint = { x: 0, y: 0 }
+const panStartOffset = { x: 0, y: 0 }
+const cameraRotation = ref(0) // 0, 90, 180, 270
+const cameraMirrored = ref(initialSettings.cameraFacing === 'front')
+
+const videoStreamStyle = computed(() => {
+  if (!isCameraMode.value) {
+    return {}
+  }
+  return {
+    transform: `rotate(${cameraRotation.value}deg) scaleX(${cameraMirrored.value ? -1 : 1}) translate(${cameraPanX.value}px, ${cameraPanY.value}px) scale(${cameraZoom.value})`,
+    transformOrigin: 'center center',
+    transition: isCameraPanning.value ? 'none' : 'transform 0.15s ease-out',
+    cursor: cameraZoom.value > 1.0 ? (isCameraPanning.value ? 'grabbing' : 'grab') : 'default'
+  }
+})
+
+function setZoom(val) {
+  cameraZoom.value = val
+  if (val <= 1.0) {
+    cameraPanX.value = 0
+    cameraPanY.value = 0
+  }
+}
+
+function onZoomSliderChange() {
+  if (cameraZoom.value <= 1.0) {
+    cameraPanX.value = 0
+    cameraPanY.value = 0
+  }
+}
+
+function resetPTZ() {
+  cameraZoom.value = 1.0
+  cameraPanX.value = 0
+  cameraPanY.value = 0
+  cameraRotation.value = 0
+  cameraMirrored.value = false
+}
+
+function rotateCamera() {
+  cameraRotation.value = (cameraRotation.value + 90) % 360
+}
+
+function toggleMirror() {
+  cameraMirrored.value = !cameraMirrored.value
+}
+
+function onCameraDblClick() {
+  if (!isCameraMode.value) return
+  if (cameraZoom.value > 1.0) {
+    cameraZoom.value = 1.0
+    cameraPanX.value = 0
+    cameraPanY.value = 0
+  } else {
+    cameraZoom.value = 2.0
+  }
+}
+
+// 实时时钟水印
+const cameraClock = ref('')
+let cameraClockTimer = null
+
+function updateCameraClock() {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  cameraClock.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
+
+// 电池与温度告警
+const deviceBatteryText = computed(() => {
+  const stats = currentDevice.value?.stats
+  if (!stats) return ''
+  let text = ''
+  if (stats.battery_level !== undefined && stats.battery_level >= 0) {
+    text += `🔋 ${stats.battery_level}%`
+  }
+  if (stats.temperature !== undefined && stats.temperature > 0) {
+    text += ` (${stats.temperature.toFixed(1)}°C)`
+  }
+  return text
+})
+
+const isBatteryTempHigh = computed(() => {
+  const stats = currentDevice.value?.stats
+  return Boolean(stats?.temperature && stats.temperature >= 45)
+})
+
+// 安防高清抓拍
+function takeCameraSnapshot() {
+  const video = videoElement.value
+  const canvas = canvasElement.value
+  const target = isWebCodecs.value ? canvas : video
+  if (!target) return
+  const offscreen = document.createElement('canvas')
+  const w = target.videoWidth || target.width || 1920
+  const h = target.videoHeight || target.height || 1080
+  offscreen.width = w
+  offscreen.height = h
+  const ctx = offscreen.getContext('2d')
+  ctx.drawImage(target, 0, 0, w, h)
+  const dataUrl = offscreen.toDataURL('image/jpeg', 0.95)
+  const a = document.createElement('a')
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  a.download = `监控抓拍_${currentId.value}_${timeStr}.jpg`
+  a.href = dataUrl
+  a.click()
+}
+
+// 本地录像 (MediaRecorder)
+const isRecording = ref(false)
+const recordingDuration = ref(0)
+let recordingTimer = null
+let mediaRecorder = null
+let recordedChunks = []
+
+const formattedRecordingTime = computed(() => {
+  const m = String(Math.floor(recordingDuration.value / 60)).padStart(2, '0')
+  const s = String(recordingDuration.value % 60).padStart(2, '0')
+  return `${m}:${s}`
+})
+
+function toggleCameraRecording() {
+  if (isRecording.value) {
+    stopRecording()
+  } else {
+    startRecording()
+  }
+}
+
+function startRecording() {
+  const stream = currentWebRTC.value?.stream?.value || videoElement.value?.srcObject || (canvasElement.value?.captureStream ? canvasElement.value.captureStream(30) : null)
+  if (!stream) {
+    alert('视频流尚未就绪，无法开始录像')
+    return
+  }
+  recordedChunks = []
+  try {
+    const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus'))
+      ? 'video/webm;codecs=vp8,opus'
+      : ((typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/webm')) ? 'video/webm' : 'video/mp4')
+    mediaRecorder = new MediaRecorder(stream, { mimeType })
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        recordedChunks.push(e.data)
+      }
+    }
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const now = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+      a.download = `监控录像_${currentId.value}_${timeStr}.${mimeType.includes('mp4') ? 'mp4' : 'webm'}`
+      a.href = url
+      a.click()
+      URL.revokeObjectURL(url)
+      recordedChunks = []
+    }
+    mediaRecorder.start(1000)
+    isRecording.value = true
+    recordingDuration.value = 0
+    recordingTimer = setInterval(() => {
+      recordingDuration.value++
+    }, 1000)
+  } catch (err) {
+    console.error('Recording start failed:', err)
+    alert('无法启动本地录像: ' + err.message)
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop() } catch (e) {}
+  }
+  isRecording.value = false
+  if (recordingTimer) {
+    clearInterval(recordingTimer)
+    recordingTimer = null
+  }
+}
 
 function saveSettings(newSettings) {
   localSettings.value = newSettings
@@ -514,7 +1146,7 @@ function resetSettings() {
   if (currentId.value) {
     webrtc.disconnect()
     currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
-    deviceStore.setActiveWebRTC(webrtc)
+    deviceStore.registerWebRTC(currentId.value, webrtc)
     setupWebRTC()
   }
 }
@@ -632,7 +1264,9 @@ const webrtc = new Proxy({}, {
   }
 })
 const isWebCodecs = computed(() => Boolean(currentWebRTC.value?.isWebCodecsActive?.value))
-deviceStore.setActiveWebRTC(webrtc)
+if (currentId.value) {
+  deviceStore.registerWebRTC(currentId.value, webrtc)
+}
 
 const keymapStore = useKeymapStore()
 const keymapEngine = new KeymapEngine(
@@ -645,7 +1279,21 @@ watch(() => keymapStore.activeProfile, (newProfile) => {
 }, { immediate: true, deep: true })
 
 function onGlobalKeyDown(e) {
+  // 多机直连隔离：非焦点设备不消费全局键盘事件
+  if (!effectiveFocused.value) return
+
   debugLog('[GlobalKey] KeyDown. target:', e.target.tagName, 'activeElement:', document.activeElement ? document.activeElement.tagName : 'none', 'key:', e.key)
+  
+  // 拦截 Esc 键快速退出页面全屏
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    if (isWebFullscreen.value) {
+      toggleWebFullscreen()
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+  }
+
   if (keymapStore.isEditMode) return;
   
   const hasModal = document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog');
@@ -665,6 +1313,9 @@ function onGlobalKeyDown(e) {
 }
 
 function onGlobalPaste(e) {
+  // 多机直连隔离：非焦点设备不处理全局粘贴
+  if (!effectiveFocused.value) return
+
   if (keymapStore.isEditMode) return
   const tag = e.target.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return
@@ -715,6 +1366,9 @@ function setDeviceClipboard(text, { paste = false, source = CLIPBOARD_SOURCE_LOC
 }
 
 function onGlobalKeyUp(e) {
+  // 多机直连隔离：非焦点设备不处理按键弹起
+  if (!effectiveFocused.value) return
+
   if (keymapStore.isEditMode) return;
 
   const hasModal = document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog');
@@ -730,11 +1384,24 @@ function onGlobalKeyUp(e) {
 }
 
 function onGlobalWheel(e) {
+  // 多机直连隔离：非焦点设备不处理滚轮
+  if (!effectiveFocused.value) return
+  if (isCameraMode.value) return
   if (e.__cloudphoneWheelHandled) return
   handleWheel(e)
 }
 
 function onWheel(e) {
+  if (isCameraMode.value) {
+    const delta = e.deltaY < 0 ? 0.2 : -0.2
+    const newZoom = Math.min(10.0, Math.max(1.0, parseFloat((cameraZoom.value + delta).toFixed(1))))
+    cameraZoom.value = newZoom
+    if (cameraZoom.value === 1.0) {
+      cameraPanX.value = 0
+      cameraPanY.value = 0
+    }
+    return
+  }
   e.__cloudphoneWheelHandled = true
   handleWheel(e)
 }
@@ -836,10 +1503,21 @@ function onVideoResize() { checkAndRecommendLayout() }
 watch(currentId, (newId) => {
   if (newId) {
     webrtc.disconnect()
-    localSettings.value = applyPolicyToSettings(getDeviceSettings(newId), authStore.userPolicy)
+    const sessionMode = deviceStore.getDeviceMode(newId)
+    const st = getDeviceSettings(newId)
+    st.videoSource = sessionMode
+    if (sessionMode === 'camera') {
+      const camPref = getCameraPreferences(newId)
+      st.cameraFacing = camPref.cameraFacing
+      st.cameraId = camPref.cameraId
+      st.cameraSize = camPref.cameraSize
+      st.cameraFps = camPref.cameraFps
+      st.audioSource = camPref.audioSource || 'mic'
+    }
+    localSettings.value = applyPolicyToSettings(st, authStore.userPolicy)
     pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
     currentWebRTC.value = useWebRTC(newId, scrcpyOptions.value)
-    deviceStore.setActiveWebRTC(webrtc)
+    deviceStore.registerWebRTC(newId, webrtc)
     setupWebRTC()
   }
 })
@@ -872,7 +1550,7 @@ function setupWebRTC() {
       checkAndRecommendLayout()
     })
   }
-  webrtc.setAudioMuted(pageAudioMuted.value)
+  webrtc.setAudioMuted(effectiveAudioMuted.value)
   webrtc.connect()
   
   // 设置截图回调
@@ -885,6 +1563,9 @@ function setupWebRTC() {
 
   // 设置剪切板回调
   webrtc.onClipboard((event) => {
+    // 多机直连隔离：非焦点设备剪切板变动不冲刷覆盖宿主机本地剪切板
+    if (!effectiveFocused.value) return
+
     const text = event?.text || ''
     if (!text) {
       return
@@ -934,6 +1615,9 @@ const handlePopState = (e) => {
 
 function onWindowFocus() {
   if (isComposingText.value) return
+  // 多机直连隔离：仅当前聚焦的直控视口响应切屏剪切板自动同步
+  if (!effectiveFocused.value) return
+
   if (navigator.clipboard && navigator.clipboard.readText) {
     navigator.clipboard.readText().then(text => {
       if (text && text !== lastLocalClipboardText) {
@@ -958,11 +1642,18 @@ function handleSettingsUpdated(event) {
     if (currentId.value) {
       webrtc.disconnect()
       currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
-      deviceStore.setActiveWebRTC(webrtc)
+      deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
     }
   }
 }
+
+// 监听音频静音状态动态同步
+watch(effectiveAudioMuted, (val) => {
+  if (webrtc && typeof webrtc.setAudioMuted === 'function') {
+    webrtc.setAudioMuted(val)
+  }
+})
 
 onMounted(() => {
   window.history.pushState({ panel: 'open' }, '')
@@ -970,6 +1661,10 @@ onMounted(() => {
   window.addEventListener('cloudphone-settings-updated', handleSettingsUpdated)
   
   setupWebRTC()
+  runDemoLoop()
+  updateCameraClock()
+  cameraClockTimer = setInterval(updateCameraClock, 1000)
+
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
     if (isFullscreen.value) {
@@ -990,6 +1685,15 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (cameraClockTimer) clearInterval(cameraClockTimer)
+  if (recordingTimer) clearInterval(recordingTimer)
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop() } catch (e) {}
+  }
+  if (demoAnimationId) {
+    cancelAnimationFrame(demoAnimationId)
+    demoAnimationId = null
+  }
   if (stopAgentVersionWatch) {
     stopAgentVersionWatch()
     stopAgentVersionWatch = null
@@ -1005,10 +1709,15 @@ onUnmounted(() => {
   }
   // Remove web-fullscreen class
   document.body.classList.remove('web-fullscreen')
+  document.body.classList.remove('has-web-fullscreen')
+  isWebFullscreen.value = false
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('cloudphone-settings-updated', handleSettingsUpdated)
+  deviceStore.setDeviceMode(currentId.value, 'display')
   webrtc.disconnect()
-  deviceStore.setActiveWebRTC(null)
+  if (currentId.value) {
+    deviceStore.unregisterWebRTC(currentId.value)
+  }
   document.removeEventListener('keydown', onGlobalKeyDown)
   document.removeEventListener('keyup', onGlobalKeyUp)
   document.removeEventListener('paste', onGlobalPaste)
@@ -1175,11 +1884,14 @@ function toggleFullscreen() {
     // 如果处于网页全屏，先退出网页全屏，避免样式污染系统全屏元素
     if (isWebFullscreen.value) {
       document.body.classList.remove('web-fullscreen')
+      document.body.classList.remove('has-web-fullscreen')
       isWebFullscreen.value = false
     }
-    containerRef.value?.requestFullscreen()
+    containerRef.value?.requestFullscreen().catch(() => {
+      toggleWebFullscreen()
+    })
   } else {
-    document.exitFullscreen()
+    document.exitFullscreen().catch(() => {})
   }
 }
 
@@ -1187,11 +1899,12 @@ function toggleWebFullscreen() {
   if (!isWebFullscreen.value) {
     // 如果处于系统全屏，先退出系统全屏
     if (document.fullscreenElement) {
-      document.exitFullscreen()
+      document.exitFullscreen().catch(() => {})
     }
-    document.body.classList.add('web-fullscreen')
+    document.body.classList.add('has-web-fullscreen')
     isWebFullscreen.value = true
   } else {
+    document.body.classList.remove('has-web-fullscreen')
     document.body.classList.remove('web-fullscreen')
     isWebFullscreen.value = false
   }
@@ -1304,6 +2017,9 @@ function quickKey(cmd) {
 }
 
 function togglePageMute() {
+  if (props.audioMuted) {
+    deviceStore.focusDevice(currentId.value)
+  }
   pageAudioMuted.value = webrtc.toggleAudioMuted()
 }
 
@@ -1420,6 +2136,17 @@ function onKeyboardPaste(e) {
 
 let mouseDown = false
 function onMouseDown(e) { 
+  if (isCameraMode.value) {
+    if (cameraZoom.value > 1.0) {
+      isCameraPanning.value = true
+      panStartPoint.x = e.clientX
+      panStartPoint.y = e.clientY
+      panStartOffset.x = cameraPanX.value
+      panStartOffset.y = cameraPanY.value
+    }
+    e.preventDefault()
+    return
+  }
   if (e.button === 1) { // 中键 -> HOME
     webrtc.sendInjectKeycode(0, 3)
     e.preventDefault()
@@ -1432,6 +2159,13 @@ function onMouseDown(e) {
   }
   const coord = rotateCoords(e.clientX, e.clientY)
   mouseDown = true; 
+  deviceStore.focusDevice(currentId.value)
+  if (import.meta.env.VITE_DEMO_MODE === 'true' && canvasElement.value) {
+    const rect = canvasElement.value.getBoundingClientRect()
+    const cvsX = (e.clientX - rect.left) * (canvasElement.value.width / (rect.width || 1))
+    const cvsY = (e.clientY - rect.top) * (canvasElement.value.height / (rect.height || 1))
+    demoRipples.value.push({ x: cvsX, y: cvsY, radius: 10, alpha: 0.8 })
+  }
   webrtc.sendTouch(0, e.clientX, e.clientY, -1, coord)
   if (hiddenInput.value) {
     hiddenInput.value.focus()
@@ -1440,12 +2174,25 @@ function onMouseDown(e) {
   e.preventDefault() // 阻止默认行为，防止焦点被 video 夺走！
 }
 function onMouseMove(e) { 
+  if (isCameraMode.value) {
+    if (isCameraPanning.value) {
+      const dx = e.clientX - panStartPoint.x
+      const dy = e.clientY - panStartPoint.y
+      cameraPanX.value = panStartOffset.x + dx
+      cameraPanY.value = panStartOffset.y + dy
+    }
+    return
+  }
   if (mouseDown) {
     const coord = rotateCoords(e.clientX, e.clientY)
     webrtc.sendTouch(2, e.clientX, e.clientY, -1, coord)
   }
 }
 function onMouseUp(e) { 
+  if (isCameraMode.value) {
+    isCameraPanning.value = false
+    return
+  }
   if (e.button === 1) { // 中键 -> HOME
     webrtc.sendInjectKeycode(1, 3)
     e.preventDefault()
@@ -1461,6 +2208,10 @@ function onMouseUp(e) {
   webrtc.sendTouch(1, e.clientX, e.clientY, -1, coord)
 }
 function onMouseLeave(e) { 
+  if (isCameraMode.value) {
+    isCameraPanning.value = false
+    return
+  }
   if (mouseDown) { 
     const coord = rotateCoords(e.clientX, e.clientY)
     mouseDown = false; 
@@ -1469,6 +2220,7 @@ function onMouseLeave(e) {
 }
 
 function onTouchStart(e) {
+  if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i]
     const coord = rotateCoords(t.clientX, t.clientY)
@@ -1476,6 +2228,7 @@ function onTouchStart(e) {
   }
 }
 function onTouchMove(e) {
+  if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i]
     const coord = rotateCoords(t.clientX, t.clientY)
@@ -1483,6 +2236,7 @@ function onTouchMove(e) {
   }
 }
 function onTouchEnd(e) {
+  if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i]
     const coord = rotateCoords(t.clientX, t.clientY)
@@ -1585,6 +2339,53 @@ function onTouchEnd(e) {
   .fullscreen-fab {
     right: 16px;
   }
+}
+
+/* 局部独立页面全屏 (Web Fullscreen) */
+.device-panel-view.is-web-fullscreen {
+  position: relative !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1000 !important;
+  background: #000 !important;
+  display: flex !important;
+  flex-direction: row !important;
+}
+
+.device-panel-view.is-web-fullscreen .device-client-main {
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+.device-panel-view.is-web-fullscreen .video-wrapper {
+  width: 100% !important;
+  height: 100% !important;
+  background: #000 !important;
+}
+
+.device-panel-view.is-web-fullscreen .webfullscreen-fab {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  z-index: 100000 !important;
+  background: rgba(248, 81, 73, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: #fff !important;
+  width: 40px !important;
+  height: 40px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7) !important;
+}
+
+.device-panel-view.is-web-fullscreen .webfullscreen-fab:hover {
+  background: rgba(248, 81, 73, 1) !important;
+  transform: scale(1.1) !important;
+}
+
+.device-panel-view.is-web-fullscreen .fullscreen-fab,
+.device-panel-view.is-web-fullscreen .pip-fab {
+  display: none !important;
 }
 
 .stats-badge {
@@ -1978,4 +2779,329 @@ function onTouchEnd(e) {
 /* 群控从机侧栏布局 */
 .group-control-btn.active { background: rgba(255, 159, 67, 0.18); border-color: #ff9f43; color: #ff9f43; }
 .group-control-btn.active:hover { background: rgba(255, 159, 67, 0.28); }
+
+/* =========================================================
+   📷 摄像头专属安防监控控制台样式 (Surveillance Mode)
+   ========================================================= */
+
+/* --- 监控专属 OSD 水印栏 --- */
+.camera-osd-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 75%, transparent 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 90;
+  pointer-events: none;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  color: #e6edf3;
+  user-select: none;
+}
+
+.osd-left, .osd-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.osd-divider {
+  color: rgba(255, 255, 255, 0.25);
+  font-weight: 300;
+}
+
+.live-dot {
+  background: rgba(46, 160, 67, 0.2);
+  color: #3fb950;
+  border: 1px solid rgba(46, 160, 67, 0.4);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.osd-title {
+  font-weight: 700;
+  color: #58a6ff;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.osd-lens {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.osd-res, .osd-fps, .osd-bitrate {
+  color: #7ee787;
+  font-variant-numeric: tabular-nums;
+}
+
+.osd-clock {
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+.osd-battery {
+  color: #a5d6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.osd-battery.temp-warn {
+  color: #f85149;
+  font-weight: bold;
+  animation: blink-warn 1s infinite;
+}
+
+.osd-rec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(248, 81, 73, 0.25);
+  border: 1px solid #f85149;
+  color: #f85149;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.rec-blink-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f85149;
+  animation: blink-warn 0.8s infinite ease-in-out;
+}
+
+@keyframes blink-warn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* --- 监控专属右侧控制栏 (Camera Sidebar) --- */
+.camera-sidebar {
+  width: 250px;
+  background: #0d1117;
+  border-left: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  color: #c9d1d9;
+  flex-shrink: 0;
+}
+
+.camera-sidebar-title {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #58a6ff;
+  border-bottom: 1px solid #21262d;
+  background: #161b22;
+}
+
+.sidebar-title-icon {
+  width: 18px;
+  height: 18px;
+  color: #58a6ff;
+}
+
+.camera-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cam-section {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.cam-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+}
+
+.cam-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+}
+
+.cam-badge.zoom-val {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.cam-badge.audio-on {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.cam-btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.cam-btn-grid.res-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.cam-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 8px 6px;
+  color: #c9d1d9;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.cam-btn:hover {
+  background: #30363d;
+  border-color: #8b949e;
+}
+
+.cam-btn.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+.cam-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.res-btn {
+  padding: 6px 2px;
+  font-size: 11px;
+}
+
+.zoom-slider-row {
+  margin: 6px 0;
+}
+
+.zoom-range {
+  width: 100%;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.zoom-presets {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.preset-btn {
+  padding: 5px 0;
+  font-size: 10px;
+}
+
+.reset-btn {
+  padding: 5px 0;
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.audio-toggle-btn {
+  width: 100%;
+  padding: 8px;
+}
+
+.audio-toggle-btn.active {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: #3fb950;
+  color: #3fb950;
+}
+
+.snapshot-btn:hover {
+  border-color: #58a6ff;
+  color: #58a6ff;
+}
+
+.record-btn.recording {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: #f85149;
+  color: #f85149;
+}
+
+.danger-btn {
+  color: #f85149;
+}
+
+.danger-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: #f85149;
+}
+
+/* 手机悬浮菜单监控项扩展 */
+.fab-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b949e;
+  padding: 4px 10px 2px;
+  user-select: none;
+}
+
+.fab-res-row {
+  display: flex;
+  gap: 4px;
+  padding: 2px 6px;
+}
+
+.mini-res {
+  flex: 1;
+  padding: 4px 0 !important;
+  font-size: 10px !important;
+  justify-content: center;
+}
+
+.fab-item.cam-active {
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.15) !important;
+}
+
+.fab-item.recording {
+  border-color: #f85149 !important;
+  color: #f85149 !important;
+  background: rgba(248, 81, 73, 0.2) !important;
+}
 </style>

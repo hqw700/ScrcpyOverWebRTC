@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
+import { useDeviceStore } from './devices'
 
 export const useGroupControlStore = defineStore('groupControl', () => {
   const isGroupControlActive = ref(false)
@@ -7,12 +8,15 @@ export const useGroupControlStore = defineStore('groupControl', () => {
   const selectedSlaveIds = ref([])
 
   function toggleGroupControl(active, mId = null) {
+    const deviceStore = useDeviceStore()
     isGroupControlActive.value = active !== undefined ? active : !isGroupControlActive.value
     if (isGroupControlActive.value) {
       masterId.value = mId
+      deviceStore.globalPreviewMode = true
     } else {
       masterId.value = null
       clearSlaves()
+      deviceStore.globalPreviewMode = false
     }
   }
 

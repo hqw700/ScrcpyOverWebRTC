@@ -288,11 +288,10 @@ watch(selectedDeviceId, (newId) => {
   cleanWebRTC()
   if (!newId) return
 
-  // 仅当目标设备已在控制页打开时才复用共享连接；
-  // 不再主动 setActiveDevice —— 否则移动端全屏控制面板会被弹出来盖住文件页，
-  // 且面板关闭时共享连接随之断开，造成“选完设备/文件就断连”的问题。
-  if (deviceStore.activeDeviceId === newId && deviceStore.activeWebRTC) {
-    webrtc = deviceStore.activeWebRTC
+  // 检查是否已有活跃的直连 WebRTC 实例
+  const sharedInst = deviceStore.getWebRTC(newId)
+  if (sharedInst) {
+    webrtc = sharedInst
     isSharedConnection = true
   } else {
     webrtc = useWebRTC(newId, { audio: false, video: false })
@@ -323,6 +322,18 @@ watch(selectedDeviceId, (newId) => {
     refreshFileList()
   }
 })
+
+watch(() => deviceStore.activeWebRTCMap, (newMap) => {
+  if (selectedDeviceId.value && newMap.has(selectedDeviceId.value) && !isSharedConnection) {
+    // 若该设备在后台建立起直连，平滑复用共享通道
+    const shared = newMap.get(selectedDeviceId.value)
+    if (shared && shared !== webrtc) {
+      const cur = selectedDeviceId.value
+      selectedDeviceId.value = ''
+      setTimeout(() => { selectedDeviceId.value = cur }, 50)
+    }
+  }
+}, { deep: true })
 
 watch(() => deviceStore.activeDeviceId, (newActiveId) => {
   if (newActiveId && selectedDeviceId.value !== newActiveId) {

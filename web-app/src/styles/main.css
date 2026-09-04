@@ -85,17 +85,55 @@ button {
 }
 
 /* Web fullscreen mode */
-.web-fullscreen .video-wrapper {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  background: var(--bg-primary);
-  z-index: 10000;
+body.has-web-fullscreen,
+body.web-fullscreen {
+  overflow: hidden !important;
 }
-/* Hide sidebars in web fullscreen */
-.web-fullscreen .sidebar,
-.web-fullscreen .control-sidebar {
+
+body.has-web-fullscreen .app-header,
+body.has-web-fullscreen .viewport,
+body.has-web-fullscreen .side-resizer,
+body.has-web-fullscreen .mobile-bottom-nav,
+body.has-web-fullscreen .multi-top-bar,
+body.web-fullscreen .multi-top-bar {
+  display: none !important;
+}
+
+body.has-web-fullscreen .control-panel-wrapper {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 999999 !important;
+  border: none !important;
+  background: #000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transition: none !important;
+}
+
+body.has-web-fullscreen .panel-inner,
+body.has-web-fullscreen .panel-main,
+body.has-web-fullscreen .multi-device-container,
+body.has-web-fullscreen .multi-body-viewport,
+body.has-web-fullscreen .maximized-wrapper,
+body.has-web-fullscreen .grid-cell,
+body.has-web-fullscreen .multi-grid-container,
+body.has-web-fullscreen .multi-device-item,
+body.has-web-fullscreen .item-body {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #000 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+}
+
+body.has-web-fullscreen .item-header {
   display: none !important;
 }
 /* FAB buttons shared style */

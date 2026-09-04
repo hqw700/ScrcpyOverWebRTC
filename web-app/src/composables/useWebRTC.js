@@ -232,6 +232,12 @@ function handleDeviceMessage(payload) {
 
     case 'scrcpy_error':
       console.error('[WebRTC] scrcpy-server error:', payload.message)
+      // 如果是相机ID不存在引发的异常，自动清除该设备的异常相机本地缓存偏好，防止死锁
+      if (payload.message && payload.message.includes('Camera with id')) {
+        try {
+          localStorage.removeItem(`cloudphone_camera_pref_${deviceId}`)
+        } catch (e) {}
+      }
       error.value = payload.message || 'scrcpy-server 启动失败'
       status.value = 'error'
       if (pc) {
@@ -414,8 +420,10 @@ function handleDeviceMessage(payload) {
 
   function clearAudioUnlockHandler() {
     if (audioUnlockHandler) {
-      window.removeEventListener('pointerdown', audioUnlockHandler)
-      window.removeEventListener('keydown', audioUnlockHandler)
+      window.removeEventListener('pointerdown', audioUnlockHandler, { capture: true })
+      window.removeEventListener('keydown', audioUnlockHandler, { capture: true })
+      window.removeEventListener('touchstart', audioUnlockHandler, { capture: true })
+      window.removeEventListener('click', audioUnlockHandler, { capture: true })
       audioUnlockHandler = null
     }
   }
@@ -437,6 +445,7 @@ function handleDeviceMessage(payload) {
     if (audioElement) {
       audioElement.pause()
       audioElement.srcObject = null
+      audioElement.remove()
       audioElement = null
     }
     audioStream = null
@@ -450,6 +459,8 @@ function handleDeviceMessage(payload) {
     if (audioElement) {
       audioElement.pause()
       audioElement.srcObject = null
+      audioElement.remove()
+      audioElement = null
     }
 
     audioElement = new Audio()
@@ -458,24 +469,24 @@ function handleDeviceMessage(payload) {
     audioElement.muted = audioMuted.value
     audioElement.volume = Math.min(1, gain)
     audioElement.srcObject = audioStream
+    audioElement.style.display = 'none'
+    document.body.appendChild(audioElement)
 
     const play = () => {
       if (!audioElement) return
       audioElement.play()
         .then(() => {
           debugLog('[WebRTC] Audio element playing, volume:', audioElement.volume)
-          if (audioUnlockHandler) {
-            window.removeEventListener('pointerdown', audioUnlockHandler)
-            window.removeEventListener('keydown', audioUnlockHandler)
-            audioUnlockHandler = null
-          }
+          clearAudioUnlockHandler()
         })
         .catch(err => {
           debugWarn('[WebRTC] audio play() blocked, waiting for user gesture:', err)
           if (!audioUnlockHandler) {
             audioUnlockHandler = () => play()
-            window.addEventListener('pointerdown', audioUnlockHandler, { once: true })
-            window.addEventListener('keydown', audioUnlockHandler, { once: true })
+            window.addEventListener('pointerdown', audioUnlockHandler, { once: true, capture: true })
+            window.addEventListener('keydown', audioUnlockHandler, { once: true, capture: true })
+            window.addEventListener('touchstart', audioUnlockHandler, { once: true, capture: true })
+            window.addEventListener('click', audioUnlockHandler, { once: true, capture: true })
           }
         })
     }
@@ -491,7 +502,7 @@ function handleDeviceMessage(payload) {
   }
 
   function playAudioTrack(track) {
-    if (!options.audio) return
+    if (options.audio === false) return
 
     cleanupAudioPlayback()
     audioStream = new MediaStream([track])
@@ -574,6 +585,19 @@ function handleDeviceMessage(payload) {
     pc.ontrack = (evt) => {
       debugLog('[WebRTC] ontrack event:', evt.track.kind, evt.streams)
       if (evt.track.kind === 'audio') {
+        // ⚡ 当开启 encodedInsertableStreams 时（例如 WebCodecs 模式），
+        // 浏览器将音频接收端也置于 Insertable Streams 拦截管线中。
+        // 若不读取并通过 pipeTo 直通 writable，编码的 Opus 数据包将积压在队列中，
+        // 导致浏览器原生音频解码器接收不到任何数据，画面动作流畅但毫无声音。
+        if (enableInsertable && evt.receiver && evt.receiver.createEncodedStreams) {
+          try {
+            const { readable, writable } = evt.receiver.createEncodedStreams()
+            readable.pipeTo(writable).catch(e => console.warn('[WebRTC] Audio insertable streams pipeTo error:', e))
+          } catch (e) {
+            console.warn('[WebRTC] Audio createEncodedStreams error:', e)
+          }
+        }
+
         if (options.audio === false) return
         playAudioTrack(evt.track)
         return

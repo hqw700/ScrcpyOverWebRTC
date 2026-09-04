@@ -29,6 +29,65 @@ export const useDeviceStore = defineStore('devices', () => {
 
   const offlineDevices = ref([])
 
+  // --- 顶栏共享与视图控制状态 ---
+  const searchQuery = ref('')
+  const cardSize = ref(Number(localStorage.getItem('cloudphone_card_size') || 200))
+  const viewMode = ref(localStorage.getItem('cloudphone_view_mode') || 'grid') // 'grid' | 'table'
+  const showLicenseModal = ref(false)
+  const showGlobalSettingsModal = ref(false)
+  const showTagManagerModal = ref(false)
+
+  function setCardSize(size) {
+    cardSize.value = Number(size)
+    localStorage.setItem('cloudphone_card_size', String(size))
+  }
+
+  function setViewMode(mode) {
+    viewMode.value = mode
+    localStorage.setItem('cloudphone_view_mode', mode)
+  }
+
+  function toggleViewMode() {
+    setViewMode(viewMode.value === 'grid' ? 'table' : 'grid')
+  }
+
+  // --- 授权用量与徽标计算属性 ---
+  const licenseUsedCount = computed(() => licenseCurrentDevices.value || onlineDevices.value.length)
+  const licenseUsagePercent = computed(() => {
+    if (!licenseMaxDevices.value || licenseMaxDevices.value <= 0) return 0
+    return Math.round((licenseUsedCount.value / licenseMaxDevices.value) * 100)
+  })
+
+  const licenseBadgeText = computed(() => {
+    const used = licenseUsedCount.value
+    const max = licenseMaxDevices.value
+    if (licenseActivated.value) {
+      return `授权 ${used}/${max} 台 · 剩余 ${licenseDaysRemaining.value} 天`
+    }
+    if (licensePromo.value) {
+      return `限时特惠 ${used}/${max} 台`
+    }
+    return `免费版 ${used}/${max} 台`
+  })
+
+  const licenseBadgeTitle = computed(() => {
+    if (licenseActivated.value) {
+      return `授权到期时间: ${licenseExpiresAt.value || '-'}，点击查看授权管理`
+    }
+    if (licensePromo.value) {
+      return `特惠至 ${licenseExpiresAt.value}，到期后恢复 ${licensePostPromoMaxDevices.value} 台`
+    }
+    return '免费版授权，点击查看授权管理'
+  })
+
+  const licenseBadgeClass = computed(() => {
+    if (licenseStatus.value === 'expired' || isLicenseExpired.value) return 'badge-danger'
+    if (licenseUsagePercent.value >= 100) return 'badge-danger'
+    if (licenseUsagePercent.value >= 80) return 'badge-warn'
+    if (licenseActivated.value && licenseDaysRemaining.value <= 30) return 'badge-warn'
+    return ''
+  })
+
 
   // 辅助函数：根据当前活跃的设备列表更新在线和离线列表
   // 入参 deviceList 项可携带服务端状态：{ id, info, online, firstSeen, lastSeen }
@@ -256,24 +315,167 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
-  const activeDeviceId = ref(null)
-  const activeWebRTC = shallowRef(null)
+  const activeDeviceIds = ref([])
+  const focusedDeviceId = ref(null)
+  const masterDeviceId = ref(null)
+  const multiLayoutMode = ref('grid') // 'grid' | 'tabs' | 'master-slave' | 'floating'
+  const audioFocusMode = ref('exclusive') // 'exclusive' (独占音频) | 'mix' (混音)
+  const globalBroadcastInput = ref(false) // 键盘与输入法是否全局广播
+  const maximizedDeviceId = ref(null) // 单机放大聚焦 ID
+
+  const activeWebRTCMap = shallowRef(new Map())
+
+  function registerWebRTC(deviceId, webrtcInstance) {
+    if (!deviceId || !webrtcInstance) return
+    const newMap = new Map(activeWebRTCMap.value)
+    newMap.set(deviceId, markRaw(webrtcInstance))
+    activeWebRTCMap.value = newMap
+  }
+
+  function unregisterWebRTC(deviceId) {
+    if (!deviceId) return
+    if (activeWebRTCMap.value.has(deviceId)) {
+      const newMap = new Map(activeWebRTCMap.value)
+      newMap.delete(deviceId)
+      activeWebRTCMap.value = newMap
+    }
+  }
+
+  function getWebRTC(deviceId) {
+    if (!deviceId) return null
+    return activeWebRTCMap.value.get(deviceId) || null
+  }
+
+  // 兼容单机 activeDeviceId
+  const activeDeviceId = computed({
+    get: () => focusedDeviceId.value || activeDeviceIds.value[0] || null,
+    set: (val) => {
+      if (!val) {
+        closeAllDevices()
+      } else {
+        openDevice(val)
+      }
+    }
+  })
+
+  // 兼容单机 activeWebRTC：动态返回当前焦点或首台设备实例
+  const activeWebRTC = computed(() => {
+    if (focusedDeviceId.value && activeWebRTCMap.value.has(focusedDeviceId.value)) {
+      return activeWebRTCMap.value.get(focusedDeviceId.value)
+    }
+    const firstId = activeDeviceIds.value[0]
+    if (firstId && activeWebRTCMap.value.has(firstId)) {
+      return activeWebRTCMap.value.get(firstId)
+    }
+    return null
+  })
 
   const activeDevice = computed(() => 
     devices.value.find(d => d.id === activeDeviceId.value)
   )
 
+  function openDevice(id) {
+    if (!id) return
+    if (!activeDeviceIds.value.includes(id)) {
+      activeDeviceIds.value.push(id)
+    }
+    focusedDeviceId.value = id
+    if (!masterDeviceId.value) {
+      masterDeviceId.value = id
+    }
+  }
+
+  function closeDevice(id) {
+    const index = activeDeviceIds.value.indexOf(id)
+    if (index > -1) {
+      activeDeviceIds.value.splice(index, 1)
+    }
+    unregisterWebRTC(id)
+    if (focusedDeviceId.value === id) {
+      focusedDeviceId.value = activeDeviceIds.value[activeDeviceIds.value.length - 1] || null
+    }
+    if (masterDeviceId.value === id) {
+      masterDeviceId.value = activeDeviceIds.value[0] || null
+    }
+    if (maximizedDeviceId.value === id) {
+      maximizedDeviceId.value = null
+    }
+    deviceConnectionModes.value[id] = 'display'
+    if (activeDeviceIds.value.length === 0) {
+      closeAllDevices()
+    }
+  }
+
+  // 独立设备当前会话连接模式（'display' | 'camera'），默认均为屏幕连接 'display'
+  const deviceConnectionModes = ref({})
+
+  function setDeviceMode(deviceId, mode = 'display') {
+    if (!deviceId) return
+    deviceConnectionModes.value[deviceId] = mode
+  }
+
+  function getDeviceMode(deviceId) {
+    if (!deviceId) return 'display'
+    return deviceConnectionModes.value[deviceId] || 'display'
+  }
+
+  function openDeviceAsCamera(id) {
+    if (!id) return
+    setDeviceMode(id, 'camera')
+    openDevice(id)
+  }
+
+  function closeAllDevices() {
+    activeDeviceIds.value = []
+    focusedDeviceId.value = null
+    masterDeviceId.value = null
+    maximizedDeviceId.value = null
+    activeWebRTCMap.value = new Map()
+    deviceConnectionModes.value = {}
+  }
+
+  function focusDevice(id) {
+    if (activeDeviceIds.value.includes(id)) {
+      focusedDeviceId.value = id
+    }
+  }
+
+  function setMasterDevice(id) {
+    if (activeDeviceIds.value.includes(id)) {
+      masterDeviceId.value = id
+    }
+  }
+
+  function setMultiLayoutMode(mode) {
+    multiLayoutMode.value = mode
+  }
+
+  function toggleMaximizeDevice(id) {
+    if (maximizedDeviceId.value === id) {
+      maximizedDeviceId.value = null
+    } else {
+      maximizedDeviceId.value = id
+    }
+  }
+
   function setActiveDevice(id) {
-    activeDeviceId.value = id
+    if (id) {
+      openDevice(id)
+    } else {
+      closeAllDevices()
+    }
   }
 
   function setActiveWebRTC(webrtcInstance) {
-    activeWebRTC.value = webrtcInstance ? markRaw(webrtcInstance) : null
+    if (activeDeviceId.value && webrtcInstance) {
+      registerWebRTC(activeDeviceId.value, webrtcInstance)
+    } else if (!webrtcInstance && activeDeviceId.value) {
+      unregisterWebRTC(activeDeviceId.value)
+    }
   }
 
   function clearActiveDevice() {
-    activeDeviceId.value = null
-    activeWebRTC.value = null
+    closeAllDevices()
   }
 
   const deviceHistory = ref({})
@@ -718,7 +920,25 @@ export const useDeviceStore = defineStore('devices', () => {
     loading,
     error,
     activeDeviceId,
+    activeDeviceIds,
+    focusedDeviceId,
+    masterDeviceId,
+    multiLayoutMode,
+    audioFocusMode,
+    globalBroadcastInput,
+    maximizedDeviceId,
+    openDevice,
+    closeDevice,
+    closeAllDevices,
+    focusDevice,
+    setMasterDevice,
+    setMultiLayoutMode,
+    toggleMaximizeDevice,
     activeWebRTC,
+    activeWebRTCMap,
+    registerWebRTC,
+    unregisterWebRTC,
+    getWebRTC,
     activeDevice,
     onlineDevices,
     deviceHistory,
@@ -738,6 +958,9 @@ export const useDeviceStore = defineStore('devices', () => {
     quitAgent,
     deleteOfflineDevice,
     setActiveDevice,
+    openDeviceAsCamera,
+    setDeviceMode,
+    getDeviceMode,
     setActiveWebRTC,
     clearActiveDevice,
     openGlobalConsole,
@@ -766,6 +989,20 @@ export const useDeviceStore = defineStore('devices', () => {
     sendGroupControlEvent,
     sendInjectData,
     globalPreviewMode,
-    globalInteractiveMode
+    globalInteractiveMode,
+    searchQuery,
+    cardSize,
+    viewMode,
+    showLicenseModal,
+    showGlobalSettingsModal,
+    showTagManagerModal,
+    setCardSize,
+    setViewMode,
+    toggleViewMode,
+    licenseUsedCount,
+    licenseUsagePercent,
+    licenseBadgeText,
+    licenseBadgeTitle,
+    licenseBadgeClass
   }
 })

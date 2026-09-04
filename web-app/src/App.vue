@@ -217,8 +217,188 @@
     <!-- 2. 主内容区域 -->
     <main class="main-content" id="main-layout-content">
       <header class="top-bar" v-if="!isMobile">
-        <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : (showShareAdminPage ? '分享与卡密管理' : '云虚机矩阵')))) }}</h1>
+        <!-- 1. 左侧：页面主标题、在线设备数与授权徽标 -->
+        <div class="top-bar-left">
+          <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : (showShareAdminPage ? '分享与卡密管理' : (showBatchPage ? '批量任务群控' : (showUserAdminPage ? '用户权限管理' : '云虚机矩阵')))))) }}</h1>
+          
+          <!-- 当处于主页面“云虚机矩阵”时展示在线状态徽标与授权徽标 -->
+          <div class="top-device-stats" v-if="isMainMatrixPage">
+            <span class="device-stat-chip online" title="当前在线虚机数量">
+              <span class="stat-dot"></span>
+              {{ deviceStore.onlineDevices.length }} 台在线
+            </span>
+            <button 
+              class="license-badge-top" 
+              :class="deviceStore.licenseBadgeClass" 
+              :title="deviceStore.licenseBadgeTitle" 
+              @click="showLicensePanel = true"
+            >
+              {{ deviceStore.licenseBadgeText }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 中间：全局居中搜索框 (仅主页面展示) -->
+        <div class="top-bar-center" v-if="isMainMatrixPage">
+          <div class="top-search-box" :class="{ 'has-query': !!deviceStore.searchQuery }">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              ref="topSearchInputRef"
+              v-model="deviceStore.searchQuery"
+              type="text"
+              placeholder="搜索虚机名称、IP、ID或标签... (⌘K)"
+              @keydown.esc="deviceStore.searchQuery = ''"
+            />
+            <button 
+              v-if="deviceStore.searchQuery" 
+              class="clear-search-btn" 
+              @click="deviceStore.searchQuery = ''" 
+              title="清空搜索"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <kbd class="search-shortcut-badge" v-else>⌘K</kbd>
+          </div>
+        </div>
+        <div class="top-bar-center-placeholder" v-else></div>
+
+        <!-- 3. 右侧：矩阵专属操作栏 + 帮助与用户卡片 -->
         <div class="top-bar-right">
+          <!-- 矩阵页面专属操作栏 -->
+          <div class="top-matrix-actions" v-if="isMainMatrixPage">
+            <!-- 显示设置下拉菜单 -->
+            <div class="top-dropdown-wrap" @click.stop>
+              <button 
+                class="top-action-btn display-btn" 
+                :class="{ active: showDisplayMenu }" 
+                @click.stop="showDisplayMenu = !showDisplayMenu"
+                title="视图与画面预览设置"
+              >
+                <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <span class="btn-text">显示选项 ▾</span>
+              </button>
+              
+              <transition name="pop">
+                <div class="display-dropdown-panel" v-if="showDisplayMenu" @click.stop>
+                  <div class="dropdown-panel-title">画面与预览设置</div>
+                  
+                  <div class="dropdown-item-switch" v-if="authStore.isAdmin">
+                    <label class="switch-row" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
+                      <span class="switch-title">高频实时预览</span>
+                      <input type="checkbox" v-model="deviceStore.globalPreviewMode" class="switch-input" />
+                    </label>
+                  </div>
+
+                  <div class="dropdown-item-switch" v-if="authStore.isAdmin">
+                    <label class="switch-row" :class="{ disabled: !deviceStore.globalPreviewMode }" title="开启后可直接在卡片上触控操作 (需先开启高频预览)">
+                      <span class="switch-title">预览直接触控</span>
+                      <input type="checkbox" v-model="deviceStore.globalInteractiveMode" :disabled="!deviceStore.globalPreviewMode" class="switch-input" />
+                    </label>
+                  </div>
+
+                  <div class="dropdown-divider"></div>
+
+                  <div class="dropdown-slider-row" v-if="deviceStore.viewMode === 'grid'">
+                    <div class="slider-header">
+                      <span>卡片大小</span>
+                      <span class="slider-val">{{ deviceStore.cardSize }}px</span>
+                    </div>
+                    <div class="preset-density-row">
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardSize <= 170 }" @click="deviceStore.setCardSize(160)">紧凑 (160px)</button>
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardSize > 170 && deviceStore.cardSize <= 260 }" @click="deviceStore.setCardSize(220)">标准 (220px)</button>
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardSize > 260 }" @click="deviceStore.setCardSize(320)">舒适 (320px)</button>
+                    </div>
+                    <input 
+                      type="range" 
+                      :value="deviceStore.cardSize" 
+                      @input="deviceStore.setCardSize($event.target.value)" 
+                      min="150" 
+                      max="400" 
+                      step="10" 
+                      class="card-slider-input" 
+                    />
+                  </div>
+
+                  <div class="dropdown-view-toggle">
+                    <button 
+                      class="view-toggle-opt" 
+                      :class="{ active: deviceStore.viewMode === 'grid' }" 
+                      @click="deviceStore.setViewMode('grid')"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                      卡片宫格
+                    </button>
+                    <button 
+                      class="view-toggle-opt" 
+                      :class="{ active: deviceStore.viewMode === 'table' }" 
+                      @click="deviceStore.setViewMode('table')"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                      高密列表
+                    </button>
+                  </div>
+                </div>
+              </transition>
+            </div>
+
+            <!-- 多机直连快速关闭按钮 (仅在有多机直连时展示) -->
+            <button 
+              v-if="deviceStore.activeDeviceIds.length > 0"
+              class="top-action-btn primary-action-btn active" 
+              @click.stop="deviceStore.closeAllDevices()" 
+              title="点击关闭全部多机直连"
+            >
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="8" height="18" rx="2"></rect>
+                <rect x="14" y="3" width="8" height="18" rx="2"></rect>
+              </svg>
+              <span class="btn-text">多机直连 ({{ deviceStore.activeDeviceIds.length }}) ✕</span>
+            </button>
+
+            <!-- 群控模式开关按钮 (管理员) -->
+            <button 
+              v-if="authStore.isAdmin"
+              class="top-action-btn group-control-btn" 
+              :class="{ active: groupControlStore.isGroupControlActive }" 
+              @click.stop="toggleGroupControl"
+              :title="groupControlStore.isGroupControlActive ? '退出群控模式' : '进入群控模式 (支持全选与按标签勾选从机)'"
+            >
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              <span class="btn-text">{{ groupControlStore.isGroupControlActive ? '退出群控' : '群控' }}</span>
+            </button>
+
+            <!-- 标签管理按钮 -->
+            <button class="top-action-btn" @click="dispatchTopAction('tag-manager')" title="设备标签管理">
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path>
+                <circle cx="8.5" cy="8.5" r="1.4"></circle>
+              </svg>
+              <span class="btn-text">标签</span>
+            </button>
+
+            <!-- 全局设置按钮 (管理员) -->
+            <button class="top-action-btn" @click="dispatchTopAction('global-settings')" title="全局默认设置" v-if="authStore.isAdmin">
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.3 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.3 2.7h4.4l.3-2.7a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"></path>
+              </svg>
+              <span class="btn-text">设置</span>
+            </button>
+          </div>
+
+          <div class="top-bar-divider" v-if="isMainMatrixPage"></div>
+
           <!-- 帮助与支持下拉菜单 -->
           <div class="header-help-menu" @click.stop v-if="!authStore.noAuthMode">
             <button class="help-btn" :class="{ active: showHelpMenu }" @click.stop="showHelpMenu = !showHelpMenu" title="帮助与支持">
@@ -357,35 +537,10 @@
       </template>
 
       <!-- 面板内容区 -->
-      <div class="panel-inner" v-if="deviceStore.activeDeviceId">
-        <!-- 仅在 PC 端显示的头部 -->
-        <header class="panel-top-bar" v-if="!isMobile" @mousedown="startDragging">
-          <div class="vm-info">
-            <span class="status-dot online"></span>
-            <span class="vm-id">{{ deviceStore.activeDeviceId }}</span>
-          </div>
-          <div class="panel-tools" @mousedown.stop @click.stop>
-            <button class="tool-btn" @click="toggleFloating" :title="isFloating ? '固定面板' : '悬浮面板'">
-              <svg v-if="isFloating" class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="17" x2="12" y2="22"></line>
-                <path d="M5 17h14v-1.76a2 2 0 0 0-.44-1.24l-2.78-3.58A2 2 0 0 1 15 9.18V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.18a2 2 0 0 1-.78 1.24l-2.78 3.58A2 2 0 0 0 5 15.24z"></path>
-              </svg>
-              <svg v-else class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-              </svg>
-            </button>
-            <button class="tool-btn close" @click="closePanel" title="关闭">
-              <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-        </header>
-
+      <div class="panel-inner" v-if="deviceStore.activeDeviceIds.length > 0">
         <div class="panel-main">
-           <!-- 渲染 DeviceClient -->
-           <DeviceClient v-if="deviceStore.activeDeviceId" :deviceId="deviceStore.activeDeviceId" @recommend-layout="handleRecommendLayout" />
+           <!-- 统一由 MultiDeviceContainer 承载直连工作台 (支持 1~N 台的平铺、标签、主从、浮窗全生命周期) -->
+           <MultiDeviceContainer />
         </div>
       </div>
 
@@ -473,10 +628,13 @@ import BatchControlPage from '@/views/BatchControlPage.vue'
 import AdvancedPage from '@/views/AdvancedPage.vue'
 import ShareAdminPage from '@/views/ShareAdminPage.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
+import MultiDeviceContainer from '@/components/multi/MultiDeviceContainer.vue'
+import { useGroupControlStore } from '@/stores/groupControl'
 
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
 const authStore = useAuthStore()
+const groupControlStore = useGroupControlStore()
 
 const route = useRoute()
 // /share 为访客免登录分享页：渲染 router-view，不初始化后台数据与信令
@@ -484,6 +642,10 @@ const isSharePage = computed(() => route.path === '/share')
 
 function handleLogout() {
   authStore.logout()
+}
+
+function toggleGroupControl() {
+  groupControlStore.toggleGroupControl()
 }
 
 const systemVersion = ref('v0.1.9')
@@ -517,6 +679,37 @@ const isActivating = ref(false)
 const activationError = ref(null)
 const copySuccess = ref(false)
 const showLicensePanel = ref(false)
+const showDisplayMenu = ref(false)
+const topSearchInputRef = ref(null)
+
+const isMainMatrixPage = computed(() => 
+  !showDeployPage.value && 
+  !showFilePage.value && 
+  !showTerminalPage.value && 
+  !showMonitorPage.value && 
+  !showUserAdminPage.value && 
+  !showBatchPage.value && 
+  !showAdvancedPage.value && 
+  !showShareAdminPage.value
+)
+
+function dispatchTopAction(action) {
+  if (action === 'tag-manager') {
+    window.dispatchEvent(new CustomEvent('open-tag-manager', { detail: { mode: 'full' } }))
+  } else if (action === 'global-settings') {
+    window.dispatchEvent(new CustomEvent('open-global-settings'))
+  }
+}
+
+function onGlobalKeyDown(e) {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+    if (isMainMatrixPage.value && topSearchInputRef.value) {
+      e.preventDefault()
+      topSearchInputRef.value.focus()
+      topSearchInputRef.value.select()
+    }
+  }
+}
 
 // 当前账号有效期（/api/me 下发；零值时间 = 永久不显示）
 // nowTick 每秒驱动一次，让倒计时实时走动而不是只在刷新时更新
@@ -571,9 +764,6 @@ async function submitActivation() {
     activationError.value = res.error
   }
 }
-const closeHelpMenu = () => {
-  showHelpMenu.value = false
-}
 
 const floatPos = ref({ x: 100, y: 100 })
 const floatSize = ref({ w: 600, h: 800 })
@@ -582,19 +772,25 @@ const sideWidth = ref(420)
 // 动态样式计算
 const panelStyle = computed(() => {
   if (isMobile.value) return {}
-  // 面板关闭或者处于文件/终端/部署/大盘页面时不设置宽度
-  if (!deviceStore.activeDeviceId || showTerminalPage.value || showDeployPage.value || showMonitorPage.value) return { width: '0px' }
+  // 面板关闭或者处于文件/终端/部署/大盘页面时不设置宽度并隐藏
+  if (deviceStore.activeDeviceIds.length === 0 || showTerminalPage.value || showDeployPage.value || showMonitorPage.value) {
+    return { width: '0px', display: 'none' }
+  }
+  const isMulti = deviceStore.activeDeviceIds.length > 1
   if (isFloating.value) {
+    const defaultMultiW = Math.min(window.innerWidth * 0.85, 1080)
+    const defaultMultiH = Math.min(window.innerHeight * 0.88, 850)
     return {
       position: 'fixed',
       left: `${floatPos.value.x}px`,
       top: `${floatPos.value.y}px`,
-      width: `${floatSize.value.w}px`,
-      height: `${floatSize.value.h}px`,
+      width: `${isMulti && !userAdjusted.value ? defaultMultiW : floatSize.value.w}px`,
+      height: `${isMulti && !userAdjusted.value ? defaultMultiH : floatSize.value.h}px`,
       transform: 'none'
     }
   }
-  return { width: `${sideWidth.value}px` }
+  const defaultSideW = isMulti && !userAdjusted.value ? Math.min(window.innerWidth * 0.65, 880) : sideWidth.value
+  return { width: `${defaultSideW}px` }
 })
 
 // 处理子组件建议的布局
@@ -739,6 +935,16 @@ const initApp = () => {
   }
 }
 
+const closeHelpMenu = () => {
+  showHelpMenu.value = false
+}
+
+const onWindowClick = () => {
+  showHelpMenu.value = false
+  showDisplayMenu.value = false
+  showMultiSelectMenu.value = false
+}
+
 const handleNavigateEvent = (e) => {
   if (e && e.detail) {
     navigateTo(e.detail)
@@ -755,7 +961,8 @@ onMounted(async () => {
   }
   expiryTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
   window.addEventListener('resize', updateMedia)
-  window.addEventListener('click', closeHelpMenu)
+  window.addEventListener('click', onWindowClick)
+  window.addEventListener('keydown', onGlobalKeyDown)
   window.addEventListener('cloudphone-navigate', handleNavigateEvent)
   updateMedia() // 确保组件挂载后瞬间重新执行检测，避免初次视口异常
 })
@@ -768,7 +975,8 @@ watch(() => authStore.isLoggedIn, (newVal) => {
 onUnmounted(() => {
   if (expiryTimer) clearInterval(expiryTimer)
   window.removeEventListener('resize', updateMedia)
-  window.removeEventListener('click', closeHelpMenu)
+  window.removeEventListener('click', onWindowClick)
+  window.removeEventListener('keydown', onGlobalKeyDown)
   window.removeEventListener('cloudphone-navigate', handleNavigateEvent)
 })
 
@@ -1446,8 +1654,536 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 }
 
 .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.top-bar { height: 60px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
-.page-title { font-size: 16px; font-weight: 600; color: #e6edf3; }
+.top-bar {
+  height: 56px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  gap: 16px;
+  position: relative;
+  z-index: 150;
+  flex-shrink: 0;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e6edf3;
+  white-space: nowrap;
+}
+
+.top-device-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  white-space: nowrap;
+}
+
+.stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.license-badge-top {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #30363d;
+  background: rgba(139, 148, 158, 0.08);
+  color: #8b949e;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.license-badge-top:hover {
+  border-color: #8b949e;
+  color: #c9d1d9;
+}
+
+.license-badge-top.badge-warn {
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border-color: rgba(210, 153, 34, 0.4);
+}
+
+.license-badge-top.badge-danger {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.1);
+  border-color: rgba(248, 81, 73, 0.4);
+}
+
+/* 居中全局搜索栏 */
+.top-bar-center {
+  flex: 1;
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.top-bar-center-placeholder {
+  flex: 1;
+}
+
+.top-search-box {
+  width: 100%;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.top-search-box:focus-within {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+.search-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.top-search-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+}
+
+.top-search-box input::placeholder {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.clear-search-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-search-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.search-shortcut-badge {
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+/* 顶部右侧 */
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.top-matrix-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: #c9d1d9;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.top-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.top-action-btn.active {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.4);
+  color: var(--accent);
+}
+
+.top-action-btn.primary-action-btn {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+}
+
+.top-action-btn.primary-action-btn:hover {
+  background: rgba(88, 166, 255, 0.2);
+  border-color: rgba(88, 166, 255, 0.5);
+}
+
+.action-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.top-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* 显示设置下拉菜单 */
+.top-dropdown-wrap {
+  position: relative;
+}
+
+.display-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 230px;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dropdown-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #8b949e;
+  letter-spacing: 0.5px;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+}
+
+.switch-row.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch-input {
+  cursor: pointer;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #30363d;
+  margin: 2px 0;
+}
+
+.dropdown-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.slider-val {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.preset-density-row {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0 6px 0;
+}
+
+.preset-density-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-density-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
+}
+
+.preset-density-btn.active {
+  background: rgba(56, 139, 253, 0.15);
+  border-color: #388bfd;
+  color: #58a6ff;
+  font-weight: 700;
+}
+
+.card-slider-input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.dropdown-view-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.view-toggle-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-toggle-opt svg {
+  width: 13px;
+  height: 13px;
+}
+
+.view-toggle-opt:hover {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.view-toggle-opt.active {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: #58a6ff;
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+/* 多机直连快速勾选下拉面板 */
+.multi-select-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 270px;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.multi-select-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #30363d;
+}
+
+.multi-select-header .panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+
+.header-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.text-tool-btn {
+  background: none;
+  border: none;
+  color: #58a6ff;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.text-tool-btn:hover {
+  text-decoration: underline;
+}
+
+.multi-select-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.multi-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #c9d1d9;
+  transition: background 0.15s;
+}
+
+.multi-select-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.select-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.item-id {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-model {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.multi-select-empty {
+  font-size: 12px;
+  color: #8b949e;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.multi-select-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #30363d;
+}
+
+.disconnect-all-btn {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  color: #f85149;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.disconnect-all-btn:hover {
+  background: rgba(248, 81, 73, 0.2);
+}
+
+.start-multi-btn {
+  background: #238636;
+  border: 1px solid #2ea44f;
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.start-multi-btn:hover:not(:disabled) {
+  background: #2ea44f;
+}
+
+.start-multi-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .global-status { color: #888; font-size: 13px; }
 .viewport { flex: 1; overflow-y: auto; padding: 12px; }
 

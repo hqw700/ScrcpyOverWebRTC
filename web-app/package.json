@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "rm -f ../assets/assets/wework.jpg && vite build",
     "build:demo": "vite build --mode demo",
     "preview": "vite preview"

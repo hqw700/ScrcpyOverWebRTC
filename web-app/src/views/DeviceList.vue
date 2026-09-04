@@ -1,143 +1,7 @@
 <template>
   <div class="device-list-page">
-    <!-- 桌面端页头（布局与功能保持原样） -->
-    <header v-if="!isMobile" class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">所有虚机</h2>
-        <span v-if="deviceStore.showOfflineOnly" class="device-count">{{ filteredOfflineDevices.length }} / {{ deviceStore.offlineDevices.length }} 台离线</span>
-        <span v-else class="device-count">{{ filteredDevices.length }} / {{ deviceStore.devices.length }} 台在线</span>
-        <!-- 授权用量徽标：点击打开授权管理面板 -->
-        <button class="license-badge" :class="licenseBadgeClass" :title="licenseBadgeTitle" @click="showLicensePanel = true">
-          {{ licenseBadgeText }}
-        </button>
-      </div>
-      
-      <div class="header-controls">
-        <div class="search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <circle cx="11" cy="11" r="7"></circle>
-            <path d="M20 20l-4-4"></path>
-          </svg>
-          <input
-            v-model="searchQuery"
-            type="search"
-            placeholder="搜索设备或标签"
-          >
-        </div>
-        <div class="size-control" v-show="viewMode === 'grid'">
-          <span class="label">卡片</span>
-          <input
-            type="range"
-            v-model="cardSize"
-            min="150"
-            max="400"
-            step="10"
-            class="size-slider"
-          >
-          <span class="size-value">{{ cardSize }}px</span>
-        </div>
-
-        <div class="preview-switches" v-if="authStore.isAdmin">
-          <div class="preview-mode-switch">
-            <label class="switch-label" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
-              <input
-                type="checkbox"
-                v-model="deviceStore.globalPreviewMode"
-                class="switch-checkbox"
-              >
-              <span class="switch-text">高频预览</span>
-            </label>
-          </div>
-
-          <div class="preview-mode-switch">
-            <label 
-              class="switch-label" 
-              :class="{ 'disabled': !deviceStore.globalPreviewMode }" 
-              title="开启后，可直接点击列表里的预览画面进行触控和按键控制，无需进入详情页 (需要先开启高频预览)"
-            >
-              <input
-                type="checkbox"
-                v-model="deviceStore.globalInteractiveMode"
-                :disabled="!deviceStore.globalPreviewMode"
-                class="switch-checkbox"
-              >
-              <span class="switch-text">预览直控</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 群控快捷工具栏 -->
-        <div v-if="authStore.isAdmin && groupControlStore.isGroupControlActive" class="group-quick-actions animate-fade-in">
-          <span class="group-mode-badge">群控主控: {{ groupControlStore.masterId }}</span>
-          <button class="action-btn-mini" @click.stop="selectAllOnline" title="全选所有在线设备">全选在线</button>
-          <button class="action-btn-mini" @click.stop="clearSlaves" title="清空已勾选设备">清空</button>
-          
-          <div class="tag-select-dropdown">
-            <button class="action-btn-mini dropdown-trigger" @click.stop="showTagDropdown = !showTagDropdown">
-              按标签勾选 ▾
-            </button>
-            <div v-if="showTagDropdown" class="tag-dropdown-menu" @click.stop>
-              <div 
-                v-for="tag in tagStore.tags" 
-                :key="tag.id" 
-                class="tag-dropdown-item"
-                @click="selectByTag(tag.id)"
-              >
-                <span class="tag-color-dot" :style="{ backgroundColor: tag.color }"></span>
-                <span class="tag-name-text">{{ tag.name }}</span>
-              </div>
-              <div v-if="tagStore.tags.length === 0" class="tag-dropdown-empty">暂无标签</div>
-            </div>
-          </div>
-          <span class="selected-count-badge">已选 {{ groupControlStore.selectedSlaveIds.length }} 台</span>
-          <button 
-            v-if="groupControlStore.selectedSlaveIds.length > 0"
-            class="action-btn-mini primary-mini-btn"
-            @click.stop="openTagManager('batch')"
-            title="批量为选中的设备打标签"
-          >
-            打标签
-          </button>
-        </div>
-
-        <div class="header-actions">
-          <button class="deploy-btn secondary view-mode-btn" @click="toggleViewMode" :title="viewMode === 'grid' ? '切换到列表视图' : '切换到卡片视图'" aria-label="切换视图">
-            <svg v-if="viewMode === 'grid'" class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-            <svg v-else class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-            <span class="btn-label">{{ viewMode === 'grid' ? '列表' : '卡片' }}</span>
-          </button>
-          <button class="deploy-btn secondary mobile-tag-action" @click="openTagManager('full')" title="标签管理" aria-label="标签管理">
-            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-              <path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path>
-              <circle cx="8.5" cy="8.5" r="1.4"></circle>
-            </svg>
-            <span class="btn-label">标签管理</span>
-          </button>
-          <button class="deploy-btn secondary" @click="openGlobalSettings" title="全局默认设置" aria-label="全局设置" v-if="authStore.isAdmin">
-            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.3 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.3 2.7h4.4l.3-2.7a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"></path>
-            </svg>
-            <span class="btn-label">全局设置</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <!-- 移动端紧凑页头：两行高密度控件 -->
-    <header v-else class="page-header mobile-header">
+    <!-- 移动端紧凑页头：两行高密度控件 (桌面端已合并至全局顶栏) -->
+    <header v-if="isMobile" class="page-header mobile-header">
       <!-- 单行紧凑页头：批量入口（admin）/ 标签 / 排序 / 宫格 / 搜索 / 刷新 / 视图切换 -->
       <div class="mh-row">
         <!-- 批量操作弹层（仅 admin）：群控 + 预览开关 + 标签管理/全局设置 -->
@@ -363,6 +227,66 @@
         </button>
       </section>
 
+      <!-- 群控快捷操作工具条 (Group Control Toolbar) -->
+      <section v-if="groupControlStore.isGroupControlActive" class="group-control-bar animate-fade-in" @click.stop>
+        <div class="gc-bar-left">
+          <span class="gc-brand-badge">⚡ 群控模式</span>
+          <button class="gc-btn" @click.stop="selectAllOnline" title="全选所有在线虚机">
+            全选在线
+          </button>
+          <button class="gc-btn" @click.stop="clearSlaves" title="清空所有已选从机">
+            清空已选
+          </button>
+
+          <!-- 按标签勾选下拉菜单 -->
+          <div class="gc-tag-dropdown-wrap" @click.stop>
+            <button class="gc-btn gc-dropdown-btn" @click.stop="showTagDropdown = !showTagDropdown">
+              <span>按标签勾选 ▾</span>
+            </button>
+            <div v-if="showTagDropdown" class="gc-tag-dropdown-menu" @click.stop>
+              <div 
+                v-for="tag in tagStore.tags" 
+                :key="tag.id" 
+                class="gc-tag-item"
+                @click="selectByTag(tag.id)"
+              >
+                <span class="gc-tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                <span class="gc-tag-name">{{ tag.name }}</span>
+              </div>
+              <div v-if="tagStore.tags.length === 0" class="gc-tag-empty">暂无可用标签</div>
+            </div>
+          </div>
+
+          <span class="gc-count-badge">已勾选 {{ groupControlStore.selectedSlaveIds.length }} 台从机</span>
+
+          <!-- 预览直控按键 -->
+          <button 
+            class="gc-btn gc-interactive-btn"
+            :class="{ active: deviceStore.globalInteractiveMode }"
+            @click.stop="toggleGlobalInteractive"
+            title="开启后可直接在大盘预览画面上触控操作，无需进入详情页"
+          >
+            <span class="gc-btn-icon">🎮</span>
+            <span>预览直控 {{ deviceStore.globalInteractiveMode ? '已开启' : '已关闭' }}</span>
+          </button>
+
+          <button 
+            v-if="groupControlStore.selectedSlaveIds.length > 0"
+            class="gc-btn gc-tag-action-btn"
+            @click="openTagManager('batch')"
+            title="对已勾选设备批量打标签"
+          >
+            🏷 批量打标签
+          </button>
+        </div>
+
+        <div class="gc-bar-right">
+          <button class="gc-exit-btn" @click="groupControlStore.toggleGroupControl(false)" title="退出群控模式">
+            退出群控 ✕
+          </button>
+        </div>
+      </section>
+
       <main class="grid-container">
         <div v-if="deviceStore.loading && deviceStore.devices.length === 0" class="state-view">
           <div class="spinner"></div>
@@ -534,10 +458,85 @@ cpctl restart</pre>
         </div>
 
         <div v-else>
-          <!-- 列表视图（参考 Android 端列表模式：缩略图 + 名称/型号/状态 + 箭头） -->
-          <template v-if="viewMode === 'list'">
-            <div v-if="deviceStore.showOfflineOnly" class="device-list-view">
-              <DeviceListItem
+          <!-- 高密运维数据表格视图 -->
+          <template v-if="isTableView">
+            <div class="device-table-container">
+              <div class="device-table-header">
+                <div class="th col-select">
+                  <span v-if="groupControlStore.isGroupControlActive">
+                    <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" title="全选/取消全选" class="header-checkbox" />
+                  </span>
+                </div>
+                <div class="th col-thumb">预览</div>
+                <div class="th col-device sortable" @click="handleTableSort('id')" title="点击排序">
+                  设备标识 <span class="sort-icon">{{ getSortIcon('id') }}</span>
+                </div>
+                <div class="th col-status sortable" @click="handleTableSort('status')" title="点击排序">
+                  运行状态 <span class="sort-icon">{{ getSortIcon('status') }}</span>
+                </div>
+                <div class="th col-clients">接入情况</div>
+                <div class="th col-metrics sortable" @click="handleTableSort('cpu')" title="点击按 CPU 占用排序">
+                  系统负载 <span class="sort-icon">{{ getSortIcon('cpu') }}</span>
+                </div>
+                <div class="th col-tags">标签</div>
+                <div class="th col-actions">快捷操作</div>
+              </div>
+
+              <div class="device-table-body">
+                <template v-if="deviceStore.showOfflineOnly">
+                  <DeviceListItem
+                    v-for="device in sortedOfflineDevices"
+                    :key="device.id"
+                    :device="device"
+                    :tags="tagStore.getTagsForDevice(device.id)"
+                    @connect="connectDevice"
+                    @settings="openSettings"
+                    @edit-tags="id => openTagManager('single', id)"
+                    @share="openShareModal"
+                  />
+                </template>
+                <template v-else>
+                  <DeviceListItem
+                    v-for="device in sortedDevices"
+                    :key="device.id"
+                    :device="device"
+                    :tags="tagStore.getTagsForDevice(device.id)"
+                    @connect="connectDevice"
+                    @settings="openSettings"
+                    @edit-tags="id => openTagManager('single', id)"
+                    @share="openShareModal"
+                  />
+
+                  <!-- 离线设备分区（在表格中直接无缝衔接） -->
+                  <template v-if="sortedOfflineDevices.length > 0">
+                    <div class="table-offline-divider">
+                      <span>离线设备 ({{ sortedOfflineDevices.length }})</span>
+                    </div>
+                    <DeviceListItem
+                      v-for="device in sortedOfflineDevices"
+                      :key="device.id"
+                      :device="device"
+                      :tags="tagStore.getTagsForDevice(device.id)"
+                      @connect="connectDevice"
+                      @settings="openSettings"
+                      @edit-tags="id => openTagManager('single', id)"
+                      @share="openShareModal"
+                    />
+                  </template>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <!-- 卡片网格视图 -->
+          <template v-else>
+            <!-- 离线筛选视图：只显示离线设备 -->
+            <div
+              v-if="deviceStore.showOfflineOnly"
+              class="device-grid offline-grid"
+              :style="{ gridTemplateColumns: gridColumnsStyle }"
+            >
+              <DeviceCard
                 v-for="device in filteredOfflineDevices"
                 :key="device.id"
                 :device="device"
@@ -545,12 +544,15 @@ cpctl restart</pre>
                 @connect="connectDevice"
                 @settings="openSettings"
                 @edit-tags="id => openTagManager('single', id)"
-                @share="openShareModal"
               />
             </div>
             <template v-else>
-              <div v-if="filteredDevices.length > 0" class="device-list-view">
-                <DeviceListItem
+              <div 
+                v-if="filteredDevices.length > 0"
+                class="device-grid" 
+                :style="{ gridTemplateColumns: gridColumnsStyle }"
+              >
+                <DeviceCard
                   v-for="device in filteredDevices"
                   :key="device.id"
                   :device="device"
@@ -568,8 +570,11 @@ cpctl restart</pre>
                   <span class="offline-section-title">离线设备</span>
                   <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
                 </div>
-                <div class="device-list-view">
-                  <DeviceListItem
+                <div 
+                  class="device-grid offline-grid" 
+                  :style="{ gridTemplateColumns: gridColumnsStyle }"
+                >
+                  <DeviceCard
                     v-for="device in filteredOfflineDevices"
                     :key="device.id"
                     :device="device"
@@ -582,67 +587,6 @@ cpctl restart</pre>
                 </div>
               </div>
             </template>
-          </template>
-
-          <!-- 卡片网格视图 -->
-          <template v-else>
-          <!-- 离线筛选视图：只显示离线设备 -->
-          <div
-            v-if="deviceStore.showOfflineOnly"
-            class="device-grid offline-grid"
-            :style="{ gridTemplateColumns: gridColumnsStyle }"
-          >
-            <DeviceCard
-              v-for="device in filteredOfflineDevices"
-              :key="device.id"
-              :device="device"
-              :tags="tagStore.getTagsForDevice(device.id)"
-              @connect="connectDevice"
-              @settings="openSettings"
-              @edit-tags="id => openTagManager('single', id)"
-            />
-          </div>
-          <template v-else>
-            <div 
-              v-if="filteredDevices.length > 0"
-              class="device-grid" 
-              :style="{ gridTemplateColumns: gridColumnsStyle }"
-            >
-              <DeviceCard
-                v-for="device in filteredDevices"
-                :key="device.id"
-                :device="device"
-                :tags="tagStore.getTagsForDevice(device.id)"
-                @connect="connectDevice"
-                @settings="openSettings"
-                @edit-tags="id => openTagManager('single', id)"
-                @share="openShareModal"
-              />
-            </div>
-
-            <!-- 离线设备区块（数据来自服务端离线记录） -->
-            <div v-if="filteredOfflineDevices.length > 0" class="offline-section">
-              <div class="offline-section-header">
-                <span class="offline-section-title">离线设备</span>
-                <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
-              </div>
-              <div 
-                class="device-grid offline-grid" 
-                :style="{ gridTemplateColumns: gridColumnsStyle }"
-              >
-                <DeviceCard
-                  v-for="device in filteredOfflineDevices"
-                  :key="device.id"
-                  :device="device"
-                  :tags="tagStore.getTagsForDevice(device.id)"
-                  @connect="connectDevice"
-                  @settings="openSettings"
-                  @edit-tags="id => openTagManager('single', id)"
-                  @share="openShareModal"
-                />
-              </div>
-            </div>
-          </template>
           </template>
         </div>
       </main>
@@ -752,18 +696,25 @@ function openShareModal(deviceId) {
   shareTargetDeviceId.value = deviceId
   shareModalVisible.value = true
 }
-const savedCardSize = localStorage.getItem('cloudphone_card_size')
-const cardSize = ref(savedCardSize ? parseInt(savedCardSize, 10) : 280)
-const searchQuery = ref('')
+const cardSize = computed(() => deviceStore.cardSize)
+const searchQuery = computed({
+  get: () => deviceStore.searchQuery,
+  set: (v) => { deviceStore.searchQuery = v }
+})
 const showTagDropdown = ref(false)
-
-// 视图模式：grid=卡片网格，list=列表（参考 Android 端的卡片/列表切换）
-const savedViewMode = localStorage.getItem('cloudphone_view_mode')
-const viewMode = ref(savedViewMode === 'list' ? 'list' : 'grid')
+const viewMode = computed(() => deviceStore.viewMode)
 
 function toggleViewMode() {
-  viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid'
-  localStorage.setItem('cloudphone_view_mode', viewMode.value)
+  deviceStore.toggleViewMode()
+}
+
+function openMultiDirectControl() {
+  if (deviceStore.activeDeviceIds.length === 0) {
+    const online = deviceStore.onlineDevices.slice(0, 2)
+    if (online.length > 0) {
+      online.forEach(d => deviceStore.openDevice(d.id))
+    }
+  }
 }
 
 // 移动端检测（写法与 App.vue 的 isMobile 保持一致）
@@ -857,6 +808,15 @@ function clearSlaves() {
 function selectByTag(tagId) {
   groupControlStore.selectByTag(tagId, deviceStore.devices, tagStore)
   showTagDropdown.value = false
+}
+
+function toggleGlobalInteractive() {
+  if (!deviceStore.globalInteractiveMode) {
+    deviceStore.globalPreviewMode = true
+    deviceStore.globalInteractiveMode = true
+  } else {
+    deviceStore.globalInteractiveMode = false
+  }
 }
 
 // 点击页面空白处收起所有下拉（群控标签勾选 + 移动端页头下拉）
@@ -977,6 +937,73 @@ const filteredOfflineDevices = computed(() => {
   })
 })
 
+// 视图判断（兼容 table 与 list 模式名）
+const isTableView = computed(() => ['table', 'list'].includes(deviceStore.viewMode))
+
+const tableSortField = ref('id') // 'id' | 'status' | 'cpu' | 'lastSeen'
+const tableSortAsc = ref(true)
+
+function handleTableSort(field) {
+  if (tableSortField.value === field) {
+    tableSortAsc.value = !tableSortAsc.value
+  } else {
+    tableSortField.value = field
+    tableSortAsc.value = field === 'id'
+  }
+}
+
+function getSortIcon(field) {
+  if (tableSortField.value !== field) return '↕'
+  return tableSortAsc.value ? '▲' : '▼'
+}
+
+const isAllSelected = computed(() => {
+  const online = filteredDevices.value.filter(d => d.status === 'online')
+  return online.length > 0 && online.every(d => groupControlStore.selectedSlaveIds.includes(d.id))
+})
+
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    groupControlStore.clearSlaves()
+  } else {
+    groupControlStore.selectAllOnline(filteredDevices.value)
+  }
+}
+
+const sortedDevices = computed(() => {
+  const list = [...filteredDevices.value]
+  return list.sort((a, b) => {
+    let res = 0
+    if (tableSortField.value === 'id') {
+      res = a.id.localeCompare(b.id)
+    } else if (tableSortField.value === 'status') {
+      const aVal = a.status === 'online' ? 1 : 0
+      const bVal = b.status === 'online' ? 1 : 0
+      res = bVal - aVal
+    } else if (tableSortField.value === 'cpu') {
+      const aVal = a.metrics?.cpu || 0
+      const bVal = b.metrics?.cpu || 0
+      res = aVal - bVal
+    } else if (tableSortField.value === 'lastSeen') {
+      res = lastSeenTime(a) - lastSeenTime(b)
+    }
+    return tableSortAsc.value ? res : -res
+  })
+})
+
+const sortedOfflineDevices = computed(() => {
+  const list = [...filteredOfflineDevices.value]
+  return list.sort((a, b) => {
+    let res = 0
+    if (tableSortField.value === 'id') {
+      res = a.id.localeCompare(b.id)
+    } else {
+      res = lastSeenTime(a) - lastSeenTime(b)
+    }
+    return tableSortAsc.value ? res : -res
+  })
+})
+
 // 当前视图是否无可展示设备（离线筛选模式下只看离线列表）
 const noVisibleDevices = computed(() => {
   if (deviceStore.showOfflineOnly) {
@@ -1032,9 +1059,8 @@ function saveSettings(newSettings) {
   
   if (selectedDeviceId.value) {
     connectDevice(selectedDeviceId.value)
-  } else {
-    closeSettings()
   }
+  closeSettings()
 }
 
 function resetSettings() {
@@ -1166,6 +1192,14 @@ function toggleSelectedTag(tagId) {
   deviceStore.showOfflineOnly = false
 }
 
+function handleOpenGlobalSettingsEvent() {
+  openGlobalSettings()
+}
+
+function handleOpenTagManagerEvent(e) {
+  openTagManager(e?.detail?.mode || 'full')
+}
+
 onMounted(async () => {
   quickstartSignaling.value = window.location.host
   deviceStore.fetchDevices()
@@ -1173,84 +1207,31 @@ onMounted(async () => {
     deviceStore.fetchDevices()
   }, 10000)
   window.addEventListener('cloudphone-open-tag-manager', handleOpenTagManagerEvent)
+  window.addEventListener('open-tag-manager', handleOpenTagManagerEvent)
+  window.addEventListener('open-global-settings', handleOpenGlobalSettingsEvent)
   await fetchIceServers()
 })
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
   window.removeEventListener('cloudphone-open-tag-manager', handleOpenTagManagerEvent)
+  window.removeEventListener('open-tag-manager', handleOpenTagManagerEvent)
+  window.removeEventListener('open-global-settings', handleOpenGlobalSettingsEvent)
 })
 
 function connectDevice(deviceId) {
+  // 默认卡片或列表点击均以屏幕连接为主，若未显式指定模式则确保为 display
+  if (!deviceStore.getDeviceMode(deviceId)) {
+    deviceStore.setDeviceMode(deviceId, 'display')
+  }
   deviceStore.setActiveDevice(deviceId)
-}
-
-function handleOpenTagManagerEvent() {
-  openTagManager('full')
 }
 </script>
 
 <style scoped>
 .device-list-page {
-  padding: 24px;
+  padding: 16px 20px;
   min-height: 100%;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.device-count {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* 授权用量徽标 */
-.license-badge {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid #30363d;
-  background: rgba(139, 148, 158, 0.08);
-  color: #8b949e;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.license-badge:hover {
-  border-color: #8b949e;
-  color: #c9d1d9;
-}
-
-.license-badge.badge-warn {
-  color: #d29922;
-  background: rgba(210, 153, 34, 0.1);
-  border-color: rgba(210, 153, 34, 0.4);
-}
-
-.license-badge.badge-danger {
-  color: #f85149;
-  background: rgba(248, 81, 73, 0.1);
-  border-color: rgba(248, 81, 73, 0.4);
 }
 
 /* 虚机数量超限警告条 */
@@ -1307,79 +1288,6 @@ function handleOpenTagManagerEvent() {
 .limit-close-btn:hover {
   color: #c9d1d9;
   background: rgba(255, 255, 255, 0.08);
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.search-box {
-  width: 260px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-}
-
-.search-box:focus-within {
-  border-color: var(--accent);
-}
-
-.search-box svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-}
-
-.search-box input {
-  min-width: 0;
-  flex: 1;
-  color: var(--text-primary);
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 13px;
-}
-
-.search-box input::placeholder {
-  color: var(--text-secondary);
-}
-
-.deploy-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  height: 36px;
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  padding: 0 12px;
-  border-radius: 7px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.toolbar-icon,
-.btn-label {
-  display: inline-flex;
-  align-items: center;
-}
-
-.toolbar-icon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
 }
 
 .deploy-btn.secondary {
@@ -1583,12 +1491,228 @@ function handleOpenTagManagerEvent() {
   width: 100%;
 }
 
-.device-grid {
-  display: grid;
-  gap: 20px;
+/* 群控模式快捷工具条 */
+.group-control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(90deg, rgba(255, 159, 67, 0.12) 0%, rgba(26, 115, 232, 0.08) 100%);
+  border: 1px solid rgba(255, 159, 67, 0.35);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 50;
 }
 
-/* 列表视图 */
+.gc-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gc-brand-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff9f43;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gc-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary, #f1f5f9);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gc-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.gc-btn.gc-interactive-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.gc-tag-dropdown-wrap {
+  position: relative;
+  z-index: 60;
+}
+
+.gc-tag-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  background: #161b22;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  min-width: 150px;
+  padding: 6px 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.gc-tag-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 12px;
+  color: #f1f5f9;
+}
+
+.gc-tag-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gc-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gc-tag-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-tag-empty {
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+}
+
+.gc-count-badge {
+  font-size: 11px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.gc-tag-action-btn {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.gc-exit-btn {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  color: #f85149;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gc-exit-btn:hover {
+  background: rgba(248, 81, 73, 0.25);
+  border-color: rgba(248, 81, 73, 0.5);
+}
+
+.device-grid {
+  display: grid;
+  gap: 16px;
+  grid-auto-flow: dense;
+}
+
+/* 高密运维数据表格 */
+.device-table-container {
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  width: 100%;
+}
+
+.device-table-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(13, 17, 23, 0.85);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary, #94a3b8);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.th {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.th.sortable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.th.sortable:hover {
+  color: #f1f5f9;
+}
+
+.sort-icon {
+  font-size: 9px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.header-checkbox {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent, #388bfd);
+}
+
+.table-offline-divider {
+  padding: 8px 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 列表视图向后兼容 */
 .device-list-view {
   display: flex;
   flex-direction: column;

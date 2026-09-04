@@ -14,16 +14,17 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
-- **Ultimate Smoothness**: Utilizes Zero-Search Parsing, avoiding any new memory copies. Performance is practically identical to native scrcpy.
-- **Public Network Enhancement**: Native support for IPv6 direct connection, completely bypassing carrier CGNAT blockades, significantly improving NAT hole punching success rates under mobile networks.
-- **All-Around Interaction**: Supports multi-finger touch, physical key simulation, custom key mappings (mapping keyboard keys to screen actions), WebADB console, and real-time snapshots.
-- **Dynamic Control**: Dynamically modify device resolution, bitrate, framerate, and toggle BWE (Bandwidth Estimation) dynamic bitrate from the UI panel, either before or after connecting.
-- **One-Click Deployment**: Supports deploying the Agent directly to physical devices via browser using WebUSB/WebADB. No local ADB environment required.
-- **Direct Web Access**: Supports connection from any OS (iOS/Android/Windows/Mac/Linux) simply via a web browser.
-- **Group Control**: High-sync rate group control, sub-machines support high frame rate previews.
-- **Magisk Module**: The Agent can be flashed as a Magisk / KernelSU / APatch module, running as a system service with auto-start on boot, and ships with the `cpctl` console for computer-free hot configuration.
-- **Android App**: The official App works as both controller and controlled end: as a controller, it connects to the dashboard to view and control cloud phones (multi-touch, hardware keys, camera passthrough); as a controlled end, its built-in Controlled Mode runs the Agent directly on the phone via Root or Shizuku (ADB) engines — no computer needed. With Standalone Mode enabled, even the server runs inside the phone.
-- **Full Device Compatibility**: Broadly compatible with physical Android phones (Rooted / Non-Rooted), Android emulators, redroid virtualized containers, and commercial cloud phone environments.
+- **Ultimate Smoothness**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring both WebCodecs phase-locked hardware rendering (matching native Scrcpy) and standard HTML5 video engines.
+- **Direct Public Network Access**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P NAT hole punching with automatic TURN relay fallback.
+- **Multi-Device Matrix**: (v0.3.5) Concurrent direct control of multiple devices with Grid, Tabs, Master-Slave, and Floating window layouts, with strict input focus and audio isolation.
+- **Surveillance Camera Mode**: (v0.3.5) Screen-off hardware camera streaming for physical phones, dedicated monitoring console with multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
+- **All-Around Interaction**: Multi-touch, physical key simulation, visual keymapping, IME Chinese input passthrough, silent bidirectional clipboard, and WebADB console.
+- **Efficient Group Control**: Millisecond-level group sync with canvas direct touch, dynamic aspect-ratio adaptation, compact data grid view with hover popover preview.
+- **Dynamic Control**: On-the-fly adjustment of resolution, bitrate, framerate, and BWE congestion control; supports device audio direct capture and microphone monitoring.
+- **One-Click Driverless Deployment**: Zero client needed (iOS/Android/PC/Mac); supports WebUSB/WebADB one-click deployment from browser, and Magisk/KernelSU boot-start modules.
+- **Integrated Android App**: Official App acts as both controller and controlled end; controlled mode supports Root and Shizuku driverless boot, plus standalone embedded server mode.
+- **Secure Device Sharing**: Share devices via passwordless links or card keys, with expiration time, permission controls, and active session management.
+- **Broad Ecosystem Compatibility**: Compatible with physical Android phones (Root / Non-Root), emulators, redroid containers, and commercial cloud phones.
 
 ## 2. Quick Start
 

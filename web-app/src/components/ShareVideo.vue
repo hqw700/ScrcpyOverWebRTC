@@ -234,7 +234,14 @@ function buildOptions() {
     audio_source: s.audioSource,
     audio_dup: s.audioDup,
     audio_low_latency: s.audioLowLatency,
-    power_off: s.powerOff
+    power_off: s.powerOff,
+    video_source: s.videoSource,
+    camera_facing: s.cameraFacing,
+    camera_id: s.cameraId,
+    camera_size: s.cameraSize,
+    camera_fps: s.cameraFps,
+    camera_high_speed: s.cameraHighSpeed,
+    camera_ar: s.cameraAr
   }
 }
 

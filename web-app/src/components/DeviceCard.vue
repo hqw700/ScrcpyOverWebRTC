@@ -3,28 +3,79 @@
     class="device-card" 
     ref="cardElement" 
     :data-device-id="device.id" 
-    :class="{ 'is-interactive-mode': deviceStore.globalInteractiveMode && device.status === 'online' }"
+    :class="{ 
+      'is-interactive-mode': deviceStore.globalInteractiveMode && device.status === 'online',
+      'is-landscape': isLandscape,
+      'is-landscape-grid': isLandscape
+    }"
+    :style="{ '--aspect-ratio': dynamicAspectRatio }"
     @click="onCardClick"
   >
     <div class="preview-area" :class="{ 'is-landscape': isLandscape }">
+      <!-- 微光背景（填补异形屏边缘，消除黑边突兀感） -->
+      <div v-if="currentSnapshot" class="ambient-glow-bg" :style="ambientBgStyle"></div>
+
       <!-- 展示快照或占位图 -->
       <img v-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" />
       <div v-else-if="!currentSnapshot && !isPreviewActive" class="snapshot-placeholder">
         <span class="vm-icon">💻</span>
       </div>
+
       <!-- Canvas 用于高频预览模式下的硬件解码播放 -->
       <canvas
         v-show="isPreviewActive"
         ref="previewCanvas"
         class="snapshot-img"
-        :class="{ 'is-landscape': isLandscape }"
       ></canvas>
-      <!-- 使用中遮罩：顶部高亮条显示接入者（用户名/访客卡密）与剩余时间 -->
-      <div v-if="device.clientCount > 0" class="in-use-overlay" :title="inUseTitle">
-        <div v-if="primaryClientText" class="in-use-top">{{ primaryClientText }}</div>
-        <span class="in-use-text">使用中</span>
-        <span class="in-use-sub">{{ device.clientCount }} 个连接</span>
+
+      <!-- 顶部醒目“使用中”提示条 -->
+      <div v-if="device.clientCount > 0" class="in-use-banner" :title="inUseTitle" @click.stop>
+        <span class="in-use-pulse"></span>
+        <span class="in-use-text">{{ primaryClientText }}</span>
       </div>
+
+      <!-- 顶部右侧快捷操作区：群控勾选 + 三点菜单 -->
+      <div class="card-header-right" @click.stop>
+        <!-- 群控标识/勾选框 -->
+        <div v-if="groupControlStore.isGroupControlActive && device.status === 'online'" class="group-select-wrap">
+          <span v-if="groupControlStore.masterId === device.id" class="master-badge">主控</span>
+          <template v-else>
+            <input 
+              type="checkbox" 
+              :id="`group-select-${device.id}`" 
+              :checked="groupControlStore.selectedSlaveIds.includes(device.id)"
+              @change="onSlaveCheckboxChange"
+              class="group-select-checkbox"
+            />
+            <label :for="`group-select-${device.id}`"></label>
+          </template>
+        </div>
+        <!-- 功能菜单按钮 -->
+        <button class="card-menu-btn" @click.stop="toggleMenu" title="更多操作">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="4" cy="8" r="1.5"/>
+            <circle cx="8" cy="8" r="1.5"/>
+            <circle cx="12" cy="8" r="1.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 群控主控制轻量边框徽标（不再全屏蒙版） -->
+      <div v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-indicator">
+        <span class="master-indicator-pill">群控·主控端</span>
+      </div>
+
+      <!-- 隐藏的预加载图片 -->
+      <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
+
+      <!-- Hover 点击进入控制提示 -->
+      <div class="hover-action-overlay" v-if="!deviceStore.globalInteractiveMode && device.status === 'online'">
+        <span class="play-hint">进入控制</span>
+      </div>
+      <div class="hover-action-overlay offline" v-else-if="device.status !== 'online'">
+        <span class="play-hint offline-hint">离线</span>
+      </div>
+
       <!-- 预览直控覆盖交互层 -->
       <div
         v-if="deviceStore.globalInteractiveMode && device.status === 'online'"
@@ -40,7 +91,7 @@
       >
         <!-- 悬浮毛玻璃虚拟按键栏 -->
         <div class="virtual-navbar" @pointerdown.stop @pointerup.stop @click.stop>
-          <button class="nav-btn connect-btn" @click="emit('connect', device.id)" title="进入详情控制">
+          <button class="nav-btn connect-btn" @click="deviceStore.setDeviceMode(device.id, 'display'); emit('connect', device.id)" title="进入详情控制">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
           </button>
           <button class="nav-btn" @click="sendKey(4)" title="返回 (BACK)">
@@ -54,45 +105,13 @@
           </button>
         </div>
       </div>
-      <!-- 群控主控制遮罩（大字号+半透明） -->
-      <div v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-full-overlay">
-        <span class="master-full-text">主控</span>
-      </div>
-      <!-- 群控标识/勾选框 -->
-      <div v-if="groupControlStore.isGroupControlActive && device.status === 'online'" class="group-select-overlay" @click.stop>
-        <span v-if="groupControlStore.masterId === device.id" class="master-badge">主控</span>
-        <template v-else>
-          <input 
-            type="checkbox" 
-            :id="`group-select-${device.id}`" 
-            :checked="groupControlStore.selectedSlaveIds.includes(device.id)"
-            @change="onSlaveCheckboxChange"
-            class="group-select-checkbox"
-          />
-          <label :for="`group-select-${device.id}`"></label>
-        </template>
-      </div>
-      <!-- 隐藏的预加载图片 -->
-      <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
-      <div class="overlay" v-if="!deviceStore.globalInteractiveMode && device.status === 'online'">
-        <span class="play-hint">点击进入控制</span>
-      </div>
-      <div class="overlay" v-else-if="device.status !== 'online'">
-        <span class="play-hint offline-hint">设备离线</span>
-      </div>
-      <!-- 悬浮页脚 -->
-      <div class="card-footer-overlay" @click.stop>
-        <div class="device-main-info">
-          <h3 class="device-id-text" :title="device.id">{{ device.id }}</h3>
-          <span class="status-badge" :class="statusClass">
-            {{ statusText }}
-          </span>
-        </div>
-        <div v-if="device.info?.model" class="device-meta">
-          <span class="model-name">{{ device.info.model }}</span>
-        </div>
-        <div v-if="device.status !== 'online' && lastSeenText" class="device-meta">
-          <span class="model-name offline-last-seen">最后在线: {{ lastSeenText }}</span>
+      <!-- 底部元信息栏 (Bottom Bar: 状态圆点 + 设备 ID + 标签) -->
+      <div class="card-bottom-bar" @click.stop>
+        <div class="bottom-left-info">
+          <span class="status-dot" :class="statusClass"></span>
+          <span class="device-name" :title="device.id">{{ device.id }}</span>
+          <span v-if="isCameraMode" class="camera-mode-badge" title="当前设备正在以摄像头监控模式运行">📷 监控中</span>
+          <span v-if="device.status !== 'online' && lastSeenText" class="offline-last-seen" :title="lastSeenText">{{ lastSeenText }}</span>
         </div>
         <div v-if="tags.length > 0" class="device-tags">
           <span
@@ -108,19 +127,19 @@
             +{{ hiddenTagCount }}
           </span>
         </div>
-        <!-- 功能菜单按钮 -->
-        <button class="menu-btn" @click.stop="toggleMenu" title="更多操作">
-          <svg viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="4" cy="8" r="1.5"/>
-            <circle cx="8" cy="8" r="1.5"/>
-            <circle cx="12" cy="8" r="1.5"/>
-          </svg>
-        </button>
       </div>
     </div>
 
     <!-- 下拉菜单 -->
     <div v-if="showMenu" class="card-menu" @click.stop>
+      <button class="menu-item" @click.stop="onAddToMulti" v-if="device.status === 'online'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="8" height="18" rx="2"></rect><rect x="14" y="3" width="8" height="18" rx="2"></rect></svg>
+        加入多机直连
+      </button>
+      <button class="menu-item" @click.stop="onCameraSettings" v-if="device.status === 'online'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        摄像头监控模式
+      </button>
       <button class="menu-item" @click.stop="onSettings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         连接设置
@@ -167,7 +186,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['connect', 'settings', 'edit-tags', 'share'])
+const emit = defineEmits(['connect', 'settings', 'camera-settings', 'edit-tags', 'share'])
 const deviceStore = useDeviceStore()
 const groupControlStore = useGroupControlStore()
 const authStore = useAuthStore()
@@ -201,19 +220,32 @@ const inUseTitle = computed(() => {
   return lines.length ? `当前接入：\n${lines.join('\n')}` : `当前有 ${props.device.clientCount} 个连接`
 })
 
+const snapshotWidth = ref(0)
+const snapshotHeight = ref(0)
+
+function updateSnapshotDimensions(url) {
+  if (!url) {
+    snapshotWidth.value = 0
+    snapshotHeight.value = 0
+    return
+  }
+  const img = new Image()
+  img.onload = () => {
+    snapshotWidth.value = img.naturalWidth || 0
+    snapshotHeight.value = img.naturalHeight || 0
+  }
+  img.src = url
+}
+
 const isLandscape = computed(() => {
-  // 建立响应式依赖
-  const loaded = imgLoaded.value
-  
   const canvas = previewCanvas.value
-  // 只有当高频预览处于活动状态，并且首帧已经成功渲染（即 Canvas 已经被赋予了实际图像大小，排排除默认 300x150 大小的影响）时，才采用 Canvas 的高宽判断
+  // 只有当高频预览处于活动状态，并且首帧已经成功渲染时，才采用 Canvas 的高宽判断
   if (isPreviewActive.value && isFirstFrameRendered.value && canvas && canvas.width && canvas.height) {
     return canvas.width > canvas.height
   }
   
-  const img = cardElement.value?.querySelector('.snapshot-img:not(canvas)')
-  if (img && img.naturalWidth && img.naturalHeight) {
-    return img.naturalWidth > img.naturalHeight
+  if (snapshotWidth.value > 0 && snapshotHeight.value > 0) {
+    return snapshotWidth.value > snapshotHeight.value
   }
   
   const display = props.device.info?.displays?.[0]
@@ -221,6 +253,30 @@ const isLandscape = computed(() => {
     return display.x_res > display.y_res
   }
   return false
+})
+
+const dynamicAspectRatio = computed(() => {
+  const canvas = previewCanvas.value
+  if (isPreviewActive.value && isFirstFrameRendered.value && canvas && canvas.width && canvas.height) {
+    return `${canvas.width} / ${canvas.height}`
+  }
+  if (snapshotWidth.value > 0 && snapshotHeight.value > 0) {
+    return `${snapshotWidth.value} / ${snapshotHeight.value}`
+  }
+  const display = props.device.info?.displays?.[0]
+  if (display && display.x_res && display.y_res) {
+    return `${display.x_res} / ${display.y_res}`
+  }
+  return isLandscape.value ? '16 / 9' : '9 / 16'
+})
+
+const ambientBgStyle = computed(() => {
+  if (currentSnapshot.value) {
+    return {
+      backgroundImage: `url(${currentSnapshot.value})`
+    }
+  }
+  return {}
 })
 
 function onSlaveCheckboxChange() {
@@ -237,6 +293,7 @@ const cardElement = ref(null)
 
 watch(() => props.device.snapshot, (newSnapshot) => {
   if (newSnapshot) {
+    updateSnapshotDimensions(newSnapshot)
     if (!currentSnapshot.value) {
       currentSnapshot.value = newSnapshot
     } else {
@@ -245,18 +302,25 @@ watch(() => props.device.snapshot, (newSnapshot) => {
   } else {
     currentSnapshot.value = ''
     nextSnapshotUrl.value = ''
+    snapshotWidth.value = 0
+    snapshotHeight.value = 0
   }
-})
+}, { immediate: true })
 
 function onNextSnapshotLoaded() {
   if (nextSnapshotUrl.value) {
     currentSnapshot.value = nextSnapshotUrl.value
+    updateSnapshotDimensions(nextSnapshotUrl.value)
     nextSnapshotUrl.value = ''
   }
 }
 
 function onImageLoad(event) {
   imgLoaded.value = true
+  if (event?.target) {
+    snapshotWidth.value = event.target.naturalWidth || 0
+    snapshotHeight.value = event.target.naturalHeight || 0
+  }
 }
 
 const statusClass = computed(() => {
@@ -265,6 +329,10 @@ const statusClass = computed(() => {
 
 const statusText = computed(() => {
   return props.device.status === 'online' ? '在线' : '离线'
+})
+
+const isCameraMode = computed(() => {
+  return deviceStore.getDeviceMode(props.device.id) === 'camera' && deviceStore.activeDeviceIds.includes(props.device.id)
 })
 
 const lastSeenText = computed(() => {
@@ -277,12 +345,24 @@ const lastSeenText = computed(() => {
 const visibleTags = computed(() => props.tags.slice(0, 3))
 const hiddenTagCount = computed(() => Math.max(0, props.tags.length - visibleTags.value.length))
 
-function onCardClick() {
+function onCardClick(e) {
   // 离线设备不进入控制页（服务端会拒绝 TypeConnect）
   if (props.device.status !== 'online') return
   if (!showMenu.value) {
-    emit('connect', props.device.id)
+    // 默认点击卡片始终以屏幕连接为主
+    deviceStore.setDeviceMode(props.device.id, 'display')
+    if (e && (e.ctrlKey || e.metaKey || deviceStore.activeDeviceIds.length > 0)) {
+      deviceStore.openDevice(props.device.id)
+    } else {
+      emit('connect', props.device.id)
+    }
   }
+}
+
+function onAddToMulti() {
+  showMenu.value = false
+  deviceStore.setDeviceMode(props.device.id, 'display')
+  deviceStore.openDevice(props.device.id)
 }
 
 function toggleMenu() {
@@ -292,6 +372,12 @@ function toggleMenu() {
 function onShareDevice() {
   showMenu.value = false
   emit('share', props.device.id)
+}
+
+function onCameraSettings() {
+  showMenu.value = false
+  // 方案 A：一键直通专属安防监控大屏，右侧控制台自由换镜与调分辨率
+  deviceStore.openDeviceAsCamera(props.device.id)
 }
 
 function onSettings() {
@@ -688,7 +774,8 @@ function stopPreviewFlow() {
 // 监控全局预览开关和可视区域变化
 function evaluatePreviewState() {
   const isOnline = props.device.status === 'online'
-  const isNotActiveControl = deviceStore.activeDeviceId !== props.device.id
+  // 多机直连互斥：只要当前设备在多机直连打开列表中，就绝不启动大盘 H.264 预览流，杜绝双路推流冲突
+  const isNotActiveControl = !deviceStore.activeDeviceIds.includes(props.device.id)
   
   // 如果此设备被选为群控从机，无论卡片是否可见，我们都强制它保持预览开启（保活 scrcpy 进程）
   const isSlaveSelected = groupControlStore.isGroupControlActive && 
@@ -709,10 +796,10 @@ function evaluatePreviewState() {
   }
 }
 
-// 监听当前活跃的控制设备变化 (当被控制时自动停用预览，断开时若大盘模式开启且可见则自动恢复)
-watch(() => deviceStore.activeDeviceId, () => {
+// 监听当前活跃的直连设备列表变化 (当被直连控制时自动停用大盘预览，断开时若大盘模式开启且可见则自动恢复)
+watch(() => deviceStore.activeDeviceIds, () => {
   evaluatePreviewState()
-})
+}, { deep: true })
 
 // 监听大盘模式的变化
 watch(() => deviceStore.globalPreviewMode, () => {
@@ -831,8 +918,6 @@ const getAbsoluteCoords = (e) => {
   const clientY = e.clientY - rect.top
   
   let videoW, videoH
-  // 声明在外层作用域：下方 [DirectControl Debug] 日志会引用，
-  // 若留在 else 块内会导致走 canvas/img 分支时 ReferenceError 中断整个事件下发
   let rawW, rawH
   if (canvas && isPreviewActive.value && canvas.width && canvas.height) {
     videoW = canvas.width
@@ -844,90 +929,51 @@ const getAbsoluteCoords = (e) => {
     const display = props.device.info?.displays?.[0]
     rawW = display?.x_res || 1080
     rawH = display?.y_res || 1920
-    videoW = isLandscape.value ? Math.max(rawW, rawH) : Math.min(rawW, rawH)
-    videoH = isLandscape.value ? Math.min(rawW, rawH) : Math.max(rawW, rawH)
+    videoW = rawW
+    videoH = rawH
   }
   
   const clientW = rect.width
   const clientH = rect.height
   
-  // 考虑 object-fit: contain 下的真正渲染高宽及黑边偏移量
-  // 如果是横屏（isLandscape.value = true），图像在 CSS 中被旋转了 90 度
-  // 等于说在网页上展现的高宽比其实是 videoH / videoW
-  const videoRatio = isLandscape.value ? (videoH / videoW) : (videoW / videoH)
+  // 考虑 object-fit: contain 下的真正渲染高宽及边框偏移量（正向画面）
+  const videoRatio = videoW / videoH
   const clientRatio = clientW / clientH
   
   let actualW, actualH, offsetX, offsetY
   if (clientRatio > videoRatio) {
-    // 左右有黑边 (Pillarbox)
+    // 左右有微小留白 (Pillarbox)
     actualH = clientH
     actualW = clientH * videoRatio
     offsetX = (clientW - actualW) / 2
     offsetY = 0
   } else {
-    // 上下有黑边 (Letterbox)
+    // 上下有微小留白 (Letterbox)
     actualW = clientW
     actualH = clientW / videoRatio
     offsetX = 0
     offsetY = (clientH - actualH) / 2
   }
   
-  // 相对真正视频画面的坐标位置
+  // 相对真正画面的归一化坐标 [0, 1]
   const relativeX = clientX - offsetX
   const relativeY = clientY - offsetY
   
   const normX = Math.max(0, Math.min(1, relativeX / actualW))
   const normY = Math.max(0, Math.min(1, relativeY / actualH))
   
-  // 触控协议以设备逻辑分辨率为基准下发（与主控页 useWebRTC.sendTouch 一致）。
-  // 注意不能用预览流/快照的分辨率（可能只有 360p），否则服务端按比例换算后落点会整体偏移缩放
+  // 触控协议以设备逻辑分辨率为基准下发
   const displayInfo = props.device.info?.displays?.[0]
-  const devW = displayInfo?.x_res || 1080
-  const devH = displayInfo?.y_res || 1920
-  const isDefaultLandscape = devW > devH
-  const isVideoLandscape = videoW > videoH
-  const isRotatedVideo = isVideoLandscape !== isDefaultLandscape
-  const targetW = isRotatedVideo ? devH : devW
-  const targetH = isRotatedVideo ? devW : devH
+  const devW = displayInfo?.x_res || videoW || 1080
+  const devH = displayInfo?.y_res || videoH || 1920
 
-  let result = null
-  if (isLandscape.value) { // 顺时针旋转 90 度
-    const origNormX = normY
-    const origNormY = 1 - normX
-    
-    result = {
-      x: Math.round(origNormX * targetW),
-      y: Math.round(origNormY * targetH),
-      w: targetW,
-      h: targetH,
-      isRotated: true
-    }
-  } else { // 正常竖屏
-    result = {
-      x: Math.round(normX * targetW),
-      y: Math.round(normY * targetH),
-      w: targetW,
-      h: targetH,
-      isRotated: false
-    }
+  return {
+    x: Math.round(normX * devW),
+    y: Math.round(normY * devH),
+    w: devW,
+    h: devH,
+    isRotated: false
   }
-
-  // 调试日志（排查坐标映射问题时再打开）
-  // console.log(`[DirectControl Debug] [${props.device.id}] Coordinates Calc:`, {
-  //   isLandscape: isLandscape.value,
-  //   clientX: e.clientX,
-  //   clientY: e.clientY,
-  //   rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-  //   relativeClick: { clientX, clientY },
-  //   videoContentBounds: { actualW, actualH, offsetX, offsetY },
-  //   normalized: { normX, normY },
-  //   rawResolution: { rawW, rawH },
-  //   videoResolution: { videoW, videoH },
-  //   targetResolution: { targetW, targetH },
-  //   computedCoords: result
-  // })
-
-  return result
 }
 
 const sendDeviceControl = (payload) => {
@@ -1067,84 +1113,54 @@ const sendKey = (keycode) => {
 
 <style scoped>
 .device-card {
-  background: var(--bg-secondary);
+  background: var(--bg-secondary, #161b22);
   border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--border);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
   position: relative;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .device-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  border-color: var(--accent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  border-color: var(--accent, #388bfd);
+}
+
+/* 桌面端横屏卡片在网格中跨 2 列 */
+@media (min-width: 1025px) {
+  .device-card.is-landscape-grid {
+    grid-column: span 2;
+  }
 }
 
 .preview-area {
-  aspect-ratio: 9 / 16;
-  background: #111;
+  aspect-ratio: var(--aspect-ratio, 9 / 16);
+  background: #090d13;
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
-/* 使用中遮罩 - 参考群控“主控”：半透明蒙版+大字（蓝色系以区分主控橙） */
-.in-use-overlay {
+/* 环境光微光背景：提取快照虚化填充异形边框 */
+.ambient-glow-bg {
   position: absolute;
-  inset: 0;
-  z-index: 11;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  inset: -15%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(28px) brightness(0.35) saturate(1.3);
+  opacity: 0.65;
   pointer-events: none;
-  border-radius: inherit;
-}
-
-.in-use-text {
-  font-size: clamp(22px, 5vw, 44px);
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.55);
-  letter-spacing: 0.15em;
-  user-select: none;
-  -webkit-text-stroke: 1px rgba(56, 189, 248, 0.4);
-}
-
-.in-use-sub {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
-  letter-spacing: 0.1em;
-  user-select: none;
-}
-
-.in-use-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 6px 8px;
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.95), rgba(99, 102, 241, 0.95));
-  color: #0b1120;
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-align: center;
-  letter-spacing: 0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-shadow: 0 2px 12px rgba(56, 189, 248, 0.45);
-  user-select: none;
+  z-index: 0;
+  transform: scale(1.1);
 }
 
 .snapshot-placeholder {
@@ -1153,203 +1169,319 @@ const sendKey = (keycode) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  z-index: 1;
 }
 
 .snapshot-img {
+  position: relative;
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
-  transition: transform 0.3s ease, width 0.3s ease, height 0.3s ease;
-}
-
-/* 横屏时的旋转适配：强制以竖屏在 9:16 容器中显示 */
-.preview-area.is-landscape .snapshot-img {
-  position: absolute;
-  width: 177.78%; /* 宽高对调：宽为容器的高（16/9 ≈ 177.78%） */
-  height: 100%;   /* 高为容器的宽（100%） */
-  top: 0;
-  left: -38.89%;  /* 水平居中偏移：(177.78% - 100%) / 2 = 38.89% */
-  object-fit: contain;
-  transform: rotate(90deg); /* 顺时针旋转 90 度 */
+  z-index: 1;
+  transition: transform 0.2s ease;
 }
 
 .vm-icon {
-  font-size: 48px;
-  opacity: 0.3;
+  font-size: 40px;
+  opacity: 0.35;
 }
 
-.overlay {
+/* 顶部醒目“使用中”提示条 */
+.in-use-banner {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 10px;
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.95) 0%, rgba(2, 132, 199, 0.8) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.in-use-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  animation: pulse-glow 1.8s infinite;
+  flex-shrink: 0;
+}
+
+.in-use-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  max-width: calc(100% - 70px);
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.8);
+}
+
+.status-dot.offline {
+  background: #64748b;
+}
+
+.device-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+/* 顶部右侧快捷操作区 */
+.card-header-right {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-select-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(13, 17, 23, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
+.group-select-checkbox {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent, #388bfd);
+  margin: 0;
+}
+
+.master-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: #ff9f43;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(255, 159, 67, 0.4);
+}
+
+.card-menu-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(13, 17, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+  padding: 0;
+}
+
+.card-menu-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.card-menu-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 主控端轻量指示器 */
+.master-indicator {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  pointer-events: none;
+}
+
+.master-indicator-pill {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(255, 159, 67, 0.92);
+  padding: 2px 10px;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(255, 159, 67, 0.5);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Hover 点击进入控制蒙版 */
+.hover-action-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
+  z-index: 8;
+  pointer-events: none;
 }
 
-.device-card:hover .overlay {
+.device-card:hover .hover-action-overlay {
   opacity: 1;
 }
 
 .play-hint {
-  background: var(--accent);
+  background: var(--accent, #388bfd);
   color: white;
   padding: 6px 16px;
   border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  transform: translateY(10px);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(56, 139, 253, 0.4);
+  transform: translateY(6px);
   transition: transform 0.2s;
+  letter-spacing: 0.02em;
 }
 
 .device-card:hover .play-hint {
   transform: translateY(0);
 }
 
-.card-footer-overlay {
+.offline-hint {
+  background: rgba(30, 41, 59, 0.85);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+/* 底部元信息栏 */
+.card-bottom-bar {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, rgba(13, 17, 23, 0.95) 0%, rgba(13, 17, 23, 0.7) 60%, rgba(13, 17, 23, 0) 100%);
-  padding: 12px 14px 10px;
-  z-index: 5;
-  box-sizing: border-box;
+  padding: 6px 8px;
+  background: linear-gradient(to top, rgba(13, 17, 23, 0.9) 0%, rgba(13, 17, 23, 0.5) 60%, transparent 100%);
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.device-main-info {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  justify-content: space-between;
+  gap: 6px;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.95;
+  transition: opacity 0.2s ease;
 }
 
-.device-id-text {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text-primary);
-  max-width: 140px;
+.device-card:hover .card-bottom-bar {
+  opacity: 1;
 }
 
-.status-badge {
+.bottom-left-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.camera-mode-badge {
   font-size: 10px;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
   font-weight: 700;
-  text-transform: uppercase;
-}
-
-.status-badge.online {
-  background: rgba(74, 222, 128, 0.1);
-  color: #4ade80;
-}
-
-.status-badge.offline {
-  background: rgba(255, 255, 255, 0.1);
-  color: #999;
-}
-
-.offline-hint {
-  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
 }
 
 .offline-last-seen {
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.device-meta {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.model-name {
-  opacity: 0.7;
+  font-size: 9px;
+  color: rgba(226, 232, 240, 0.5);
+  margin-left: 2px;
 }
 
 .device-tags {
   display: flex;
-  flex-wrap: nowrap; /* 强制不折行 */
-  gap: 5px;
-  overflow: hidden; /* 溢出隐藏 */
-  padding-right: 28px;
-  margin-top: auto; /* 自动推到最底端 */
+  gap: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .device-tag {
-  max-width: 86px;
+  max-width: 65px;
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 7px;
+  height: 16px;
+  padding: 0 5px;
   border: 1px solid;
   border-radius: 999px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
 }
 
 .more-tag {
-  color: var(--text-secondary);
-  border-color: var(--border);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* 菜单按钮 */
-.menu-btn {
-  position: absolute;
-  right: 12px;
-  bottom: 12px; /* 锁死在右下角，因为页脚固定高度，所以在纵向上也是完全对齐的 */
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.08); /* 明显的磨砂质感背景 */
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: all 0.2s ease;
-}
-
-.menu-btn:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.18);
-  border-color: var(--accent);
-}
-
-.menu-btn svg {
-  width: 14px;
-  height: 14px;
-  color: var(--text-primary);
+  color: var(--text-secondary, #94a3b8);
+  border-color: var(--border, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* 下拉菜单 */
 .card-menu {
   position: absolute;
-  bottom: 42px; /* 呈现在右下角按钮的上方 */
-  right: 12px;
+  top: 36px;
+  right: 8px;
   min-width: 140px;
-  background: #161b22 !important; /* 强制不透明底色 */
-  opacity: 1 !important; /* 强制不透明 */
-  border: 1px solid var(--border);
+  background: #161b22 !important;
+  opacity: 1 !important;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
   z-index: 100;
@@ -1359,20 +1491,20 @@ const sendKey = (keycode) => {
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 7px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--text-primary, #f1f5f9);
   cursor: pointer;
   text-align: left;
 }
 
 .menu-item:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .menu-item:disabled {
@@ -1381,12 +1513,12 @@ const sendKey = (keycode) => {
 }
 
 .menu-item.danger {
-  color: var(--error);
+  color: #f85149;
 }
 
 .menu-item svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .menu-overlay {
@@ -1395,221 +1527,15 @@ const sendKey = (keycode) => {
   z-index: 50;
 }
 
-/* 移动端卡片优化：高密度宫格小卡片（4 列时约 80-90px 宽） */
-@media (max-width: 1024px) {
-  .device-card {
-    height: 100%;
-    border-radius: 8px;
-    /* 允许三点菜单在小卡片上溢出显示 */
-    overflow: visible;
-  }
-  .device-card:hover {
-    /* 触屏无悬停态，去掉位移动画避免点击抖动 */
-    transform: none;
-  }
-  .preview-area {
-    aspect-ratio: unset;
-    flex: 1;
-    min-height: 0;
-    border-radius: inherit;
-  }
-  /* 悬浮页脚改为整卡定位容器：名称胶囊置顶、菜单按钮置底，本身不拦截点击 */
-  .card-footer-overlay {
-    top: 0;
-    bottom: 0;
-    background: none;
-    padding: 4px;
-    justify-content: flex-start;
-    pointer-events: none;
-  }
-  /* 顶部左侧名称胶囊：半透明黑底圆角，名称 + 状态徽标并排 */
-  .device-main-info {
-    margin-bottom: 0;
-    gap: 4px;
-    padding: 2px 6px;
-    max-width: 100%;
-    background: rgba(0, 0, 0, 0.55);
-    border-radius: 999px;
-    backdrop-filter: blur(4px);
-  }
-  .device-id-text {
-    font-size: 10px;
-    max-width: none;
-  }
-  .status-badge {
-    font-size: 8px;
-    padding: 0 3px;
-    flex: 0 0 auto;
-  }
-  /* 小卡片只保留名称+状态：型号 / 最后在线 / 标签列表隐藏 */
-  .device-meta,
-  .device-tags {
-    display: none;
-  }
-  .vm-icon {
-    font-size: 28px;
-  }
-  .play-hint {
-    font-size: 10px;
-    padding: 3px 8px;
-  }
-  /* 使用中遮罩文字缩小，避免小卡片破版 */
-  .in-use-top {
-    font-size: 0.6rem;
-    padding: 2px 4px;
-  }
-  .in-use-text {
-    font-size: clamp(14px, 4vw, 22px);
-  }
-  .in-use-sub {
-    font-size: 0.6rem;
-  }
-  /* 三点菜单：固定卡片底部左侧，半透明圆形黑底白图标 */
-  .menu-btn {
-    left: 4px;
-    right: auto;
-    bottom: 4px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .menu-btn svg {
-    width: 12px;
-    height: 12px;
-    color: #fff;
-  }
-  /* 菜单从底部左侧按钮上方弹出 */
-  .card-menu {
-    left: 4px;
-    right: auto;
-    bottom: 32px;
-    min-width: 130px;
-  }
-  /* 群控勾选框移到右上（左上是名称胶囊），尺寸缩小 */
-  .group-select-overlay {
-    top: 4px;
-    left: auto;
-    right: 4px;
-    padding: 2px;
-    border-radius: 6px;
-  }
-  .group-select-checkbox {
-    width: 14px;
-    height: 14px;
-  }
-  .master-badge {
-    font-size: 9px;
-    padding: 1px 5px;
-  }
-  .master-full-text {
-    font-size: clamp(18px, 5vw, 28px);
-  }
-  /* 直控虚拟按键栏缩小 */
-  .virtual-navbar {
-    top: 4px;
-    gap: 4px;
-    padding: 2px 6px;
-    border-radius: 14px;
-  }
-  .nav-btn {
-    width: 20px;
-    height: 20px;
-  }
-  .nav-btn svg {
-    width: 10px;
-    height: 10px;
-  }
-}
-
-/* 群控主控遮罩 - 半透明蒙版+大字主控 */
-.master-full-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-.master-full-text {
-  font-size: clamp(28px, 8vw, 64px);
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 159, 67, 0.5);
-  letter-spacing: 0.15em;
-  user-select: none;
-  -webkit-text-stroke: 1px rgba(255, 159, 67, 0.4);
-}
-
-/* 群控勾选框样式 */
-.group-select-overlay {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 15;
-  background: rgba(10, 12, 16, 0.6);
-  border-radius: 8px;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease;
-}
-
-.group-select-overlay:hover {
-  background: rgba(26, 115, 232, 0.2);
-  border-color: var(--accent);
-}
-
-.group-select-checkbox {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: var(--accent);
-  margin: 0;
-}
-
-.master-badge {
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: #ff9f43;
-  padding: 2px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(255, 159, 67, 0.4);
-}
-
 /* 预览直控相关样式 */
 .device-card.is-interactive-mode {
-  border-color: rgba(56, 139, 253, 0.4);
-  box-shadow: 0 0 10px rgba(56, 139, 253, 0.15);
-  animation: pulse-border 2.5s infinite ease-in-out;
-}
-
-@keyframes pulse-border {
-  0% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.15); }
-  50% { box-shadow: 0 0 14px rgba(56, 139, 253, 0.4); border-color: rgba(56, 139, 253, 0.7); }
-  100% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.15); }
+  border-color: rgba(56, 139, 253, 0.6);
+  box-shadow: 0 0 14px rgba(56, 139, 253, 0.25);
 }
 
 .interactive-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 20;
   cursor: crosshair;
   background: transparent;
@@ -1624,22 +1550,22 @@ const sendKey = (keycode) => {
 /* 浮动虚拟按键栏 */
 .virtual-navbar {
   position: absolute;
-  top: 10px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%) translateY(-10px);
   display: flex;
-  gap: 8px;
-  padding: 4px 10px;
-  background: rgba(22, 27, 34, 0.75);
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(22, 27, 34, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
   opacity: 0;
   pointer-events: none;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 25;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
 .interactive-overlay:hover .virtual-navbar,
@@ -1650,8 +1576,8 @@ const sendKey = (keycode) => {
 }
 
 .nav-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: transparent;
   border: none;
@@ -1664,7 +1590,7 @@ const sendKey = (keycode) => {
 }
 
 .nav-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   transform: scale(1.1);
 }
@@ -1675,8 +1601,44 @@ const sendKey = (keycode) => {
 }
 
 .nav-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
+/* 移动端紧凑卡片优化 */
+@media (max-width: 1024px) {
+  .device-card {
+    border-radius: 8px;
+  }
+  .device-pill {
+    padding: 2px 6px;
+    gap: 3px;
+  }
+  .device-name {
+    font-size: 10px;
+  }
+  .card-header-left {
+    top: 4px;
+    left: 4px;
+  }
+  .card-header-right {
+    top: 4px;
+    right: 4px;
+    gap: 4px;
+  }
+  .card-menu-btn {
+    width: 20px;
+    height: 20px;
+  }
+  .card-menu-btn svg {
+    width: 11px;
+    height: 11px;
+  }
+  .card-bottom-bar {
+    padding: 2px 4px;
+  }
+  .model-name {
+    font-size: 9px;
+  }
+}
 </style>

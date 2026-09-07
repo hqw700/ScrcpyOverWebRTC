@@ -47,8 +47,8 @@
 
             <div class="form-group form-group-row">
               <div class="group-info">
-                <label>开启 BWE 拥塞控制 <span v-if="isLocked('bitrate')" class="lock-tag">🔒 分享者已锁定</span></label>
-                <small class="hint">动态评估带宽并自适应码率</small>
+                <label>开启 BWE 拥塞控制 (WebRTC) <span v-if="isLocked('bitrate')" class="lock-tag">🔒 分享者已锁定</span></label>
+                <small class="hint">WebRTC 动态评估带宽并自适应码率（仅对 WebRTC 连接生效）</small>
               </div>
               <div class="toggle-switch">
                 <input type="checkbox" id="bwe-toggle" v-model="localSettings.bwe" :disabled="isLocked('bitrate')" />
@@ -56,25 +56,25 @@
               </div>
             </div>
 
-            <!-- BWE 开启：码率阈值设定 -->
+            <!-- BWE 开启：码率阈值设定 (WebRTC 动态自适应) -->
             <div v-if="localSettings.bwe" class="sub-section">
               <div class="form-group">
-                <label>最低码率下限 (Min Bitrate - Mbps)</label>
+                <label>WebRTC 最低码率下限 (Min Bitrate - Mbps)</label>
                 <input type="number" v-model.number="localSettings.minBitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
                 <small class="hint">弱网环境下的画质兜底，默认：8 Mbps</small>
               </div>
               <div class="form-group">
-                <label>最高码率上限 (Max Bitrate - Mbps)</label>
+                <label>WebRTC 最高码率上限 (Max Bitrate - Mbps)</label>
                 <input type="number" v-model.number="localSettings.maxBitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
                 <small class="hint">极佳网络下的画质上限，默认：20 Mbps</small>
               </div>
             </div>
 
-            <!-- BWE 关闭：固定码率设定 -->
-            <div v-else class="form-group">
-              <label>固定画面码率 (Bitrate - Mbps)</label>
-              <input type="number" v-model.number="localSettings.bitrate" min="1" step="1" :disabled="isLocked('bitrate')" />
-              <small class="hint">固定网络开销码率，默认：4 Mbps</small>
+            <!-- 固定画面码率：始终展示，明确标注在 WebSocket 投屏模式下生效（及 WebRTC 关闭 BWE 时生效） -->
+            <div class="form-group">
+              <label>固定画面码率 (Bitrate - Mbps) <span v-if="isLocked('bitrate')" class="lock-tag">🔒 分享者已锁定</span></label>
+              <input type="number" v-model.number="localSettings.bitrate" min="0.1" step="0.1" :disabled="isLocked('bitrate')" />
+              <small class="hint">⚡ <strong>WebSocket 投屏模式</strong>始终采用此固定码率推流；WebRTC 关闭 BWE 时亦以此固定码率为准（默认：4 Mbps）</small>
             </div>
 
             <div class="form-group">
@@ -119,9 +119,9 @@
             </div>
 
             <div class="form-group">
-              <label>预览固定画面码率 (Preview Bitrate - Mbps)</label>
+              <label>大盘缩略流固定码率 (Preview Bitrate - Mbps)</label>
               <input type="number" v-model.number="localSettings.previewBitrate" min="0.1" step="0.1" />
-              <small class="hint">默认 1 Mbps。控制大盘预览流的编码网络开销，推荐 0.5 ~ 2 Mbps</small>
+              <small class="hint">用于大盘卡片矩阵后台缩略流的网络带宽（默认 1 Mbps）。进入「WebSocket 投屏」后自动使用「视频」面板中的固定画面码率。</small>
             </div>
 
             <div class="form-group-divider">待机缩略图</div>

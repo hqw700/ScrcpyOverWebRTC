@@ -54,7 +54,7 @@
     <div class="item-body">
       <DeviceClient 
         :deviceId="deviceId" 
-        :key="deviceId"
+        :key="`${deviceId}_${deviceStore.getDeviceMode(deviceId)}`"
         :is-mini="isMini"
         :is-focused="isFocused"
         :audio-muted="isMuted"

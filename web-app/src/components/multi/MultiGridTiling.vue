@@ -83,8 +83,7 @@ const isMiniMode = computed(() => count.value > 4 && !maximizedDevice.value)
 .layout-1 {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
-  max-width: 900px;
-  margin: 0 auto;
+  /* 不写 max-width：横屏视频需要随面板拉宽持续放大；竖屏视频受高度限制，宽度放开无影响 */
 }
 
 /* 2台：左右双列平铺 (黄金比例) */

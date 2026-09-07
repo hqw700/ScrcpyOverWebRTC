@@ -15,9 +15,9 @@
           <input
             v-model="form.signalingUrl"
             class="form-input"
-            placeholder="支持 ws:// 或 wss:// 前缀"
+            placeholder="例如: wss://cloudphone.example.com:8443 或 wss://192.168.1.2:8443"
           >
-          <div class="form-hint">需填写信令服务器地址（支持自动补全协议），例如：<br>非加密环境: <code>ws://192.168.1.2:8443</code> 或 <code>192.168.1.2:8443</code><br>加密环境: <code>wss://192.168.1.2:8443</code></div>
+          <div class="form-hint">需填写信令服务器地址（支持域名或 IP，支持自动补全协议），例如：<br>域名加密: <code>wss://cloudphone.example.com:8443</code> 或 <code>wss://cloudphone.example.com</code><br>局域网 IP: <code>ws://192.168.1.2:8443</code> 或 <code>192.168.1.2:8443</code></div>
         </div>
 
         <div class="form-group">
@@ -332,8 +332,8 @@ async function startDeploy() {
 
 // 提取当前信令服务的 IP 和 Port 供脚本命令生成使用
 const signalingIp = computed(() => {
-  let url = form.signalingUrl || ''
-  url = url.replace('ws://', '').replace('wss://', '')
+  let url = (form.signalingUrl || '').trim()
+  url = url.replace('https://', '').replace('http://', '').replace('wss://', '').replace('ws://', '')
   return url || window.location.host
 })
 
@@ -341,7 +341,8 @@ const signalingIp = computed(() => {
 const shCommand = computed(() => {
   const host = signalingIp.value
   const ip = host.split(':')[0] || '127.0.0.1'
-  const protocol = form.signalingUrl.startsWith('ws://') ? 'ws' : 'wss'
+  const isPlain = form.signalingUrl.startsWith('ws://') || form.signalingUrl.startsWith('http://')
+  const protocol = isPlain ? 'ws' : 'wss'
   const deviceIdArg = form.deviceId ? ` -id ${form.deviceId}` : ''
   const maxFpsArg = form.maxFps > 0 ? ` -max-fps ${form.maxFps}` : ''
   const codecArg = form.videoCodecOptions ? ` -video-codec-options "${form.videoCodecOptions}"` : ''
@@ -360,7 +361,8 @@ const shCommand = computed(() => {
 const batCommand = computed(() => {
   const host = signalingIp.value
   const ip = host.split(':')[0] || '127.0.0.1'
-  const protocol = form.signalingUrl.startsWith('ws://') ? 'ws' : 'wss'
+  const isPlain = form.signalingUrl.startsWith('ws://') || form.signalingUrl.startsWith('http://')
+  const protocol = isPlain ? 'ws' : 'wss'
   const deviceIdArg = form.deviceId ? ` -id ${form.deviceId}` : ''
   const maxFpsArg = form.maxFps > 0 ? ` -max-fps ${form.maxFps}` : ''
   const codecArg = form.videoCodecOptions ? ` -video-codec-options "${form.videoCodecOptions}"` : ''
@@ -379,7 +381,8 @@ const batCommand = computed(() => {
 const magiskCommand = computed(() => {
   const host = signalingIp.value
   const ip = host.split(':')[0] || '127.0.0.1'
-  const protocol = form.signalingUrl.startsWith('ws://') ? 'ws' : 'wss'
+  const isPlain = form.signalingUrl.startsWith('ws://') || form.signalingUrl.startsWith('http://')
+  const protocol = isPlain ? 'ws' : 'wss'
   const sig = `${protocol}://${host}`
   const iceServersVal = form.iceServers || `turn:cloudphone_user:cloudphone_secure_password@${ip}:3478?transport=udp,stun:${ip}:3478`
   const iceCmd = iceServersVal ? `\ncpctl set CP_AGENT_ICE_SERVERS "${iceServersVal}"` : ''

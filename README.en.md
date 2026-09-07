@@ -16,12 +16,12 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 - **Ultimate Smoothness**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring both WebCodecs phase-locked hardware rendering (matching native Scrcpy) and standard HTML5 video engines.
 - **Direct Public Network Access**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P NAT hole punching with automatic TURN relay fallback.
-- **Multi-Device Matrix**: (v0.3.5) Concurrent direct control of multiple devices with Grid, Tabs, Master-Slave, and Floating window layouts, with strict input focus and audio isolation.
-- **Surveillance Camera Mode**: (v0.3.5) Screen-off hardware camera streaming for physical phones, dedicated monitoring console with multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
+- **100% TCP Streaming**: (v0.3.6) Added WebSocket direct control streaming mode for 100% TCP firewall penetration without TURN servers.
+- **Multi-Device Matrix**: (v0.3.6) Concurrent direct control of multiple devices with Grid, Tabs, and Floating layouts, split-screen duplicate connection isolation and focus guard.
+- **Surveillance Camera Mode**: Screen-off hardware camera streaming for physical phones, dedicated monitoring console with multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
 - **All-Around Interaction**: Multi-touch, physical key simulation, visual keymapping, IME Chinese input passthrough, silent bidirectional clipboard, and WebADB console.
 - **Efficient Group Control**: Millisecond-level group sync with canvas direct touch, dynamic aspect-ratio adaptation, compact data grid view with hover popover preview.
-- **Dynamic Control**: On-the-fly adjustment of resolution, bitrate, framerate, and BWE congestion control; supports device audio direct capture and microphone monitoring.
-- **One-Click Driverless Deployment**: Zero client needed (iOS/Android/PC/Mac); supports WebUSB/WebADB one-click deployment from browser, and Magisk/KernelSU boot-start modules.
+- **One-Click Driverless Deployment**: (v0.3.6) Zero client needed (iOS/Android/PC/Mac); supports domain signaling with adaptive Android DNS resolver, WebUSB/WebADB browser deployment, and Magisk boot-start modules.
 - **Integrated Android App**: Official App acts as both controller and controlled end; controlled mode supports Root and Shizuku driverless boot, plus standalone embedded server mode.
 - **Secure Device Sharing**: Share devices via passwordless links or card keys, with expiration time, permission controls, and active session management.
 - **Broad Ecosystem Compatibility**: Compatible with physical Android phones (Root / Non-Root), emulators, redroid containers, and commercial cloud phones.

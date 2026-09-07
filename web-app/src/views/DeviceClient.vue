@@ -1,5 +1,5 @@
 <template>
-  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape, 'is-web-fullscreen': isWebFullscreen, 'is-camera-surveillance': isCameraMode }">
+  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape, 'is-web-fullscreen': isWebFullscreen, 'is-camera-surveillance': isCameraMode }" @mousemove="onFsUiActivity" @touchstart.passive="onFsUiActivity">
     <!-- 主内容区 (视频部分) -->
     <div class="device-client-main">
       <!-- 主视频容器 -->
@@ -13,9 +13,12 @@
             <span class="osd-item osd-lens">📷 {{ currentLensName }}</span>
             <span class="osd-divider">|</span>
             <span class="osd-item osd-res">{{ currentResText }}</span>
-            <span class="osd-divider" v-if="videoStats">|</span>
             <span class="osd-item osd-fps" v-if="videoStats">{{ videoStats.fps }}fps</span>
-            <span class="osd-item osd-bitrate" v-if="videoStats">{{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}</span>
+            <span class="osd-divider" v-if="videoStats">|</span>
+            <span class="osd-item osd-bitrate" v-if="videoStats" :title="`视频接收码率 (目标: ${videoStats.targetBitrate || localSettings.bitrate || 4} Mbps)`">
+              {{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}
+              <span v-if="isWebSocketMode" class="osd-sub"> (目标 {{ videoStats.targetBitrate || localSettings.bitrate || 4 }}M)</span>
+            </span>
           </div>
 
           <div class="osd-center" v-if="isRecording">
@@ -59,15 +62,11 @@
           <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
         </button>
 
-        <!-- WebCodecs 极速锁相 Canvas 渲染器 -->
+        <!-- WebCodecs / WebSocket 极速锁相 Canvas 渲染器 -->
         <canvas
-          v-show="isWebCodecs"
+          v-show="isCanvasRendering"
           ref="canvasElement"
           class="video-stream"
-          :class="{
-            'hwc-rotated-90': isHwcRotated90 && !isCameraMode,
-            'hwc-rotated-270': isHwcRotated270 && !isCameraMode
-          }"
           :style="videoStreamStyle"
           @mousedown="onMouseDown"
           @mousemove="onMouseMove"
@@ -82,9 +81,9 @@
           @touchcancel.prevent="onTouchEnd"
         />
 
-        <!-- HTML5 <video> 兼容渲染器 (回退/画中画) -->
+        <!-- HTML5 <video> 兼容渲染器 (WebRTC 回退/画中画) -->
         <video
-          v-show="!isWebCodecs"
+          v-show="!isCanvasRendering"
           ref="videoElement"
           autoplay
           playsinline
@@ -129,19 +128,27 @@
 
         <!-- 视频流状态面板 (常规模式左上角) -->
         <div v-if="videoStats && localSettings.showStats !== false && !isCameraMode" class="stats-badge">
+          <span v-if="isWebSocketMode" class="stat-conn-type ws-pill" title="WebSocket TCP 二进制流传输">⚡ WS 投屏</span>
           <span class="stat-fps">{{ videoStats.fps }}fps</span>
           <span class="stat-delimiter">|</span>
-          <span class="stat-delay" title="网络延迟(RTT) + 缓冲(JB) + 解码 + 云端处理">E2E ~{{ videoStats.e2eDelay }}ms</span>
+          <template v-if="!isWebSocketMode">
+            <span class="stat-delay" title="网络延迟(RTT) + 缓冲(JB) + 解码 + 云端处理">E2E ~{{ videoStats.e2eDelay }}ms</span>
+            <span class="stat-delimiter">|</span>
+            <span class="stat-delay" title="Jitter Buffer">JB {{ videoStats.jbDelay }}ms</span>
+            <span class="stat-delimiter">|</span>
+            <span class="stat-delay" title="网络往返延迟">RTT {{ videoStats.rtt }}ms</span>
+            <span class="stat-delimiter">|</span>
+          </template>
+          <span class="stat-bitrate" :title="`当前视频接收码率 (目标: ${videoStats.targetBitrate || localSettings.bitrate || 4} Mbps)`">
+            {{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}
+            <span v-if="isWebSocketMode" class="stat-sub"> (目标 {{ videoStats.targetBitrate || localSettings.bitrate || 4 }}M)</span>
+          </span>
           <span class="stat-delimiter">|</span>
-          <span class="stat-delay" title="Jitter Buffer">JB {{ videoStats.jbDelay }}ms</span>
-          <span class="stat-delimiter">|</span>
-          <span class="stat-delay" title="网络往返延迟">RTT {{ videoStats.rtt }}ms</span>
-          <span class="stat-delimiter">|</span>
-          <span class="stat-bitrate" title="当前视频接收码率">{{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}</span>
-          <span class="stat-delimiter">|</span>
-          <span class="stat-conn-type" title="WebRTC 传输通道类型">{{ videoStats.connectionType || 'UDP p2p' }}</span>
-          <span class="stat-delimiter">|</span>
-          <span :class="['stat-lost', { 'stat-warn': videoStats.lostCount > 0 }]">Lost {{ videoStats.lostCount }}</span>
+          <span class="stat-conn-type" :title="isWebSocketMode ? 'WebSocket TCP 纯流传输' : 'WebRTC 传输通道类型'">{{ isWebSocketMode ? 'TCP (WebSocket)' : (videoStats.connectionType || 'UDP p2p') }}</span>
+          <template v-if="!isWebSocketMode">
+            <span class="stat-delimiter">|</span>
+            <span :class="['stat-lost', { 'stat-warn': videoStats.lostCount > 0 }]">Lost {{ videoStats.lostCount }}</span>
+          </template>
         </div>
 
         <!-- 加载/错误覆盖层 -->
@@ -156,6 +163,10 @@
               <p class="error-msg">❌ 连接失败</p>
               <p class="error-tip">{{ currentWebRTC.error.value }}</p>
               <button class="retry-btn" @click="retry">重试</button>
+              <template v-if="!isWebSocketMode">
+                <p class="error-tip ws-fallback-hint">若 UDP 被防火墙/NAT 拦截导致 WebRTC 反复失败，可改走 TCP 穿透通道：</p>
+                <button class="retry-btn ws-fallback-btn" @click="toggleStreamMode">⚡ 改用 WebSocket 投屏</button>
+              </template>
             </template>
             <template v-else-if="currentWebRTC.status.value === 'disconnected'">
               <p>连接已断开</p>
@@ -234,6 +245,10 @@
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
                 {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
               </button>
+              <button class="fab-item" :class="{ 'group-active': isWebSocketMode }" @click="toggleStreamMode(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                {{ isWebSocketMode ? '切回 WebRTC 直连' : '切换 WebSocket 投屏' }}
+              </button>
               <div class="fab-divider"></div>
               <button class="fab-item" @click="quickKey('input keyevent 26'); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> 电源
@@ -311,7 +326,7 @@
     </div>
 
     <!-- PC 右侧控制栏 (常规云手机模式) -->
-    <div v-if="!isMobile && !isMini && !isCameraMode" class="control-sidebar">
+    <div v-if="!isMobile && !isMini && !isCameraMode" class="control-sidebar" :class="{ 'fs-ui-visible': fsUiVisible }">
       <div class="sidebar-group">
         <button v-if="authStore.isAdmin" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -321,6 +336,12 @@
             <rect x="3" y="16" width="7" height="5" rx="1"></rect>
           </svg>
           <span class="btn-text">{{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}</span>
+        </button>
+        <button class="sidebar-btn" :class="{ active: isWebSocketMode }" @click="toggleStreamMode" :title="isWebSocketMode ? '当前为 WebSocket 投屏，点击切换为 WebRTC 直连' : '当前为 WebRTC 直连，点击切换为 WebSocket 投屏'">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span class="btn-text">{{ isWebSocketMode ? 'WS投屏' : 'WebRTC' }}</span>
         </button>
         <div class="sidebar-divider"></div>
         <button class="sidebar-btn" @click="quickKey('input keyevent 26')" title="电源">
@@ -586,6 +607,7 @@ import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue'
 import { debugLog, debugWarn } from '@/utils/debug'
 import { useDeviceStore } from '@/stores/devices'
 import { useWebRTC } from '@/composables/useWebRTC'
+import { useWebSocketStream } from '@/composables/useWebSocketStream'
 import { useKeymapStore } from '@/stores/keymap'
 import { KeymapEngine } from '@/utils/keymapEngine'
 import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections, getCameraPreferences, saveCameraPreferences } from '@/utils/settings'
@@ -738,9 +760,9 @@ const policyLocked = computed(() => policyLockedSections(authStore.userPolicy))
 
 const currentSessionMode = deviceStore.getDeviceMode(currentId.value)
 const initialSettings = getDeviceSettings(currentId.value)
-initialSettings.videoSource = currentSessionMode
 
 if (currentSessionMode === 'camera') {
+  initialSettings.videoSource = 'camera'
   const camPref = getCameraPreferences(currentId.value)
   initialSettings.cameraFacing = camPref.cameraFacing
   initialSettings.cameraId = camPref.cameraId
@@ -749,6 +771,8 @@ if (currentSessionMode === 'camera') {
   initialSettings.cameraZoomRatio = camPref.cameraZoomRatio || 1.0
   initialSettings.cameraOrientation = camPref.cameraOrientation || 'auto'
   initialSettings.audioSource = camPref.audioSource || 'mic'
+} else {
+  initialSettings.videoSource = 'display'
 }
 
 const localSettings = ref(applyPolicyToSettings(initialSettings, authStore.userPolicy))
@@ -913,13 +937,20 @@ function reconnectStream(msg = '正在切换参数并重新建连...') {
 
   if (currentId.value) {
     webrtc.disconnect()
-    setTimeout(() => {
-      currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
-      deviceStore.setActiveWebRTC(webrtc)
+    if (reconnectStreamTimer) {
+      clearTimeout(reconnectStreamTimer)
+      reconnectStreamTimer = null
+    }
+    reconnectStreamTimer = setTimeout(() => {
+      reconnectStreamTimer = null
+      currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
+      deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
     }, 800)
   }
 }
+
+let reconnectStreamTimer = null
 
 // PTZ 数字变焦与视口平移漫游
 const cameraZoom = ref(1.0)
@@ -1121,14 +1152,29 @@ function saveSettings(newSettings) {
   } finally {
     isSavingSettingsSelf = false
   }
+
+  // WebSocket 投屏直控模式：直接下发动态参数（支持码率热调 / 分辨率帧率平滑重置），无需卸载重载页面
+  if (isWebSocketMode.value && currentId.value) {
+    const fps = newSettings.fps || 30
+    const maxSize = newSettings.size || 1080
+    const bitrate = newSettings.bitrate || newSettings.previewBitrate || 4
+    const stayAwake = newSettings.stayAwake !== false
+    if (currentWebRTC.value && currentWebRTC.value.targetBitrate) {
+      currentWebRTC.value.targetBitrate.value = bitrate
+    }
+    deviceStore.sendPreviewControl('start_preview', currentId.value, fps, maxSize, bitrate, stayAwake)
+    return
+  }
   
-  // 与手动“关闭面板再点连接”同效：先卸载面板触发完整断开清理（onUnmounted → disconnect），
+  // WebRTC 模式与手动“关闭面板再点连接”同效：先卸载面板触发完整断开清理（onUnmounted → disconnect），
   // 等待 Agent 完成 scrcpy 停服/重启后再自动重开。
   // 原地断开即连会撞上 Agent 侧停服/重启窗口，导致新推流会话起不来。
   if (currentId.value) {
     const id = currentId.value
+    const prevMode = deviceStore.getDeviceMode(id)
     deviceStore.clearActiveDevice()
     setTimeout(() => {
+      deviceStore.setDeviceMode(id, prevMode)
       deviceStore.setActiveDevice(id)
     }, 1000)
   }
@@ -1143,9 +1189,19 @@ function resetSettings() {
   }
   localSettings.value = applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy) // Loads global settings now
   pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
+
+  if (isWebSocketMode.value && currentId.value) {
+    const fps = localSettings.value.fps || 30
+    const maxSize = localSettings.value.size || 1080
+    const bitrate = localSettings.value.bitrate || 4
+    const stayAwake = localSettings.value.stayAwake !== false
+    deviceStore.sendPreviewControl('start_preview', currentId.value, fps, maxSize, bitrate, stayAwake)
+    return
+  }
+
   if (currentId.value) {
     webrtc.disconnect()
-    currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
+    currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
     deviceStore.registerWebRTC(currentId.value, webrtc)
     setupWebRTC()
   }
@@ -1157,11 +1213,6 @@ const toggleConsole = () => {
   } else {
     deviceStore.openGlobalConsole(currentId.value)
   }
-}
-
-function goToFileManager() {
-  window.history.pushState({}, '', '/files')
-  window.dispatchEvent(new Event('popstate'))
 }
 
 // 手机悬浮菜单状态及拖拽
@@ -1245,7 +1296,15 @@ const agentVersion = ref('unknown')
 let stopAgentVersionWatch = null
 let isSavingSettingsSelf = false
 
-const currentWebRTC = shallowRef(useWebRTC(currentId.value, scrcpyOptions.value))
+function createStreamInstance(deviceId, options) {
+  const mode = deviceStore.getDeviceMode(deviceId)
+  if (mode === 'websocket') {
+    return useWebSocketStream(deviceId, options)
+  }
+  return useWebRTC(deviceId, options)
+}
+
+const currentWebRTC = shallowRef(createStreamInstance(currentId.value, scrcpyOptions.value))
 const webrtc = new Proxy({}, {
   get(target, prop) {
     const inst = currentWebRTC.value
@@ -1263,7 +1322,21 @@ const webrtc = new Proxy({}, {
     return true
   }
 })
+
+const isWebSocketMode = computed(() => {
+  return deviceStore.getDeviceMode(currentId.value) === 'websocket' || Boolean(currentWebRTC.value?.isWebSocketStream)
+})
 const isWebCodecs = computed(() => Boolean(currentWebRTC.value?.isWebCodecsActive?.value))
+const isCanvasRendering = computed(() => isWebSocketMode.value || isWebCodecs.value)
+
+function toggleStreamMode() {
+  // 只改 store 的连接模式：MultiDeviceItem 的 :key="deviceId_mode" 会驱动组件重挂载，
+  // 由新实例 setup 时按新模式建连（旧实例 onUnmounted 里 disconnect）。不要再原地重连，
+  // 原地重连 + watch 重连 + key 重挂载三套机制叠加会造成 2~3 次断连风暴与模式回弹竞态。
+  const nextMode = isWebSocketMode.value ? 'display' : 'websocket'
+  deviceStore.setDeviceMode(currentId.value, nextMode)
+}
+
 if (currentId.value) {
   deviceStore.registerWebRTC(currentId.value, webrtc)
 }
@@ -1516,11 +1589,14 @@ watch(currentId, (newId) => {
     }
     localSettings.value = applyPolicyToSettings(st, authStore.userPolicy)
     pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
-    currentWebRTC.value = useWebRTC(newId, scrcpyOptions.value)
+    currentWebRTC.value = createStreamInstance(newId, scrcpyOptions.value)
     deviceStore.registerWebRTC(newId, webrtc)
     setupWebRTC()
   }
 })
+
+// 连接模式变化的重连由 MultiDeviceItem 的 :key="deviceId_mode" 重挂载统一承担，
+// 此处不要再 watch 模式做原地重连（与 key 重挂载叠加会双重断连）。
 
 function setupWebRTC() {
   bindWebRTCEvents(currentWebRTC.value)
@@ -1640,8 +1716,16 @@ function handleSettingsUpdated(event) {
     localSettings.value = applyPolicyToSettings(getDeviceSettings(currentId.value), authStore.userPolicy)
     pageAudioMuted.value = Boolean(localSettings.value.pageAudioMuted)
     if (currentId.value) {
+      if (isWebSocketMode.value) {
+        const fps = localSettings.value.fps || 30
+        const maxSize = localSettings.value.size || 1080
+        const bitrate = localSettings.value.bitrate || 4
+        const stayAwake = localSettings.value.stayAwake !== false
+        deviceStore.sendPreviewControl('start_preview', currentId.value, fps, maxSize, bitrate, stayAwake)
+        return
+      }
       webrtc.disconnect()
-      currentWebRTC.value = useWebRTC(currentId.value, scrcpyOptions.value)
+      currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
       deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
     }
@@ -1665,15 +1749,7 @@ onMounted(() => {
   updateCameraClock()
   cameraClockTimer = setInterval(updateCameraClock, 1000)
 
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen.value = !!document.fullscreenElement
-    if (isFullscreen.value) {
-      if (isWebFullscreen.value) {
-        document.body.classList.remove('web-fullscreen')
-        isWebFullscreen.value = false
-      }
-    }
-  })
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('keydown', onGlobalKeyDown)
   document.addEventListener('keyup', onGlobalKeyUp)
   document.addEventListener('paste', onGlobalPaste)
@@ -1684,8 +1760,19 @@ onMounted(() => {
   window.addEventListener('focus', onWindowFocus)
 })
 
+function handleFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement
+  if (isFullscreen.value) {
+    if (isWebFullscreen.value) {
+      document.body.classList.remove('web-fullscreen')
+      isWebFullscreen.value = false
+    }
+  }
+}
+
 onUnmounted(() => {
   if (cameraClockTimer) clearInterval(cameraClockTimer)
+  if (fsUiHideTimer) { clearTimeout(fsUiHideTimer); fsUiHideTimer = null }
   if (recordingTimer) clearInterval(recordingTimer)
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     try { mediaRecorder.stop() } catch (e) {}
@@ -1713,11 +1800,18 @@ onUnmounted(() => {
   isWebFullscreen.value = false
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('cloudphone-settings-updated', handleSettingsUpdated)
-  deviceStore.setDeviceMode(currentId.value, 'display')
+  // 注意：卸载时不要重置连接模式（setDeviceMode 'display'）——
+  // 模式切换(:key 重挂载)和网格最大化(v-if 互斥)都会经过卸载，重置会把 websocket/camera 模式偷改回 display。
+  // 模式的清理由 store 的 closeDevice/closeAllDevices 负责。
   webrtc.disconnect()
   if (currentId.value) {
     deviceStore.unregisterWebRTC(currentId.value)
   }
+  if (reconnectStreamTimer) {
+    clearTimeout(reconnectStreamTimer)
+    reconnectStreamTimer = null
+  }
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('keydown', onGlobalKeyDown)
   document.removeEventListener('keyup', onGlobalKeyUp)
   document.removeEventListener('paste', onGlobalPaste)
@@ -1810,7 +1904,7 @@ const needRotateCoords = computed(() => isMobile.value && isVideoLandscape.value
 const videoNaturalSize = ref({ width: 0, height: 0 })
 
 function checkAndRecommendLayout() {
-  const activeMedia = (webrtc && webrtc.isWebCodecsActive && webrtc.isWebCodecsActive.value && canvasElement.value) ? canvasElement.value : videoElement.value
+  const activeMedia = (isCanvasRendering.value && canvasElement.value) ? canvasElement.value : videoElement.value
   if (!activeMedia) return
   const videoW = activeMedia.videoWidth || activeMedia.width || videoNaturalSize.value.width || 0
   const videoH = activeMedia.videoHeight || activeMedia.height || videoNaturalSize.value.height || 0
@@ -1829,7 +1923,7 @@ function checkAndRecommendLayout() {
 function rotateCoords(clientX, clientY) {
   if (!needRotateCoords.value) return { x: clientX, y: clientY }
   
-  const activeMedia = (webrtc && webrtc.isWebCodecsActive && webrtc.isWebCodecsActive.value && canvasElement.value) ? canvasElement.value : videoElement.value
+  const activeMedia = (isCanvasRendering.value && canvasElement.value) ? canvasElement.value : videoElement.value
   if (!activeMedia) return { x: clientX, y: clientY }
   
   const screenW = window.innerWidth
@@ -1895,6 +1989,16 @@ function toggleFullscreen() {
   }
 }
 
+// 页面全屏下的悬浮 UI（右侧工具栏）自动隐藏：鼠标/触摸活动时显示，静止 2.5s 后淡出
+const fsUiVisible = ref(true)
+let fsUiHideTimer = null
+function onFsUiActivity() {
+  if (!isWebFullscreen.value) return
+  fsUiVisible.value = true
+  if (fsUiHideTimer) clearTimeout(fsUiHideTimer)
+  fsUiHideTimer = setTimeout(() => { fsUiVisible.value = false }, 2500)
+}
+
 function toggleWebFullscreen() {
   if (!isWebFullscreen.value) {
     // 如果处于系统全屏，先退出系统全屏
@@ -1903,10 +2007,13 @@ function toggleWebFullscreen() {
     }
     document.body.classList.add('has-web-fullscreen')
     isWebFullscreen.value = true
+    onFsUiActivity()
   } else {
     document.body.classList.remove('has-web-fullscreen')
     document.body.classList.remove('web-fullscreen')
     isWebFullscreen.value = false
+    if (fsUiHideTimer) { clearTimeout(fsUiHideTimer); fsUiHideTimer = null }
+    fsUiVisible.value = true
   }
 }
 
@@ -2341,13 +2448,15 @@ function onTouchEnd(e) {
   }
 }
 
-/* 局部独立页面全屏 (Web Fullscreen) */
+/* 局部独立页面全屏 (Web Fullscreen)：根节点直接 fixed 提权铺满视口，
+   跳出 MultiDeviceContainer/Grid/Tabs 等所有中间容器（max-width、padding、grid 轨道均不再约束画面）。
+   z-index 9000：高于应用内所有布局层（面板 200/浮窗 1000/底部导航），低于全局弹窗/Toast (9999+)。 */
 .device-panel-view.is-web-fullscreen {
-  position: relative !important;
+  position: fixed !important;
   inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: 1000 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9000 !important;
   background: #000 !important;
   display: flex !important;
   flex-direction: row !important;
@@ -2365,11 +2474,34 @@ function onTouchEnd(e) {
   background: #000 !important;
 }
 
+/* 全屏时右侧工具栏改为悬浮覆盖层，鼠标静止自动淡出，画面保持居中且不被挤压 */
+.device-panel-view.is-web-fullscreen .control-sidebar {
+  position: absolute !important;
+  right: 0 !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 64px !important;
+  max-height: 92vh !important;
+  background: rgba(17, 17, 17, 0.72) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-right: none !important;
+  border-radius: 12px 0 0 12px !important;
+  z-index: 120 !important;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.device-panel-view.is-web-fullscreen .control-sidebar.fs-ui-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .device-panel-view.is-web-fullscreen .webfullscreen-fab {
-  position: fixed !important;
+  position: absolute !important;
   top: 20px !important;
-  right: 20px !important;
-  z-index: 100000 !important;
+  right: 84px !important; /* 避开右侧悬浮工具栏 (64px) 防止遮挡点击 */
+  z-index: 130 !important;
   background: rgba(248, 81, 73, 0.85) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   color: #fff !important;
@@ -2434,6 +2566,11 @@ function onTouchEnd(e) {
 
 .stat-delimiter { color: #555; margin: 0 2px; }
 .stat-warn { color: #f85149; }
+.ws-pill {
+  color: #c084fc !important;
+  font-weight: 700;
+  margin-right: 4px;
+}
 
 .video-wrapper {
   flex: 1;
@@ -2472,6 +2609,11 @@ function onTouchEnd(e) {
 .error-tip { font-size: 12px; color: #999; margin: 8px 0 16px; }
 
 .retry-btn { background: var(--accent); color: white; border: none; padding: 6px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+
+/* WebRTC 失败时的 WS 投屏回退引导 */
+.ws-fallback-hint { margin: 14px 0 6px; color: #d29922; }
+.ws-fallback-btn { background: rgba(210, 153, 34, 0.15); border: 1px solid #d29922; color: #d29922; }
+.ws-fallback-btn:hover { background: rgba(210, 153, 34, 0.28); }
 
 /* PC 右侧栏 */
 .control-sidebar {
@@ -2844,6 +2986,20 @@ function onTouchEnd(e) {
 .osd-res, .osd-fps, .osd-bitrate {
   color: #7ee787;
   font-variant-numeric: tabular-nums;
+}
+
+.osd-sub {
+  font-size: 10px;
+  opacity: 0.85;
+  color: #a5d6ff;
+  font-weight: normal;
+}
+
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  font-weight: normal;
+  margin-left: 2px;
 }
 
 .osd-clock {

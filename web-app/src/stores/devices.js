@@ -425,6 +425,12 @@ export const useDeviceStore = defineStore('devices', () => {
     openDevice(id)
   }
 
+  function openDeviceAsWebSocket(id) {
+    if (!id) return
+    setDeviceMode(id, 'websocket')
+    openDevice(id)
+  }
+
   function closeAllDevices() {
     activeDeviceIds.value = []
     focusedDeviceId.value = null
@@ -527,14 +533,38 @@ export const useDeviceStore = defineStore('devices', () => {
     // 显式触发响应式引用变更以更新大盘折线图
     deviceHistory.value = { ...deviceHistory.value }
   }
-  const previewCallbacks = new Map()
 
-  function registerPreviewCallback(deviceId, callback) {
-    previewCallbacks.set(deviceId, callback)
+  const previewCallbacks = new Map() // deviceId -> Map<subscriberId, callback>
+
+  function registerPreviewCallback(deviceId, subscriberOrCb, maybeCallback) {
+    let subscriberId = 'default'
+    let cb = maybeCallback
+    if (typeof subscriberOrCb === 'function') {
+      cb = subscriberOrCb
+      subscriberId = 'default'
+    } else {
+      subscriberId = String(subscriberOrCb || 'default')
+    }
+    if (!cb) return
+    if (!previewCallbacks.has(deviceId)) {
+      previewCallbacks.set(deviceId, new Map())
+    }
+    previewCallbacks.get(deviceId).set(subscriberId, cb)
   }
 
-  function unregisterPreviewCallback(deviceId) {
-    previewCallbacks.delete(deviceId)
+  function unregisterPreviewCallback(deviceId, subscriberId = 'default') {
+    const subMap = previewCallbacks.get(deviceId)
+    if (subMap) {
+      subMap.delete(subscriberId)
+      if (subMap.size === 0) {
+        previewCallbacks.delete(deviceId)
+      }
+    }
+  }
+
+  function hasPreviewSubscribers(deviceId) {
+    const subMap = previewCallbacks.get(deviceId)
+    return Boolean(subMap && subMap.size > 0)
   }
 
   function sendPreviewControl(action, deviceId, fps, maxSize, bitrate, stayAwake) {
@@ -546,7 +576,9 @@ export const useDeviceStore = defineStore('devices', () => {
       }
       if (fps !== undefined && fps > 0) payload.fps = fps
       if (maxSize !== undefined && maxSize > 0) payload.max_size = maxSize
-      if (bitrate !== undefined && bitrate > 0) payload.bitrate = bitrate * 1000000
+      if (bitrate !== undefined && bitrate > 0) {
+        payload.bitrate = bitrate >= 10000 ? Math.round(bitrate) : Math.round(bitrate * 1000000)
+      }
       if (stayAwake !== undefined) payload.stay_awake = stayAwake
       globalWs.send(JSON.stringify(payload))
     }
@@ -602,8 +634,8 @@ export const useDeviceStore = defineStore('devices', () => {
       deviceId = deviceId.substring(0, nullIdx)
     }
 
-    const cb = previewCallbacks.get(deviceId)
-    if (!cb) return
+    const subMap = previewCallbacks.get(deviceId)
+    if (!subMap || subMap.size === 0) return
 
     const isKey = view.getUint8(36) === 0x01
     // BigEndian read uint64 ptsUs
@@ -611,7 +643,13 @@ export const useDeviceStore = defineStore('devices', () => {
     const payloadLen = view.getUint32(45, false)
     const nalu = new Uint8Array(buffer, 49, payloadLen)
 
-    cb(nalu, isKey, ptsUs)
+    subMap.forEach(cb => {
+      try {
+        cb(nalu, isKey, ptsUs)
+      } catch (err) {
+        console.error(`[Preview] Callback error for ${deviceId}:`, err)
+      }
+    })
   }
 
   let globalWs = null
@@ -959,6 +997,7 @@ export const useDeviceStore = defineStore('devices', () => {
     deleteOfflineDevice,
     setActiveDevice,
     openDeviceAsCamera,
+    openDeviceAsWebSocket,
     setDeviceMode,
     getDeviceMode,
     setActiveWebRTC,
@@ -985,6 +1024,7 @@ export const useDeviceStore = defineStore('devices', () => {
     activateLicense,
     registerPreviewCallback,
     unregisterPreviewCallback,
+    hasPreviewSubscribers,
     sendPreviewControl,
     sendGroupControlEvent,
     sendInjectData,

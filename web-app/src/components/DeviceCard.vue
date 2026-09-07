@@ -111,6 +111,7 @@
           <span class="status-dot" :class="statusClass"></span>
           <span class="device-name" :title="device.id">{{ device.id }}</span>
           <span v-if="isCameraMode" class="camera-mode-badge" title="当前设备正在以摄像头监控模式运行">📷 监控中</span>
+          <span v-else-if="isWebSocketMode" class="ws-mode-badge" title="当前设备正在以 WebSocket 投屏模式运行">⚡ 投屏中</span>
           <span v-if="device.status !== 'online' && lastSeenText" class="offline-last-seen" :title="lastSeenText">{{ lastSeenText }}</span>
         </div>
         <div v-if="tags.length > 0" class="device-tags">
@@ -135,6 +136,10 @@
       <button class="menu-item" @click.stop="onAddToMulti" v-if="device.status === 'online'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="8" height="18" rx="2"></rect><rect x="14" y="3" width="8" height="18" rx="2"></rect></svg>
         加入多机直连
+      </button>
+      <button class="menu-item" @click.stop="onWebSocketMirror" v-if="device.status === 'online'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        WebSocket 投屏
       </button>
       <button class="menu-item" @click.stop="onCameraSettings" v-if="device.status === 'online'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
@@ -335,6 +340,10 @@ const isCameraMode = computed(() => {
   return deviceStore.getDeviceMode(props.device.id) === 'camera' && deviceStore.activeDeviceIds.includes(props.device.id)
 })
 
+const isWebSocketMode = computed(() => {
+  return deviceStore.getDeviceMode(props.device.id) === 'websocket' && deviceStore.activeDeviceIds.includes(props.device.id)
+})
+
 const lastSeenText = computed(() => {
   if (!props.device.lastSeen) return ''
   const d = new Date(props.device.lastSeen)
@@ -372,6 +381,11 @@ function toggleMenu() {
 function onShareDevice() {
   showMenu.value = false
   emit('share', props.device.id)
+}
+
+function onWebSocketMirror() {
+  showMenu.value = false
+  deviceStore.openDeviceAsWebSocket(props.device.id)
 }
 
 function onCameraSettings() {
@@ -734,8 +748,8 @@ function startPreviewFlow() {
   
   initDecoder(decoderMode)
   
-  // 注册数据接收回调
-  deviceStore.registerPreviewCallback(props.device.id, (nalu, isKey, ptsUs) => {
+  // 注册数据接收回调 (subscriberId 为 'card')
+  deviceStore.registerPreviewCallback(props.device.id, 'card', (nalu, isKey, ptsUs) => {
     feedFrame(nalu, isKey, ptsUs, decoderMode)
   })
   
@@ -748,11 +762,15 @@ function stopPreviewFlow() {
   hasReceivedKeyFrame.value = false
   isFirstFrameRendered.value = false
   
-  // 注销回调
-  deviceStore.unregisterPreviewCallback(props.device.id)
+  // 注销卡片自己的回调
+  deviceStore.unregisterPreviewCallback(props.device.id, 'card')
   
-  // 发送 stop_preview 指令
-  deviceStore.sendPreviewControl('stop_preview', props.device.id)
+  // 发送 stop_preview 指令（关键保护：如果正处于 WebSocket 投屏直控或有其他订阅者，绝不发送 stop_preview 掐断主控）
+  const isWsActive = deviceStore.getDeviceMode(props.device.id) === 'websocket' &&
+                     deviceStore.activeDeviceIds.includes(props.device.id)
+  if (!isWsActive && !deviceStore.hasPreviewSubscribers(props.device.id)) {
+    deviceStore.sendPreviewControl('stop_preview', props.device.id)
+  }
   
   // 释放 WebCodecs 解码器
   if (videoDecoder) {
@@ -1436,6 +1454,18 @@ const sendKey = (keycode) => {
   border: 1px solid rgba(56, 189, 248, 0.35);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.ws-mode-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.25);
 }
 
 .offline-last-seen {

@@ -180,11 +180,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-:global(body.has-web-fullscreen) .multi-top-bar,
-:global(.has-web-fullscreen) .multi-top-bar,
-:global(body.web-fullscreen) .multi-top-bar {
-  display: none !important;
-}
+/* 注意：全屏时隐藏 multi-top-bar 的规则由 styles/main.css 统一提供，
+   此处不要再写 :global(body.has-web-fullscreen) —— scoped 模式下它会被错误编译为
+   body.has-web-fullscreen{display:none}，导致整个 <body> 被隐藏（页面全屏白屏）。 */
 .multi-device-container {
   display: flex;
   flex-direction: column;

@@ -38,8 +38,10 @@
     <div class="tabs-content-viewport" :class="{ 'is-split': isSplitMode && activeDeviceIds.length >= 2 }">
       <!-- 主窗格 (Primary Pane) -->
       <div class="pane-primary">
+        <!-- 分屏时排除副视窗设备：保证每台设备全应用只有一个 DeviceClient 实例，
+             否则同一设备会挂两条 WebRTC/WebSocket 连接且互相覆盖 store 注册表 -->
         <div 
-          v-for="id in activeDeviceIds" 
+          v-for="id in primaryPaneDeviceIds" 
           :key="id"
           v-show="currentTab === id"
           class="tab-pane-instance"
@@ -83,7 +85,19 @@ const currentTab = ref(deviceStore.focusedDeviceId || activeDeviceIds.value[0] |
 const isSplitMode = ref(false)
 const secondaryTabId = ref(activeDeviceIds.value[1] || null)
 
+// 主窗格设备列表：分屏时排除副视窗占用的设备（该设备由副视窗唯一挂载）
+const primaryPaneDeviceIds = computed(() => {
+  if (isSplitMode.value && secondaryTabId.value) {
+    return activeDeviceIds.value.filter(id => id !== secondaryTabId.value)
+  }
+  return activeDeviceIds.value
+})
+
 watch(() => deviceStore.focusedDeviceId, (newId) => {
+  // 分屏模式下：若用户点击/聚焦的是副视窗设备，主窗格切勿跟跳，避免把副视窗设备挤走
+  if (isSplitMode.value && secondaryTabId.value === newId) {
+    return
+  }
   if (newId && activeDeviceIds.value.includes(newId)) {
     currentTab.value = newId
   }

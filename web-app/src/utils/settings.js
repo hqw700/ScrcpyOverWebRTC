@@ -37,7 +37,7 @@ export const defaultSettings = {
 function parseSettings(parsed) {
   const hasAudioDup = Object.prototype.hasOwnProperty.call(parsed, 'audioDup')
   if (parsed.bitrate > 1000) {
-    parsed.bitrate = Math.max(1, Math.round(parsed.bitrate / 1000000))
+    parsed.bitrate = Math.max(0.1, Math.round(parsed.bitrate / 100000) / 10)
     if (parsed.minBitrate > 1000) parsed.minBitrate = Math.max(1, Math.round(parsed.minBitrate / 1000000))
     if (parsed.maxBitrate > 1000) parsed.maxBitrate = Math.max(1, Math.round(parsed.maxBitrate / 1000000))
   }

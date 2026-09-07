@@ -84,57 +84,22 @@ button {
   border-radius: 4px;
 }
 
-/* Web fullscreen mode */
+/* Web fullscreen mode:
+   页面全屏由 DeviceClient 根节点 (.device-panel-view.is-web-fullscreen) 直接 fixed 提权铺满屏幕，
+   不再依赖中间容器链提权，这里只需锁住 body 滚动。
+   注意：切勿在 scoped 样式中对 body.has-web-fullscreen 使用 :global() 选择器（会被错误编译）。 */
 body.has-web-fullscreen,
 body.web-fullscreen {
   overflow: hidden !important;
 }
 
-body.has-web-fullscreen .app-header,
-body.has-web-fullscreen .viewport,
-body.has-web-fullscreen .side-resizer,
-body.has-web-fullscreen .mobile-bottom-nav,
-body.has-web-fullscreen .multi-top-bar,
-body.web-fullscreen .multi-top-bar {
-  display: none !important;
-}
-
-body.has-web-fullscreen .control-panel-wrapper {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  z-index: 999999 !important;
-  border: none !important;
-  background: #000 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  transition: none !important;
-}
-
-body.has-web-fullscreen .panel-inner,
-body.has-web-fullscreen .panel-main,
-body.has-web-fullscreen .multi-device-container,
-body.has-web-fullscreen .multi-body-viewport,
-body.has-web-fullscreen .maximized-wrapper,
-body.has-web-fullscreen .grid-cell,
-body.has-web-fullscreen .multi-grid-container,
+/* 打破多机容器内的层叠上下文囚笼：
+   .multi-device-item.is-focused (z-index:2) 和 .floating-window (内联 z-index) 会创建层叠上下文，
+   把全屏层的 z-index:9000 囚禁在内，导致 multi-top-bar (z-index:10) 等兄弟层盖住全屏画面。
+   全屏时将这些中间层的 z-index 置为 auto，让全屏层直接在面板级层叠上下文中胜出。 */
 body.has-web-fullscreen .multi-device-item,
-body.has-web-fullscreen .item-body {
-  width: 100% !important;
-  height: 100% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  background: #000 !important;
-  border: none !important;
-  border-radius: 0 !important;
-  display: flex !important;
-  flex: 1 !important;
-  overflow: hidden !important;
-}
-
-body.has-web-fullscreen .item-header {
-  display: none !important;
+body.has-web-fullscreen .floating-window {
+  z-index: auto !important;
 }
 /* FAB buttons shared style */
 .webfullscreen-fab,

@@ -942,7 +942,6 @@ const closeHelpMenu = () => {
 const onWindowClick = () => {
   showHelpMenu.value = false
   showDisplayMenu.value = false
-  showMultiSelectMenu.value = false
 }
 
 const handleNavigateEvent = (e) => {

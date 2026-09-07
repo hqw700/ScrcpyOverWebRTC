@@ -45,6 +45,7 @@
       <div class="device-primary">
         <span class="device-id-text" :title="device.id">{{ device.id }}</span>
         <span v-if="isCameraMode" class="item-camera-mode-badge" title="当前设备正在以摄像头监控模式运行">📷 监控中</span>
+        <span v-else-if="isWebSocketMode" class="item-ws-mode-badge" title="当前设备正在以 WebSocket 模式投屏">⚡ 投屏中</span>
       </div>
       <div class="device-secondary">
         <span v-if="device.info?.model" class="model-text" :title="device.info.model">{{ device.info.model }}</span>
@@ -151,15 +152,19 @@
 
     <!-- 下拉菜单 -->
     <div v-if="showMenu" class="item-menu" @click.stop>
-      <button class="menu-item" @click="onCameraSettings" v-if="device.status === 'online'">
+      <button class="menu-item" @click.stop="onWebSocketMirror" v-if="device.status === 'online'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        WebSocket 投屏
+      </button>
+      <button class="menu-item" @click.stop="onCameraSettings" v-if="device.status === 'online'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
         摄像头监控模式
       </button>
-      <button class="menu-item" @click="onSettings">
+      <button class="menu-item" @click.stop="onSettings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82.33l.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51-1z"></path></svg>
         连接设置
       </button>
-      <button class="menu-item" @click="onShareDevice" v-if="authStore.isAdmin">
+      <button class="menu-item" @click.stop="onShareDevice" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
         分享设备 / 卡密
       </button>
@@ -205,6 +210,10 @@ const statusText = computed(() => (props.device.status === 'online' ? '在线' :
 
 const isCameraMode = computed(() => {
   return deviceStore.getDeviceMode(props.device.id) === 'camera' && deviceStore.activeDeviceIds.includes(props.device.id)
+})
+
+const isWebSocketMode = computed(() => {
+  return deviceStore.getDeviceMode(props.device.id) === 'websocket' && deviceStore.activeDeviceIds.includes(props.device.id)
 })
 
 const lastSeenText = computed(() => {
@@ -276,6 +285,11 @@ function onAddToMulti() {
 }
 
 function toggleMenu() { showMenu.value = !showMenu.value }
+
+function onWebSocketMirror() {
+  showMenu.value = false
+  deviceStore.openDeviceAsWebSocket(props.device.id)
+}
 
 function onCameraSettings() {
   showMenu.value = false
@@ -495,6 +509,18 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
   background: rgba(56, 189, 248, 0.15);
   color: #38bdf8;
   border: 1px solid rgba(56, 189, 248, 0.35);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.item-ws-mode-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.38);
   font-weight: 700;
   white-space: nowrap;
 }

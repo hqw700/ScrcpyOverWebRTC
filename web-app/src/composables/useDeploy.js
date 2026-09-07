@@ -35,10 +35,14 @@ export function useDeploy() {
       iceServers = '',
     } = options
 
-    if (!signalingUrl) throw new Error('必须指定 signaling 服务器地址 (IP:Port)')
+    if (!signalingUrl) throw new Error('必须指定 signaling 服务器地址 (域名或 IP:Port)')
 
-    let formattedSignalingUrl = signalingUrl
-    if (!formattedSignalingUrl.startsWith('ws://') && !formattedSignalingUrl.startsWith('wss://')) {
+    let formattedSignalingUrl = signalingUrl.trim()
+    if (formattedSignalingUrl.startsWith('https://')) {
+      formattedSignalingUrl = 'wss://' + formattedSignalingUrl.slice(8)
+    } else if (formattedSignalingUrl.startsWith('http://')) {
+      formattedSignalingUrl = 'ws://' + formattedSignalingUrl.slice(7)
+    } else if (!formattedSignalingUrl.startsWith('ws://') && !formattedSignalingUrl.startsWith('wss://')) {
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
       formattedSignalingUrl = protocol + formattedSignalingUrl
     }

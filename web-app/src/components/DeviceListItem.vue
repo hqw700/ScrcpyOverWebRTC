@@ -5,10 +5,10 @@
     :class="{ offline: device.status !== 'online' }"
     @click="onRowClick"
   >
-    <!-- 列 1：群控选择 / 主控标识 -->
+    <!-- 列 1：群控选择 / 预览勾选 / 主控标识 -->
     <div class="cell col-select" @click.stop>
-      <div v-if="groupControlStore.isGroupControlActive && device.status === 'online'" class="group-select-wrap">
-        <span v-if="groupControlStore.masterId === device.id" class="master-badge">主控</span>
+      <div v-if="(groupControlStore.isGroupControlActive || (deviceStore.globalPreviewMode && deviceStore.previewScopeMode === 'selected')) && device.status === 'online'" class="group-select-wrap">
+        <span v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-badge">主控</span>
         <input
           v-else
           type="checkbox"
@@ -53,6 +53,8 @@
         <span v-if="device.info?.displays?.[0]" class="res-text">
           ({{ device.info.displays[0].x_res }}×{{ device.info.displays[0].y_res }})
         </span>
+        <span v-if="myLeaseText" class="lease-text" :class="{ urgent: myLeaseUrgent }" title="我的设备租约剩余时长">{{ myLeaseText }}</span>
+        <span v-if="adminLeaseText" class="lease-text admin-lease" :class="{ urgent: adminLeaseUrgent }" title="当前租户与租约剩余时长">{{ adminLeaseText }}</span>
       </div>
     </div>
 
@@ -172,7 +174,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
         编辑标签
       </button>
-      <button class="menu-item danger" @click="onQuitAgent" :disabled="device.status !== 'online'">
+      <button class="menu-item danger" @click="onQuitAgent" :disabled="device.status !== 'online'" v-if="authStore.isAdmin">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v6M12 4.5a6 6 0 11-8 0"/></svg>
         退出 Agent
       </button>
@@ -191,6 +193,7 @@ import { useDeviceStore } from '@/stores/devices'
 import { useGroupControlStore } from '@/stores/groupControl'
 import { useAuthStore } from '@/stores/auth'
 import { getDeviceSettings } from '@/utils/settings'
+import { formatLeaseRemaining } from '@/utils/format'
 
 const props = defineProps({
   device: { type: Object, required: true },
@@ -226,9 +229,34 @@ const lastSeenText = computed(() => {
 const visibleTags = computed(() => props.tags.slice(0, 2))
 const hiddenTagCount = computed(() => Math.max(0, props.tags.length - visibleTags.value.length))
 
+// 普通用户视角：我的租约剩余时长（admin 或无租约时不显示；≤1 天橙色警示）
+const myLeaseText = computed(() => {
+  if (authStore.isAdmin) return ''
+  const sec = props.device.myLeaseRemainingSeconds
+  if (sec === undefined || sec === null) return ''
+  return formatLeaseRemaining(sec)
+})
+const myLeaseUrgent = computed(() => {
+  const sec = props.device.myLeaseRemainingSeconds
+  return sec !== undefined && sec !== null && sec >= 0 && sec <= 86400
+})
+
+// admin 视角：设备当前租约的租户与剩余时长（无租约不显示；≤1 天橙色警示）
+const adminLeaseText = computed(() => {
+  if (!authStore.isAdmin) return ''
+  const l = props.device.lease
+  if (!l || !l.username) return ''
+  return `👤 ${l.username} · ${formatLeaseRemaining(l.remaining_seconds)}`
+})
+const adminLeaseUrgent = computed(() => {
+  const l = props.device.lease
+  const sec = l && l.remaining_seconds
+  return sec !== undefined && sec !== null && sec >= 0 && sec <= 86400
+})
+
 const clientsInfo = computed(() => props.device.clients || [])
 function formatClientRemain(sec) {
-  if (sec === undefined || sec === null || sec < 0) return '永久'
+  if (sec === undefined || sec === null || sec < 0) return '正在连接' // 永久/无期限：显示连接状态而非时长
   if (sec === 0) return '已到期'
   const d = Math.floor(sec / 86400)
   const h = Math.floor((sec % 86400) / 3600)
@@ -562,6 +590,26 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 .res-text {
   font-size: 10px;
   opacity: 0.6;
+}
+
+.lease-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7dd3fc;
+  white-space: nowrap;
+}
+
+.lease-text.urgent {
+  color: #fbbf24;
+}
+
+/* admin 视角的租户标识（绿色系，区别于普通用户的蓝色"我的租约"） */
+.lease-text.admin-lease {
+  color: #34d399;
+}
+
+.lease-text.admin-lease.urgent {
+  color: #fbbf24;
 }
 
 .col-status {

@@ -91,6 +91,15 @@ export const useTagStore = defineStore('deviceTags', () => {
   }
 
   async function load() {
+    // 标签为管理员专属的平台运营分组信息：非管理员清空本地缓存并跳过拉取
+    // （后端 GET/POST /api/tags 均已收口 requireAdmin，这里避免本地残留旧标签继续展示）
+    if (localStorage.getItem('auth_role') !== 'admin') {
+      tags.value = []
+      deviceTags.value = {}
+      selectedTagIds.value = []
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
     loadLocal() // 优先使用本地数据快速启动
 
     try {
@@ -112,6 +121,7 @@ export const useTagStore = defineStore('deviceTags', () => {
   }
 
   async function saveAndSync() {
+    if (localStorage.getItem('auth_role') !== 'admin') return // 标签写入仅管理员
     persist()
 
     try {

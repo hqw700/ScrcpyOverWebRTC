@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
@@ -9,6 +9,16 @@ export function useAdb(webrtc) {
   let term = null
   let fitAddon = null
   let sessionChannel = null
+  let unwatchWebrtcStatus = null
+
+  function handleDisconnect(reason = '远程设备连接已断开') {
+    if (!isAdbConnected.value && !sessionChannel) return
+    isAdbConnected.value = false
+    if (term) {
+      term.writeln(`\r\n\x1b[1;31m[ADB 调试] ⚠️ ${reason}，终端会话已终止。\x1b[0m`)
+      term.writeln('\x1b[90m提示: 远程连接已断开，如需继续调试请重新连接设备。\x1b[0m\r\n')
+    }
+  }
 
   async function initAdb(container) {
     if (isAdbConnected.value) return
@@ -40,6 +50,26 @@ export function useAdb(webrtc) {
       // 为该 Session 独立创建专用的 DataChannel 实例
       sessionChannel = webrtc.createAdbSessionChannel()
 
+      // 绑定通道生命周期断开监听
+      if (sessionChannel?.channel) {
+        sessionChannel.channel.addEventListener('close', () => {
+          handleDisconnect('数据通道已关闭')
+        })
+        sessionChannel.channel.addEventListener('error', (e) => {
+          console.error('[Shell] DataChannel error:', e)
+          handleDisconnect('数据通道发生异常')
+        })
+      }
+
+      // 监听 WebRTC 全局连接状态
+      if (webrtc && webrtc.status) {
+        unwatchWebrtcStatus = watch(() => webrtc.status.value, (newStatus) => {
+          if (newStatus === 'disconnected' || newStatus === 'failed') {
+            handleDisconnect('远程设备连接已断开')
+          }
+        })
+      }
+
       // 等待 150ms 确保 DataChannel 建立稳定
       await new Promise(r => setTimeout(r, 150))
 
@@ -64,9 +94,13 @@ export function useAdb(webrtc) {
 
       // 绑定键盘输入回调，写入该会话的 channel 发送
       term.onData((data) => {
-        if (sessionChannel) {
-          sessionChannel.sendData(new TextEncoder().encode(data))
+        if (!isAdbConnected.value || !sessionChannel || sessionChannel.channel?.readyState !== 'open') {
+          if (term) {
+            term.write('\x07')
+          }
+          return
         }
+        sessionChannel.sendData(new TextEncoder().encode(data))
       })
 
     } catch (e) {
@@ -79,6 +113,11 @@ export function useAdb(webrtc) {
   async function closeAdb() {
     debugLog('[Shell] Closing session')
     isAdbConnected.value = false
+
+    if (unwatchWebrtcStatus) {
+      unwatchWebrtcStatus()
+      unwatchWebrtcStatus = null
+    }
 
     if (sessionChannel) {
       sessionChannel.close()

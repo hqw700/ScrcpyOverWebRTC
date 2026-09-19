@@ -1,29 +1,19 @@
 <template>
   <div class="multi-grid-container" :class="gridClass">
-    <!-- 如果某台设备处于放大聚焦状态 -->
-    <template v-if="maximizedDevice">
-      <div class="maximized-wrapper">
-        <MultiDeviceItem 
-          :key="maximizedDevice" 
-          :deviceId="maximizedDevice" 
-          :isMini="false" 
-        />
-      </div>
-    </template>
-
-    <!-- 正常平铺网格 -->
-    <template v-else>
-      <div 
-        v-for="id in activeDeviceIds" 
-        :key="id" 
-        class="grid-cell"
-      >
-        <MultiDeviceItem 
-          :deviceId="id" 
-          :isMini="isMiniMode" 
-        />
-      </div>
-    </template>
+    <!-- 平铺网格：最大化时其余设备仅 v-show 隐藏、保持挂载，
+         避免 v-if 互斥渲染导致全员 disconnect 再重连（断连风暴） -->
+    <div 
+      v-for="id in activeDeviceIds" 
+      :key="id" 
+      v-show="!maximizedDevice || maximizedDevice === id"
+      class="grid-cell"
+      :class="{ 'grid-cell-maximized': maximizedDevice === id }"
+    >
+      <MultiDeviceItem 
+        :deviceId="id" 
+        :isMini="maximizedDevice === id ? false : isMiniMode" 
+      />
+    </div>
   </div>
 </template>
 
@@ -64,11 +54,11 @@ const isMiniMode = computed(() => count.value > 4 && !maximizedDevice.value)
   overflow: auto;
 }
 
-.maximized-wrapper {
+/* 最大化的格子铺满整个网格（其余格子 v-show 隐藏，不参与布局） */
+.grid-cell-maximized {
   grid-column: 1 / -1;
   grid-row: 1 / -1;
-  width: 100%;
-  height: 100%;
+  min-height: 0;
 }
 
 .grid-cell {

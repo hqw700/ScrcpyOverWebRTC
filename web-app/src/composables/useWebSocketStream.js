@@ -793,6 +793,7 @@ export function useWebSocketStream(deviceId, options = {}) {
     sendTouch,
     sendInjectKeycode,
     sendText,
+    sendInjectText: sendText,
     sendScroll,
     sendCommand,
     setClipboard,

@@ -4,7 +4,7 @@
     ref="cardElement" 
     :data-device-id="device.id" 
     :class="{ 
-      'is-interactive-mode': deviceStore.globalInteractiveMode && device.status === 'online',
+      'is-interactive-mode': isInteractiveActive,
       'is-landscape': isLandscape,
       'is-landscape-grid': isLandscape
     }"
@@ -36,9 +36,9 @@
 
       <!-- 顶部右侧快捷操作区：群控勾选 + 三点菜单 -->
       <div class="card-header-right" @click.stop>
-        <!-- 群控标识/勾选框 -->
-        <div v-if="groupControlStore.isGroupControlActive && device.status === 'online'" class="group-select-wrap">
-          <span v-if="groupControlStore.masterId === device.id" class="master-badge">主控</span>
+        <!-- 群控 / 预览直选勾选框 -->
+        <div v-if="(groupControlStore.isGroupControlActive || (deviceStore.globalPreviewMode && deviceStore.previewScopeMode === 'selected')) && device.status === 'online'" class="group-select-wrap">
+          <span v-if="groupControlStore.isGroupControlActive && groupControlStore.masterId === device.id" class="master-badge">主控</span>
           <template v-else>
             <input 
               type="checkbox" 
@@ -69,16 +69,16 @@
       <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
 
       <!-- Hover 点击进入控制提示 -->
-      <div class="hover-action-overlay" v-if="!deviceStore.globalInteractiveMode && device.status === 'online'">
+      <div class="hover-action-overlay" v-if="!isInteractiveActive && device.status === 'online'">
         <span class="play-hint">进入控制</span>
       </div>
       <div class="hover-action-overlay offline" v-else-if="device.status !== 'online'">
         <span class="play-hint offline-hint">离线</span>
       </div>
 
-      <!-- 预览直控覆盖交互层 -->
+      <!-- 预览直控覆盖交互层 (仅当高频推流且符合勾选/范围模式时才出现控键) -->
       <div
-        v-if="deviceStore.globalInteractiveMode && device.status === 'online'"
+        v-if="isInteractiveActive"
         class="interactive-overlay"
         tabindex="0"
         @pointerdown.stop="handlePointerDown"
@@ -113,6 +113,8 @@
           <span v-if="isCameraMode" class="camera-mode-badge" title="当前设备正在以摄像头监控模式运行">📷 监控中</span>
           <span v-else-if="isWebSocketMode" class="ws-mode-badge" title="当前设备正在以 WebSocket 投屏模式运行">⚡ 投屏中</span>
           <span v-if="device.status !== 'online' && lastSeenText" class="offline-last-seen" :title="lastSeenText">{{ lastSeenText }}</span>
+          <span v-if="myLeaseText" class="my-lease-badge" :class="{ urgent: myLeaseUrgent }" title="我的设备租约剩余时长">{{ myLeaseText }}</span>
+          <span v-if="adminLeaseText" class="my-lease-badge admin-lease" :class="{ urgent: adminLeaseUrgent }" title="当前租户与租约剩余时长">{{ adminLeaseText }}</span>
         </div>
         <div v-if="tags.length > 0" class="device-tags">
           <span
@@ -137,11 +139,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="8" height="18" rx="2"></rect><rect x="14" y="3" width="8" height="18" rx="2"></rect></svg>
         加入多机直连
       </button>
-      <button class="menu-item" @click.stop="onWebSocketMirror" v-if="device.status === 'online'">
+      <button class="menu-item" @click.stop="onWebSocketMirror" v-if="device.status === 'online' && authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
         WebSocket 投屏
       </button>
-      <button class="menu-item" @click.stop="onCameraSettings" v-if="device.status === 'online'">
+      <button class="menu-item" @click.stop="onCameraSettings" v-if="device.status === 'online' && authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
         摄像头监控模式
       </button>
@@ -153,11 +155,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
         分享设备 / 卡密
       </button>
-      <button class="menu-item" @click.stop="onEditTags">
+      <button class="menu-item" @click.stop="onEditTags" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
         编辑标签
       </button>
-      <button class="menu-item danger" @click.stop="onQuitAgent" :disabled="device.status !== 'online'">
+      <button class="menu-item danger" @click.stop="onQuitAgent" :disabled="device.status !== 'online'" v-if="authStore.isAdmin">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v6M12 4.5a6 6 0 11-8 0"/></svg>
         退出 Agent
       </button>
@@ -179,6 +181,8 @@ import { useAuthStore } from '@/stores/auth'
 import { H264Decoder } from 'h264decoder'
 import { getDeviceSettings } from '@/utils/settings'
 import { useGroupControlStore } from '@/stores/groupControl'
+import { useTagStore } from '@/stores/tags'
+import { formatLeaseRemaining } from '@/utils/format'
 
 const props = defineProps({
   device: {
@@ -194,15 +198,59 @@ const props = defineProps({
 const emit = defineEmits(['connect', 'settings', 'camera-settings', 'edit-tags', 'share'])
 const deviceStore = useDeviceStore()
 const groupControlStore = useGroupControlStore()
+const tagStore = useTagStore()
 const authStore = useAuthStore()
 const showMenu = ref(false)
 const imgLoaded = ref(false)
+
+// 预览直控是否在当前卡片激活（控键与触控层展示条件：预览直控和高频预览强关联，未勾选不展示控键）
+const isInteractiveActive = computed(() => {
+  // 1. 基础在线与直连互斥校验
+  if (props.device.status !== 'online') return false
+  if (deviceStore.activeDeviceIds.includes(props.device.id)) return false
+
+  // 2. 预览直控和高频预览强关联：高频预览与直控开关必须同时开启
+  if (!deviceStore.globalPreviewMode || !deviceStore.globalInteractiveMode) return false
+
+  // 3. 当前设备必须正在推流出流，未出流不出现直控控键
+  if (!isPreviewActive.value) return false
+
+  const isSelected = groupControlStore.selectedSlaveIds.includes(props.device.id)
+  const isMaster = groupControlStore.isGroupControlActive && groupControlStore.masterId === props.device.id
+
+  // 4. 群控模式激活：必须是主控机或被勾选的从机，未勾选的绝不出现直控控键
+  if (groupControlStore.isGroupControlActive) {
+    return isMaster || isSelected
+  }
+
+  // 5. 推流范围设为“仅勾选”模式：必须是被勾选的设备，未勾选的绝不出现直控控键
+  if (deviceStore.previewScopeMode === 'selected') {
+    return isSelected
+  }
+
+  // 6. 只要当前大盘存在已勾选的设备：严格限定仅对勾选设备生效，未勾选的不出现控键
+  if (groupControlStore.selectedSlaveIds.length > 0) {
+    return isSelected
+  }
+
+  // 7. 标签匹配模式：若指定了标签，必须命中指定标签才出现控键
+  if (deviceStore.previewScopeMode === 'tag') {
+    const devTagIds = tagStore.getTagIdsForDevice(props.device.id)
+    const targetTagIds = deviceStore.previewSelectedTagIds || []
+    if (targetTagIds.length > 0) {
+      return targetTagIds.some(t => devTagIds.includes(t))
+    }
+  }
+
+  // 8. 其他模式（屏幕可视/全部在线）且无单独勾选时，只要正在推流即可直控
+  return true
+})
 
 // --- “使用中”遮罩：接入者（用户名/访客卡密）与剩余时间 ---
 const clientsInfo = computed(() => props.device.clients || [])
 
 function formatClientRemain(sec) {
-  if (sec === undefined || sec === null || sec < 0) return '永久'
+  if (sec === undefined || sec === null || sec < 0) return '正在连接' // 永久/无期限：使用中遮罩里时长无意义，显示连接状态
   if (sec === 0) return '已到期'
   const d = Math.floor(sec / 86400)
   const h = Math.floor((sec % 86400) / 3600)
@@ -349,6 +397,31 @@ const lastSeenText = computed(() => {
   const d = new Date(props.device.lastSeen)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleString()
+})
+
+// 普通用户视角：我的租约剩余时长（admin 或无租约时不显示；≤1 天橙色警示）
+const myLeaseText = computed(() => {
+  if (authStore.isAdmin) return ''
+  const sec = props.device.myLeaseRemainingSeconds
+  if (sec === undefined || sec === null) return ''
+  return formatLeaseRemaining(sec)
+})
+const myLeaseUrgent = computed(() => {
+  const sec = props.device.myLeaseRemainingSeconds
+  return sec !== undefined && sec !== null && sec >= 0 && sec <= 86400
+})
+
+// admin 视角：设备当前租约的租户与剩余时长（无租约不显示；≤1 天橙色警示）
+const adminLeaseText = computed(() => {
+  if (!authStore.isAdmin) return ''
+  const l = props.device.lease
+  if (!l || !l.username) return ''
+  return `👤 ${l.username} · ${formatLeaseRemaining(l.remaining_seconds)}`
+})
+const adminLeaseUrgent = computed(() => {
+  const l = props.device.lease
+  const sec = l && l.remaining_seconds
+  return sec !== undefined && sec !== null && sec >= 0 && sec <= 86400
 })
 
 const visibleTags = computed(() => props.tags.slice(0, 3))
@@ -789,17 +862,44 @@ function stopPreviewFlow() {
   }
 }
 
-// 监控全局预览开关和可视区域变化
+// 监控全局预览开关、范围模式和可视区域变化
 function evaluatePreviewState() {
   const isOnline = props.device.status === 'online'
   // 多机直连互斥：只要当前设备在多机直连打开列表中，就绝不启动大盘 H.264 预览流，杜绝双路推流冲突
   const isNotActiveControl = !deviceStore.activeDeviceIds.includes(props.device.id)
   
-  // 如果此设备被选为群控从机，无论卡片是否可见，我们都强制它保持预览开启（保活 scrcpy 进程）
-  const isSlaveSelected = groupControlStore.isGroupControlActive && 
-                          groupControlStore.selectedSlaveIds.includes(props.device.id)
+  // 如果此设备被选为群控从机或当前主控机
+  const isGroupTarget = groupControlStore.isGroupControlActive && 
+                        (groupControlStore.selectedSlaveIds.includes(props.device.id) || groupControlStore.masterId === props.device.id)
 
-  const shouldPreview = (deviceStore.globalPreviewMode && (isCardVisible || isSlaveSelected)) && 
+  const scope = deviceStore.previewScopeMode || 'visible'
+  let inScope = false
+
+  if (scope === 'all') {
+    // 全部在线设备推流
+    inScope = isOnline
+  } else if (scope === 'selected') {
+    // 仅勾选设备模式：群控从机、主控机或勾选设备推流
+    inScope = isGroupTarget || groupControlStore.selectedSlaveIds.includes(props.device.id)
+  } else if (scope === 'tag') {
+    // 标签筛选范围：匹配 previewSelectedTagIds 中的标签推流
+    const devTagIds = tagStore.getTagIdsForDevice(props.device.id)
+    const targetTagIds = deviceStore.previewSelectedTagIds || []
+    if (targetTagIds.length === 0) {
+      // 若用户未指定任何推流标签，则回退为匹配顶部选中的标签且可视，或无标签时全部可视推流
+      const matchesTag = tagStore.selectedTagIds.length === 0 || tagStore.selectedTagIds.some(t => devTagIds.includes(t))
+      inScope = (matchesTag && isCardVisible) || isGroupTarget
+    } else {
+      // 匹配指定标签推流
+      inScope = targetTagIds.some(t => devTagIds.includes(t)) || isGroupTarget
+    }
+  } else {
+    // 'visible' 模式（默认）：可视区域卡片推流，群控目标即使滑出视口也保活
+    inScope = isCardVisible || isGroupTarget
+  }
+
+  const shouldPreview = deviceStore.globalPreviewMode && 
+                        inScope && 
                         isOnline && 
                         isNotActiveControl
   
@@ -824,6 +924,25 @@ watch(() => deviceStore.globalPreviewMode, () => {
   evaluatePreviewState()
 })
 
+// 监听预览范围模式的变化
+watch(() => deviceStore.previewScopeMode, () => {
+  evaluatePreviewState()
+})
+
+// 监听选中的全局标签变化（在 tag 范围模式下动态更新推流）
+watch(() => tagStore.selectedTagIds, () => {
+  if (deviceStore.previewScopeMode === 'tag') {
+    evaluatePreviewState()
+  }
+}, { deep: true })
+
+// 监听用户在预览设置中多选的推流标签变化
+watch(() => deviceStore.previewSelectedTagIds, () => {
+  if (deviceStore.previewScopeMode === 'tag') {
+    evaluatePreviewState()
+  }
+}, { deep: true })
+
 // 监听在线状态变化（掉线自动清理）
 watch(() => props.device.status, (newStatus) => {
   if (newStatus !== 'online' && isPreviewActive.value) {
@@ -835,6 +954,11 @@ watch(() => props.device.status, (newStatus) => {
 watch(() => groupControlStore.selectedSlaveIds, () => {
   evaluatePreviewState()
 }, { deep: true })
+
+// 监听群控主控机变化
+watch(() => groupControlStore.masterId, () => {
+  evaluatePreviewState()
+})
 
 // 监听群控模式开关状态变化
 watch(() => groupControlStore.isGroupControlActive, () => {
@@ -995,13 +1119,15 @@ const getAbsoluteCoords = (e) => {
 }
 
 const sendDeviceControl = (payload) => {
-  // 调试日志（排查下发链路问题时再打开）
-  // if (payload.type === 'touch' && payload.action !== 2) { // 过滤高频 Move，仅对 Down / Up 输出
-  //   console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
-  // } else if (payload.type !== 'touch') {
-  //   console.log(`[DirectControl WS Send] [${props.device.id}] Payload:`, payload)
-  // }
-  deviceStore.sendGroupControlEvent([props.device.id], payload)
+  // 如果群控激活，且当前设备属于群控集合（主控或被勾选从机），广播给已选从机和主控
+  if (groupControlStore.isGroupControlActive && 
+      (groupControlStore.masterId === props.device.id || groupControlStore.selectedSlaveIds.includes(props.device.id))) {
+    const targetSet = new Set(groupControlStore.selectedSlaveIds)
+    if (groupControlStore.masterId) targetSet.add(groupControlStore.masterId)
+    deviceStore.sendGroupControlEvent(Array.from(targetSet), payload)
+  } else {
+    deviceStore.sendGroupControlEvent([props.device.id], payload)
+  }
 }
 
 const handlePointerDown = (e) => {
@@ -1442,6 +1568,7 @@ const sendKey = (keycode) => {
   align-items: center;
   gap: 5px;
   min-width: 0;
+  overflow: hidden; /* 左侧内容（设备名/徽标）超长时截断，不挤压右侧 tag 区 */
   pointer-events: auto;
 }
 
@@ -1472,6 +1599,42 @@ const sendKey = (keycode) => {
   font-size: 9px;
   color: rgba(226, 232, 240, 0.5);
   margin-left: 2px;
+}
+
+.my-lease-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 2px;
+  white-space: nowrap;
+  /* 租户名+剩余时长较长时截断，避免挤压遮挡右侧 tag 区（完整内容见 title 悬浮提示） */
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.my-lease-badge.urgent {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+/* admin 视角的租户徽标（绿色系，区别于普通用户的蓝色"我的租约"） */
+.my-lease-badge.admin-lease {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.my-lease-badge.admin-lease.urgent {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .device-tags {

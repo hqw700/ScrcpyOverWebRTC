@@ -17,6 +17,7 @@ export function useWebRTC(deviceId, options = {}) {
 
   let webrtcObj = null
   let ws = null
+  let wsHeartbeatTimer = null
   let pc = null
   let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }]
   let inputChannel = null
@@ -93,12 +94,24 @@ export function useWebRTC(deviceId, options = {}) {
         message_type: 'connect',
         device_id: deviceId
       }))
+      // 启动 WebRTC 信令长连接应用层心跳（每 20 秒发送一次 ping 保活）
+      if (wsHeartbeatTimer) clearInterval(wsHeartbeatTimer)
+      wsHeartbeatTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          } catch (e) {
+            console.warn('[WebRTC Signaling] Failed to send ws ping:', e)
+          }
+        }
+      }, 20000)
     }
 
     ws.onmessage = (evt) => {
       if (typeof evt.data !== 'string') return
       try {
         const msg = JSON.parse(evt.data)
+        if (msg.type === 'pong' || msg.message_type === 'pong') return
         debugLog('[Signaling] Received:', msg.message_type || msg.type, msg)
         handleMessage(msg)
       } catch (e) {
@@ -113,6 +126,10 @@ export function useWebRTC(deviceId, options = {}) {
     }
 
     ws.onclose = () => {
+      if (wsHeartbeatTimer) {
+        clearInterval(wsHeartbeatTimer)
+        wsHeartbeatTimer = null
+      }
       debugLog('[Signaling] WebSocket closed')
       if (status.value !== 'disconnected') {
         status.value = 'disconnected'
@@ -1490,6 +1507,10 @@ function handleDeviceMessage(payload) {
     }
     videoStream = null
     cleanupAudioPlayback()
+    if (wsHeartbeatTimer) {
+      clearInterval(wsHeartbeatTimer)
+      wsHeartbeatTimer = null
+    }
     if (ws) {
       ws.close()
       ws = null

@@ -4,8 +4,8 @@
     <header v-if="isMobile" class="page-header mobile-header">
       <!-- 单行紧凑页头：批量入口（admin）/ 标签 / 排序 / 宫格 / 搜索 / 刷新 / 视图切换 -->
       <div class="mh-row">
-        <!-- 批量操作弹层（仅 admin）：群控 + 预览开关 + 标签管理/全局设置 -->
-        <div v-if="authStore.isAdmin" class="mh-dropdown">
+        <!-- 批量操作弹层（admin 或多设备用户）：群控 + 预览开关 + 标签管理/全局设置 -->
+        <div v-if="authStore.isAdmin || deviceStore.devices.length > 1" class="mh-dropdown">
           <button class="mh-filter-btn" @click.stop="toggleMobileMenu('batch')">☰ 批量 ▾</button>
           <div v-if="mobileOpenMenu === 'batch'" class="mh-panel" @click.stop>
             <button class="mh-panel-item" @click="toggleMobileGroupControl">
@@ -38,10 +38,15 @@
                 class="mh-panel-item"
                 @click="openTagManager('batch'); closeMobileMenus()"
               >批量打标签</button>
+              <button
+                v-if="groupControlStore.selectedSlaveIds.length > 0"
+                class="mh-panel-item"
+                @click="openBatchTextModal(); closeMobileMenus()"
+              >💬 批量文本下发</button>
             </template>
             <div class="mh-panel-divider"></div>
             <!-- 高频预览 / 预览直控开关（v-model 绑定与桌面端一致） -->
-            <label class="switch-label mh-switch" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
+            <label class="switch-label mh-switch" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放实时预览">
               <input
                 type="checkbox"
                 v-model="deviceStore.globalPreviewMode"
@@ -49,6 +54,29 @@
               >
               <span class="switch-text">高频预览</span>
             </label>
+            <div v-if="deviceStore.globalPreviewMode" class="mh-scope-row">
+              <span class="mh-scope-title">范围:</span>
+              <button 
+                class="mh-scope-btn" 
+                :class="{ active: deviceStore.previewScopeMode === 'visible' }"
+                @click.stop="deviceStore.setPreviewScopeMode('visible')"
+              >可视</button>
+              <button 
+                class="mh-scope-btn" 
+                :class="{ active: deviceStore.previewScopeMode === 'all' }"
+                @click.stop="deviceStore.setPreviewScopeMode('all')"
+              >全部</button>
+              <button 
+                class="mh-scope-btn" 
+                :class="{ active: deviceStore.previewScopeMode === 'selected' }"
+                @click.stop="deviceStore.setPreviewScopeMode('selected')"
+              >勾选</button>
+              <button 
+                class="mh-scope-btn" 
+                :class="{ active: deviceStore.previewScopeMode === 'tag' }"
+                @click.stop="deviceStore.setPreviewScopeMode('tag')"
+              >标签</button>
+            </div>
             <label
               class="switch-label mh-switch"
               :class="{ 'disabled': !deviceStore.globalPreviewMode }"
@@ -62,10 +90,12 @@
               >
               <span class="switch-text">预览直控</span>
             </label>
-            <div class="mh-panel-divider"></div>
-            <button class="mh-panel-item" @click="openTagManager('full'); closeMobileMenus()">标签管理</button>
-            <button class="mh-panel-item" @click="openGlobalSettings(); closeMobileMenus()">全局设置</button>
-            <button class="mh-panel-item" @click="showLicensePanel = true; closeMobileMenus()">授权管理</button>
+            <template v-if="authStore.isAdmin">
+              <div class="mh-panel-divider"></div>
+              <button class="mh-panel-item" @click="openTagManager('full'); closeMobileMenus()">标签管理</button>
+              <button class="mh-panel-item" @click="openGlobalSettings(); closeMobileMenus()">全局设置</button>
+              <button class="mh-panel-item" @click="showLicensePanel = true; closeMobileMenus()">授权管理</button>
+            </template>
           </div>
         </div>
         <!-- 标签筛选（全部 / 各标签 / 离线设备） -->
@@ -105,12 +135,7 @@
               <span class="mh-item-name">离线设备</span>
               <span class="mh-item-count">{{ deviceStore.offlineDevices.length }}</span>
             </button>
-            <!-- 非 admin 的标签管理/授权管理入口（原有移动端可达性保持不变） -->
-            <template v-if="!authStore.isAdmin">
-              <div class="mh-panel-divider"></div>
-              <button class="mh-panel-item" @click="openTagManager('full'); closeMobileMenus()">标签管理</button>
-              <button class="mh-panel-item" @click="showLicensePanel = true; closeMobileMenus()">授权管理</button>
-            </template>
+            <!-- 标签管理为管理员专属（标签写入口径已收口 admin），普通用户不展示写入口 -->
           </div>
         </div>
         <!-- 排序 -->
@@ -126,12 +151,12 @@
           <button class="mh-filter-btn" @click.stop="toggleMobileMenu('cols')">宫格 ▾</button>
           <div v-if="mobileOpenMenu === 'cols'" class="mh-panel" @click.stop>
             <button
-              v-for="n in [2, 3, 4]"
+              v-for="n in [1, 2, 3, 4]"
               :key="n"
               class="mh-panel-item"
               :class="{ active: mobileCols === n }"
               @click="setMobileCols(n)"
-            >{{ n }} 列</button>
+            >{{ n === 1 ? '单列' : n + ' 列' }}</button>
           </div>
         </div>
         <!-- 账号剩余时间（仅账号设有有效期时显示） -->
@@ -259,6 +284,34 @@
 
           <span class="gc-count-badge">已勾选 {{ groupControlStore.selectedSlaveIds.length }} 台从机</span>
 
+          <!-- 高频推流范围切换 -->
+          <div class="gc-scope-group" title="高频预览推流范围控制">
+            <button 
+              class="gc-scope-btn" 
+              :class="{ active: deviceStore.previewScopeMode === 'visible' }" 
+              @click.stop="deviceStore.setPreviewScopeMode('visible')"
+              title="屏幕可视区域内所有设备均推流"
+            >可视区域</button>
+            <button 
+              class="gc-scope-btn" 
+              :class="{ active: deviceStore.previewScopeMode === 'all' }" 
+              @click.stop="deviceStore.setPreviewScopeMode('all')"
+              title="全量所有在线设备持续推流"
+            >全部在线</button>
+            <button 
+              class="gc-scope-btn" 
+              :class="{ active: deviceStore.previewScopeMode === 'selected' }" 
+              @click.stop="deviceStore.setPreviewScopeMode('selected')"
+              title="仅对群控勾选的从机或主控机推流（最省资源，推荐）"
+            >仅勾选</button>
+            <button 
+              class="gc-scope-btn" 
+              :class="{ active: deviceStore.previewScopeMode === 'tag' }" 
+              @click.stop="deviceStore.setPreviewScopeMode('tag')"
+              title="仅匹配当前所选标签的设备推流"
+            >标签筛选</button>
+          </div>
+
           <!-- 预览直控按键 -->
           <button 
             class="gc-btn gc-interactive-btn"
@@ -278,6 +331,15 @@
           >
             🏷 批量打标签
           </button>
+
+          <button 
+            v-if="groupControlStore.selectedSlaveIds.length > 0"
+            class="gc-btn gc-text-action-btn"
+            @click.stop="openBatchTextModal"
+            title="向当前所有已选从机批量下发文本"
+          >
+            💬 批量文本下发
+          </button>
         </div>
 
         <div class="gc-bar-right">
@@ -293,7 +355,7 @@
           <p>正在获取虚机列表...</p>
         </div>
 
-        <div v-else-if="deviceStore.devices.length === 0 && deviceStore.offlineDevices.length === 0" class="quickstart-container">
+        <div v-else-if="deviceStore.devices.length === 0 && deviceStore.offlineDevices.length === 0 && authStore.isAdmin" class="quickstart-container">
           <div class="quickstart-header">
             <div class="empty-icon">🔌</div>
             <h3 class="qs-title">快速接入您的第一台云手机</h3>
@@ -451,6 +513,12 @@ cpctl restart</pre>
           </div>
         </div>
 
+        <div v-else-if="deviceStore.devices.length === 0 && deviceStore.offlineDevices.length === 0" class="state-view">
+          <div class="empty-icon">📱</div>
+          <h3>暂无可用云手机</h3>
+          <p>您当前没有可用的云手机，请联系管理员购买或开通。</p>
+        </div>
+
         <div v-else-if="noVisibleDevices" class="state-view">
           <div class="empty-icon">🔎</div>
           <h3>没有匹配结果</h3>
@@ -547,6 +615,34 @@ cpctl restart</pre>
               />
             </div>
             <template v-else>
+              <!-- 单列整页模式（移动端）：一页一台在线虚机，左右滑动，不显示离线设备 -->
+              <template v-if="isSingleColMode">
+                <template v-if="filteredDevices.length > 0">
+                  <div class="single-pager" @scroll.passive="onSinglePagerScroll">
+                    <div
+                      v-for="device in filteredDevices"
+                      :key="device.id"
+                      class="single-pager-page"
+                    >
+                      <DeviceCard
+                        :device="device"
+                        :tags="tagStore.getTagsForDevice(device.id)"
+                        @connect="connectDevice"
+                        @settings="openSettings"
+                        @edit-tags="id => openTagManager('single', id)"
+                        @share="openShareModal"
+                      />
+                    </div>
+                  </div>
+                  <div class="single-pager-counter">
+                    {{ Math.min(singlePagerPage, filteredDevices.length - 1) + 1 }} / {{ filteredDevices.length }}
+                  </div>
+                </template>
+                <div v-else class="single-pager-empty">
+                  暂无在线设备<template v-if="filteredOfflineDevices.length > 0">（{{ filteredOfflineDevices.length }} 台离线，可切换多列查看）</template>
+                </div>
+              </template>
+              <template v-else>
               <div 
                 v-if="filteredDevices.length > 0"
                 class="device-grid" 
@@ -564,13 +660,15 @@ cpctl restart</pre>
                 />
               </div>
 
-              <!-- 离线设备区块（数据来自服务端离线记录） -->
+              <!-- 离线设备区块（数据来自服务端离线记录，可折叠，默认折叠） -->
               <div v-if="filteredOfflineDevices.length > 0" class="offline-section">
-                <div class="offline-section-header">
+                <div class="offline-section-header clickable" @click="offlineCollapsed = !offlineCollapsed">
                   <span class="offline-section-title">离线设备</span>
                   <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
+                  <span class="offline-section-arrow">{{ offlineCollapsed ? '▸' : '▾' }}</span>
                 </div>
                 <div 
+                  v-show="!offlineCollapsed"
                   class="device-grid offline-grid" 
                   :style="{ gridTemplateColumns: gridColumnsStyle }"
                 >
@@ -586,6 +684,7 @@ cpctl restart</pre>
                   />
                 </div>
               </div>
+              </template>
             </template>
           </template>
         </div>
@@ -621,6 +720,21 @@ cpctl restart</pre>
 
     <!-- 授权管理面板 -->
     <LicensePanel :visible="showLicensePanel" @close="showLicensePanel = false" />
+
+    <!-- 群控批量文本下发弹窗 -->
+    <BatchTextModal
+      :visible="showBatchTextModal"
+      :targetDeviceIds="groupControlTargetIds"
+      @close="showBatchTextModal = false"
+      @sent="onBatchTextSent"
+    />
+
+    <!-- 群控批量操作轻提示 Toast -->
+    <transition name="fade">
+      <div v-if="batchTextNotice" class="gc-toast-notice">
+        {{ batchTextNotice }}
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -635,6 +749,7 @@ import SettingsModal from '@/components/SettingsModal.vue'
 import TagManagerModal from '@/components/TagManagerModal.vue'
 import ShareModal from '@/components/ShareModal.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
+import BatchTextModal from '@/components/BatchTextModal.vue'
 
 import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections } from '@/utils/settings'
 import { useAuthStore } from '@/stores/auth'
@@ -659,14 +774,17 @@ const licenseUsagePercent = computed(() => {
   const max = deviceStore.licenseMaxDevices || 1
   return Math.round((licenseUsedCount.value / max) * 100)
 })
-const isLicenseFull = computed(() => licenseUsedCount.value >= deviceStore.licenseMaxDevices)
+const isLicenseFull = computed(() => deviceStore.licenseDetailsLoaded && licenseUsedCount.value >= deviceStore.licenseMaxDevices)
 
 const licenseBadgeText = computed(() => {
   const used = licenseUsedCount.value
   const max = deviceStore.licenseMaxDevices
   if (deviceStore.licenseActivated) {
+    // 普通用户拿不到详细字段（额度/剩余天数），只显示已授权状态，避免展示默认值误导
+    if (!deviceStore.licenseDetailsLoaded) return '已授权'
     return `授权 ${used}/${max} 台 · 剩余 ${deviceStore.licenseDaysRemaining} 天`
   }
+  if (!deviceStore.licenseDetailsLoaded) return '未授权'
   if (deviceStore.licensePromo) {
     return `限时特惠 ${used}/${max} 台`
   }
@@ -674,6 +792,9 @@ const licenseBadgeText = computed(() => {
 })
 
 const licenseBadgeTitle = computed(() => {
+  if (!deviceStore.licenseDetailsLoaded) {
+    return '点击查看授权管理'
+  }
   if (deviceStore.licenseActivated) {
     return `授权到期时间: ${deviceStore.licenseExpiresAt || '-'}，点击查看授权管理`
   }
@@ -686,6 +807,8 @@ const licenseBadgeTitle = computed(() => {
 const licenseBadgeClass = computed(() => {
   // 已过期红色；用量 =100% 红色、>=80% 橙色；已激活且剩余 <=30 天橙色
   if (deviceStore.licenseStatus === 'expired' || deviceStore.isLicenseExpired) return 'badge-danger'
+  // 无详细字段时不做用量/临期阈值着色（此时相关值为默认值，不可靠）
+  if (!deviceStore.licenseDetailsLoaded) return ''
   if (licenseUsagePercent.value >= 100) return 'badge-danger'
   if (licenseUsagePercent.value >= 80) return 'badge-warn'
   if (deviceStore.licenseActivated && deviceStore.licenseDaysRemaining <= 30) return 'badge-warn'
@@ -723,12 +846,26 @@ const updateMobileMedia = () => {
   isMobile.value = window.innerWidth <= 1024
 }
 
-// 移动端宫格列数：可选 2/3/4，默认 4，持久化到 localStorage
+// 移动端宫格列数：可选 1/2/3/4（1 = 单列整页滑动模式），默认 4，持久化到 localStorage
 const savedMobileCols = parseInt(localStorage.getItem('cloudphone_mobile_cols'), 10)
-const mobileCols = ref([2, 3, 4].includes(savedMobileCols) ? savedMobileCols : 4)
+const mobileCols = ref([1, 2, 3, 4].includes(savedMobileCols) ? savedMobileCols : 4)
 watch(mobileCols, (newVal) => {
   localStorage.setItem('cloudphone_mobile_cols', newVal.toString())
 })
+
+// 单列整页模式（仅移动端）：一页一台在线虚机，左右滑动切换，不显示离线设备
+const isSingleColMode = computed(() => isMobile.value && mobileCols.value === 1)
+const singlePagerPage = ref(0)
+function onSinglePagerScroll(e) {
+  const el = e.target
+  const w = el.clientWidth
+  if (w > 0) {
+    singlePagerPage.value = Math.round(el.scrollLeft / w)
+  }
+}
+
+// 离线设备分区折叠（卡片视图，默认折叠）
+const offlineCollapsed = ref(true)
 
 // 排序方式：default=按 id 字典序（现状），recent=最近活跃（lastSeen）优先
 const savedSortBy = localStorage.getItem('cloudphone_sort_by')
@@ -798,7 +935,7 @@ function lastSeenTime(device) {
 }
 
 function selectAllOnline() {
-  groupControlStore.selectAllOnline(deviceStore.devices)
+  groupControlStore.selectAllOnline(filteredDevices.value)
 }
 
 function clearSlaves() {
@@ -806,7 +943,7 @@ function clearSlaves() {
 }
 
 function selectByTag(tagId) {
-  groupControlStore.selectByTag(tagId, deviceStore.devices, tagStore)
+  groupControlStore.selectByTag(tagId, filteredDevices.value, tagStore)
   showTagDropdown.value = false
 }
 
@@ -817,6 +954,38 @@ function toggleGlobalInteractive() {
   } else {
     deviceStore.globalInteractiveMode = false
   }
+}
+
+// 群控批量文本下发状态与逻辑
+const showBatchTextModal = ref(false)
+const batchTextNotice = ref('')
+let batchTextNoticeTimer = null
+
+const groupControlTargetIds = computed(() => {
+  const ids = new Set()
+  if (groupControlStore.masterId) {
+    ids.add(groupControlStore.masterId)
+  }
+  for (const id of groupControlStore.selectedSlaveIds) {
+    ids.add(id)
+  }
+  return Array.from(ids)
+})
+
+function openBatchTextModal() {
+  if (groupControlTargetIds.value.length === 0) {
+    alert('请先勾选需要下发文本的从机设备')
+    return
+  }
+  showBatchTextModal.value = true
+}
+
+function onBatchTextSent({ count }) {
+  batchTextNotice.value = `已成功向 ${count} 台设备下发文本！`
+  if (batchTextNoticeTimer) clearTimeout(batchTextNoticeTimer)
+  batchTextNoticeTimer = setTimeout(() => {
+    batchTextNotice.value = ''
+  }, 2500)
 }
 
 // 点击页面空白处收起所有下拉（群控标签勾选 + 移动端页头下拉）
@@ -834,6 +1003,7 @@ onUnmounted(() => {
   window.removeEventListener('click', closeTagDropdownMenu)
   window.removeEventListener('resize', updateMobileMedia)
   clearInterval(accountExpiryTimer)
+  if (batchTextNoticeTimer) clearTimeout(batchTextNoticeTimer)
 })
 
 watch(() => deviceStore.globalPreviewMode, (newVal) => {
@@ -1203,6 +1373,9 @@ function handleOpenTagManagerEvent(e) {
 onMounted(async () => {
   quickstartSignaling.value = window.location.host
   deviceStore.fetchDevices()
+  if (authStore.isLoggedIn && (!deviceStore.globalWs || deviceStore.globalWs.readyState !== WebSocket.OPEN)) {
+    deviceStore.initSignaling()
+  }
   refreshInterval = setInterval(() => {
     deviceStore.fetchDevices()
   }, 10000)
@@ -1551,6 +1724,75 @@ function connectDevice(deviceId) {
   font-weight: 600;
 }
 
+.gc-scope-group {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.gc-scope-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.gc-scope-btn:hover {
+  color: var(--text-primary, #f1f5f9);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gc-scope-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.mh-scope-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.mh-scope-title {
+  font-size: 11px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.mh-scope-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+}
+
+.mh-scope-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  font-weight: 600;
+}
+
 .gc-tag-dropdown-wrap {
   position: relative;
   z-index: 60;
@@ -1621,6 +1863,40 @@ function connectDevice(deviceId) {
   background: rgba(56, 189, 248, 0.15);
   border-color: rgba(56, 189, 248, 0.4);
   color: #38bdf8;
+}
+
+.gc-text-action-btn {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.gc-text-action-btn:hover {
+  background: rgba(168, 85, 247, 0.28);
+  border-color: rgba(168, 85, 247, 0.6);
+  color: #f3e8ff;
+}
+
+.gc-toast-notice {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  background: rgba(15, 23, 42, 0.95);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.25);
+  backdrop-filter: blur(12px);
+  border-radius: 999px;
+  padding: 8px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .gc-exit-btn {
@@ -1730,6 +2006,56 @@ function connectDevice(deviceId) {
   align-items: center;
   gap: 8px;
   margin-bottom: 16px;
+}
+
+.offline-section-header.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.offline-section-arrow {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+/* 单列整页模式（移动端）：一页一台，scroll-snap 横向滑动 */
+.single-pager {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.single-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.single-pager-page {
+  min-width: 100%;
+  box-sizing: border-box;
+  padding: 0 8px;
+  scroll-snap-align: center;
+}
+
+.single-pager-page :deep(.device-card) {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+}
+
+.single-pager-counter {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  padding: 6px 0 12px;
+}
+
+.single-pager-empty {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary, #94a3b8);
+  padding: 60px 20px;
 }
 
 .offline-section-title {

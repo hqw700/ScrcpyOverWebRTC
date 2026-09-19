@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed, shallowRef, markRaw } from 'vue'
+import { ref, computed, shallowRef, markRaw, watch } from 'vue'
 import { debugLog } from '@/utils/debug'
 import { useTagStore } from './tags'
+import { useAuthStore } from './auth'
 
 export const useDeviceStore = defineStore('devices', () => {
   const devices = ref([])
@@ -20,6 +21,9 @@ export const useDeviceStore = defineStore('devices', () => {
   const licenseCurrentDevices = ref(0)         // 当前在线设备数（服务端口径）
   const licensePromo = ref(false)              // 未激活且处于限时特惠期
   const licensePostPromoMaxDevices = ref(10)   // 特惠结束后的免费额度
+  // /api/license_status 对普通用户只返回最小信息（如 {licensed}），
+  // 详细字段（到期时间、设备上限等）是否存在以此标记，UI 据此隐藏对应行
+  const licenseDetailsLoaded = ref(false)
 
   const onlineDevices = computed(() => 
     [...devices.value]
@@ -62,8 +66,11 @@ export const useDeviceStore = defineStore('devices', () => {
     const used = licenseUsedCount.value
     const max = licenseMaxDevices.value
     if (licenseActivated.value) {
+      // 普通用户拿不到详细字段（额度/剩余天数），只显示已授权状态，避免展示默认值误导
+      if (!licenseDetailsLoaded.value) return '已授权'
       return `授权 ${used}/${max} 台 · 剩余 ${licenseDaysRemaining.value} 天`
     }
+    if (!licenseDetailsLoaded.value) return '未授权'
     if (licensePromo.value) {
       return `限时特惠 ${used}/${max} 台`
     }
@@ -71,6 +78,9 @@ export const useDeviceStore = defineStore('devices', () => {
   })
 
   const licenseBadgeTitle = computed(() => {
+    if (!licenseDetailsLoaded.value) {
+      return '点击查看授权管理'
+    }
     if (licenseActivated.value) {
       return `授权到期时间: ${licenseExpiresAt.value || '-'}，点击查看授权管理`
     }
@@ -82,6 +92,8 @@ export const useDeviceStore = defineStore('devices', () => {
 
   const licenseBadgeClass = computed(() => {
     if (licenseStatus.value === 'expired' || isLicenseExpired.value) return 'badge-danger'
+    // 无详细字段时不做用量/临期阈值着色（此时相关值为默认值，不可靠）
+    if (!licenseDetailsLoaded.value) return ''
     if (licenseUsagePercent.value >= 100) return 'badge-danger'
     if (licenseUsagePercent.value >= 80) return 'badge-warn'
     if (licenseActivated.value && licenseDaysRemaining.value <= 30) return 'badge-warn'
@@ -107,6 +119,9 @@ export const useDeviceStore = defineStore('devices', () => {
           status: 'offline',
           firstSeen: serverRec?.firstSeen || d.firstSeen,
           lastSeen: serverRec?.lastSeen || d.lastSeen,
+          // 注意：服务端显式返回 lease: null（已收回）时必须清空，?? 会把 null 也当作"缺省"回退旧值
+          lease: serverRec ? (serverRec.lease ?? null) : (d.lease ?? null),
+          myLeaseRemainingSeconds: serverRec ? serverRec.myLeaseRemainingSeconds : d.myLeaseRemainingSeconds,
           lastOffline: new Date().toISOString()
         }
         const idx = offlineDevices.value.findIndex(od => od.id === d.id)
@@ -129,7 +144,10 @@ export const useDeviceStore = defineStore('devices', () => {
           ...old,
           info: sd.info || old.info,
           firstSeen: sd.firstSeen || old.firstSeen,
-          lastSeen: sd.lastSeen || old.lastSeen
+          lastSeen: sd.lastSeen || old.lastSeen,
+          // sd 来自服务端列表，lease 显式为 null 时也要生效（清除旧租约）
+          lease: sd.lease ?? null,
+          myLeaseRemainingSeconds: sd.myLeaseRemainingSeconds
         }
       } else {
         offlineDevices.value.push({
@@ -139,6 +157,8 @@ export const useDeviceStore = defineStore('devices', () => {
           snapshot: null,
           firstSeen: sd.firstSeen || null,
           lastSeen: sd.lastSeen || null,
+          lease: sd.lease || null,
+          myLeaseRemainingSeconds: sd.myLeaseRemainingSeconds,
           lastOffline: null
         })
       }
@@ -152,7 +172,10 @@ export const useDeviceStore = defineStore('devices', () => {
         info: activeDev?.info || d.info,
         firstSeen: activeDev?.firstSeen || d.firstSeen,
         clientCount: activeDev?.clientCount ?? d.clientCount ?? 0,
-        clients: activeDev?.clients ?? d.clients ?? []
+        clients: activeDev?.clients ?? d.clients ?? [],
+        // activeDev 一定存在（按 activeIds 过滤）；lease 显式 null 也要生效
+        lease: activeDev ? (activeDev.lease ?? null) : (d.lease ?? null),
+        myLeaseRemainingSeconds: activeDev ? activeDev.myLeaseRemainingSeconds : d.myLeaseRemainingSeconds
       }
     })
 
@@ -172,7 +195,9 @@ export const useDeviceStore = defineStore('devices', () => {
             firstSeen: devData.firstSeen || resurrected.firstSeen,
             lastSeen: new Date().toISOString(),
             clientCount: devData.clientCount ?? resurrected.clientCount ?? 0,
-            clients: devData.clients ?? resurrected.clients ?? []
+            clients: devData.clients ?? resurrected.clients ?? [],
+            lease: devData.lease ?? null, // devData 来自服务端，显式 null 即无租约
+            myLeaseRemainingSeconds: devData.myLeaseRemainingSeconds
           })
         } else {
           // 全新上线的设备
@@ -184,7 +209,9 @@ export const useDeviceStore = defineStore('devices', () => {
             firstSeen: devData.firstSeen || null,
             lastSeen: new Date().toISOString(),
             clientCount: devData.clientCount ?? 0,
-            clients: devData.clients ?? []
+            clients: devData.clients ?? [],
+            lease: devData.lease ?? null,
+            myLeaseRemainingSeconds: devData.myLeaseRemainingSeconds
           })
         }
       }
@@ -230,7 +257,9 @@ export const useDeviceStore = defineStore('devices', () => {
     }
 
     try {
-      const res = await fetch('/devices')
+      const res = await fetch('/devices', {
+        headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || '') }
+      })
       const data = await res.json()
       
       if (Array.isArray(data)) {
@@ -245,7 +274,9 @@ export const useDeviceStore = defineStore('devices', () => {
             firstSeen: item.first_seen || null,
             lastSeen: item.last_seen || null,
             clientCount: item.client_count || 0,
-            clients: item.clients || []
+            clients: item.clients || [],
+            lease: item.lease || null, // admin 视角：当前活跃租约 {username, expires_at, remaining_seconds, ...}
+            myLeaseRemainingSeconds: item.my_lease_remaining_seconds // 普通用户视角：我的租约剩余秒数（无租约则缺省）
           }
         })
         processDeviceList(deviceList)
@@ -297,7 +328,9 @@ export const useDeviceStore = defineStore('devices', () => {
         firstSeen: item.first_seen || null,
         lastSeen: item.last_seen || null,
         clientCount: item.client_count || 0,
-        clients: item.clients || []
+        clients: item.clients || [],
+        lease: item.lease || null, // admin 视角：当前活跃租约
+        myLeaseRemainingSeconds: item.my_lease_remaining_seconds // 普通用户视角：我的租约剩余秒数
       }
     })
     processDeviceList(deviceList)
@@ -383,6 +416,7 @@ export const useDeviceStore = defineStore('devices', () => {
     if (!masterDeviceId.value) {
       masterDeviceId.value = id
     }
+    activeTopLayer.value = 'connection'
   }
 
   function closeDevice(id) {
@@ -443,6 +477,7 @@ export const useDeviceStore = defineStore('devices', () => {
   function focusDevice(id) {
     if (activeDeviceIds.value.includes(id)) {
       focusedDeviceId.value = id
+      activeTopLayer.value = 'connection'
     }
   }
 
@@ -653,16 +688,45 @@ export const useDeviceStore = defineStore('devices', () => {
   }
 
   let globalWs = null
+  let globalWsHeartbeatTimer = null
   let licensePollTimer = null
 
+  // 缩略图 HTTP 兜底轮询：全局 WS 断开（自签名证书等 WSS 不稳定环境）时也能刷新缩略图。
+  // 与 WS 推送互补，/snapshots/ 服务端有 hasDeviceAccess 校验，普通用户只能拉到自己设备的图。
+  let snapshotPollTimer = null
+  function refreshSnapshotsViaHTTP() {
+    const token = localStorage.getItem('auth_token') || ''
+    const now = Date.now()
+    let changed = false
+    devices.value.forEach((d, i) => {
+      if (d.status === 'online') {
+        devices.value[i].snapshot = `/snapshots/${encodeURIComponent(d.id)}.jpg?t=${now}&token=${encodeURIComponent(token)}`
+        changed = true
+      }
+    })
+    if (changed) devices.value = [...devices.value]
+  }
+
   function initSignaling() {
-    if (globalWs) return
+    if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) return
+    if (globalWs) {
+      try { globalWs.close() } catch(e) {}
+      globalWs = null
+    }
+
+    const authStore = useAuthStore()
+    if (!authStore.isLoggedIn) return
 
     fetchLicenseStatus()
     // 授权状态 60s 兜底轮询（WS 推送之外的保险；用单例定时器避免重连时叠加）
     if (!licensePollTimer) {
       licensePollTimer = setInterval(fetchLicenseStatus, 60000)
     }
+    // 缩略图 15s 兜底轮询（立即先刷一次，WS 不可用时也能看到缩略图）
+    if (!snapshotPollTimer) {
+      snapshotPollTimer = setInterval(refreshSnapshotsViaHTTP, 15000)
+    }
+    refreshSnapshotsViaHTTP()
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const token = localStorage.getItem('auth_token') || ''
@@ -672,6 +736,21 @@ export const useDeviceStore = defineStore('devices', () => {
     globalWs = new WebSocket(url)
     globalWs.binaryType = 'arraybuffer'
 
+    globalWs.onopen = () => {
+      debugLog('[Store] Global signaling connected')
+      // 启动应用层心跳保活定时器（每 20 秒向服务端发送一次 ping，避免 NAT/反代超时断连）
+      if (globalWsHeartbeatTimer) clearInterval(globalWsHeartbeatTimer)
+      globalWsHeartbeatTimer = setInterval(() => {
+        if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+          try {
+            globalWs.send(JSON.stringify({ type: 'ping' }))
+          } catch (e) {
+            console.warn('[Store] Failed to send ws ping:', e)
+          }
+        }
+      }, 20000)
+    }
+
     globalWs.onmessage = (evt) => {
       if (evt.data instanceof ArrayBuffer) {
         handlePreviewBinary(evt.data)
@@ -679,6 +758,9 @@ export const useDeviceStore = defineStore('devices', () => {
       }
       try {
         const msg = JSON.parse(evt.data)
+        if (msg.type === 'pong' || msg.message_type === 'pong') {
+          return
+        }
         if (msg.message_type === 'snapshot_update') {
           updateSnapshot(msg.device_id, msg.data)
         } else if (msg.message_type === 'snapshot_updated') {
@@ -716,31 +798,52 @@ export const useDeviceStore = defineStore('devices', () => {
       }
     }
 
+    globalWs.onerror = (err) => {
+      console.warn('[Store] Global signaling error:', err)
+    }
+
     globalWs.onclose = () => {
+      if (globalWsHeartbeatTimer) {
+        clearInterval(globalWsHeartbeatTimer)
+        globalWsHeartbeatTimer = null
+      }
       globalWs = null
-      setTimeout(initSignaling, 3000) // 自动重连
+      // 仅在仍然处于登录状态时安排重连
+      const aStore = useAuthStore()
+      if (aStore.isLoggedIn) {
+        setTimeout(initSignaling, 3000) // 自动重连
+      }
     }
   }
 
-  // 将授权状态（/api/license_status 响应或 license_update 推送）统一填充到 store
+  // 将授权状态（/api/license_status 响应或 license_update 推送）统一填充到 store。
+  // 普通用户的响应只含最小信息（如 {licensed}），缺失字段一律保留现有值，不用默认值覆盖。
   function applyLicenseState(data) {
-    isLicenseExpired.value = !!data.license_expired
-    licenseErrorMsg.value = data.error_msg || ''
-    globalMachineID.value = data.machine_id || ''
-    licenseMaxDevices.value = data.max_devices || 50
-    licenseExpiresAt.value = data.expires_at || ''
-    licenseDaysRemaining.value = data.days_remaining || 0
-    licenseStatus.value = data.status || 'valid'
-    licenseActivated.value = !!data.activated
-    licenseCustomer.value = data.customer || ''
-    licenseCurrentDevices.value = data.current_devices || 0
-    licensePromo.value = !!data.promo
-    licensePostPromoMaxDevices.value = data.post_promo_max_devices || 10
+    if (data.license_expired !== undefined) isLicenseExpired.value = !!data.license_expired
+    if (data.error_msg !== undefined) licenseErrorMsg.value = data.error_msg || ''
+    if (data.machine_id !== undefined) globalMachineID.value = data.machine_id || ''
+    if (data.max_devices !== undefined) licenseMaxDevices.value = data.max_devices
+    if (data.expires_at !== undefined) licenseExpiresAt.value = data.expires_at || ''
+    if (data.days_remaining !== undefined) licenseDaysRemaining.value = data.days_remaining
+    if (data.status !== undefined) licenseStatus.value = data.status
+    if (data.activated !== undefined) licenseActivated.value = !!data.activated
+    if (data.customer !== undefined) licenseCustomer.value = data.customer || ''
+    if (data.current_devices !== undefined) licenseCurrentDevices.value = data.current_devices
+    if (data.promo !== undefined) licensePromo.value = !!data.promo
+    if (data.post_promo_max_devices !== undefined) licensePostPromoMaxDevices.value = data.post_promo_max_devices
+    // 最小响应的 licensed 字段映射为 activated 语义
+    if (data.activated === undefined && data.licensed !== undefined) {
+      licenseActivated.value = !!data.licensed
+    }
+    // 响应中带有任一详细字段即视为完整粒度
+    licenseDetailsLoaded.value = data.max_devices !== undefined || data.expires_at !== undefined || data.status !== undefined
   }
 
   async function fetchLicenseStatus() {
     try {
-      const res = await fetch('/api/license_status')
+      const res = await fetch('/api/license_status', {
+        headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || '') }
+      })
       if (res.ok) {
         const data = await res.json()
         applyLicenseState(data)
@@ -817,12 +920,69 @@ export const useDeviceStore = defineStore('devices', () => {
   // 全局高频预览模式状态
   const globalPreviewMode = ref(false)
 
-  // 全局预览直控模式状态
+  // 高频预览机器范围选择模式: 'visible' (屏幕可视区域设备) | 'all' (全部在线设备) | 'selected' (仅勾选设备/从机) | 'tag' (匹配标签设备)
+  const previewScopeMode = ref(localStorage.getItem('cloudphone_preview_scope') || 'visible')
+
+  // 高频预览所选标签列表 (多选 tagId 数组)
+  const previewSelectedTagIds = ref((() => {
+    try {
+      const raw = localStorage.getItem('cloudphone_preview_tags')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })())
+
+  function setPreviewScopeMode(mode) {
+    if (['visible', 'all', 'selected', 'tag'].includes(mode)) {
+      previewScopeMode.value = mode
+      localStorage.setItem('cloudphone_preview_scope', mode)
+    }
+  }
+
+  function togglePreviewTag(tagId) {
+    const idx = previewSelectedTagIds.value.indexOf(tagId)
+    if (idx >= 0) {
+      previewSelectedTagIds.value.splice(idx, 1)
+    } else {
+      previewSelectedTagIds.value.push(tagId)
+    }
+    localStorage.setItem('cloudphone_preview_tags', JSON.stringify(previewSelectedTagIds.value))
+  }
+
+  function clearPreviewTags() {
+    previewSelectedTagIds.value = []
+    localStorage.setItem('cloudphone_preview_tags', JSON.stringify([]))
+  }
+
+  function setPreviewTags(tagIds) {
+    previewSelectedTagIds.value = Array.isArray(tagIds) ? [...tagIds] : []
+    localStorage.setItem('cloudphone_preview_tags', JSON.stringify(previewSelectedTagIds.value))
+  }
+
+  // 全局预览直控模式状态（必须依赖高频预览）
   const globalInteractiveMode = ref(false)
+
+  // 预览直控和高频预览强关联：高频预览关闭时，直控自动重置关闭
+  watch(globalPreviewMode, (enabled) => {
+    if (!enabled) {
+      globalInteractiveMode.value = false
+    }
+  })
 
   // 全局下半屏控制台状态
   const showGlobalConsole = ref(false)
   const consoleDeviceId = ref('')
+  const consoleInitialTab = ref('shell')
+  // 终端与连接界面动态层叠置顶状态：'connection' (连接面板置顶) | 'console' (终端控制台置顶)
+  const activeTopLayer = ref('connection')
+
+  function setActiveTopLayer(layer) {
+    if (layer === 'console' || layer === 'connection') {
+      activeTopLayer.value = layer
+    }
+  }
+
   // 初始高度按当前视口钳制：避免大屏保存的高度在小屏上超出视口，
   // 导致顶部拉伸手柄跑到屏幕外而无法缩小
   const globalConsoleHeight = ref(clampConsoleHeight(parseInt(localStorage.getItem('cloudphone_console_height') || '380', 10)))
@@ -849,43 +1009,68 @@ export const useDeviceStore = defineStore('devices', () => {
     [...devices.value, ...offlineDevices.value].filter(isRecentDevice)
   )
 
-  function openGlobalConsole(deviceId) {
+  function ensureConsoleDeviceId(fallback = '') {
+    if (consoleDeviceId.value) return consoleDeviceId.value
+    if (activeDeviceId.value) {
+      consoleDeviceId.value = activeDeviceId.value
+    } else if (onlineDevices.value.length > 0) {
+      consoleDeviceId.value = onlineDevices.value[0].id
+    } else if (devices.value.length > 0) {
+      consoleDeviceId.value = devices.value[0].id
+    } else if (fallback) {
+      consoleDeviceId.value = fallback
+    } else {
+      consoleDeviceId.value = 'default'
+    }
+    return consoleDeviceId.value
+  }
+
+  // 监听设备列表加载，自动将默认占位符替换为真实设备
+  watch(() => devices.value, (newDevs) => {
+    if ((!consoleDeviceId.value || consoleDeviceId.value === 'default') && newDevs && newDevs.length > 0) {
+      const online = newDevs.find(d => d.status === 'online')
+      consoleDeviceId.value = online ? online.id : newDevs[0].id
+    }
+  }, { immediate: true })
+
+  function openGlobalConsole(deviceId, initialTab = 'shell') {
     if (deviceId) {
       consoleDeviceId.value = deviceId
     } else {
-      // fallback
-      if (activeDeviceId.value) {
-        consoleDeviceId.value = activeDeviceId.value
-      } else if (onlineDevices.value.length > 0) {
-        consoleDeviceId.value = onlineDevices.value[0].id
-      }
+      ensureConsoleDeviceId()
+    }
+    if (initialTab) {
+      consoleInitialTab.value = initialTab
     }
     showGlobalConsole.value = true
+    activeTopLayer.value = 'console'
   }
 
   function toggleGlobalConsole() {
     if (showGlobalConsole.value) {
-      showGlobalConsole.value = false
-    } else {
-      // 开启时做 fallback 检查
-      if (!consoleDeviceId.value) {
-        if (activeDeviceId.value) {
-          consoleDeviceId.value = activeDeviceId.value
-        } else if (onlineDevices.value.length > 0) {
-          consoleDeviceId.value = onlineDevices.value[0].id
-        }
+      // 若控制台已开但当前处于底层（被连接界面遮挡），点击时先提升至最前
+      if (activeTopLayer.value === 'connection') {
+        activeTopLayer.value = 'console'
+      } else {
+        showGlobalConsole.value = false
+        activeTopLayer.value = 'connection'
       }
+    } else {
+      ensureConsoleDeviceId()
       showGlobalConsole.value = true
+      activeTopLayer.value = 'console'
     }
   }
 
   function closeGlobalConsole() {
     showGlobalConsole.value = false
+    activeTopLayer.value = 'connection'
   }
 
   function destroyGlobalConsole() {
     showGlobalConsole.value = false
     consoleDeviceId.value = null
+    activeTopLayer.value = 'connection'
   }
 
   // 钳制终端高度：上限跟随当前视口（至少留出顶部 100px 保证拉伸手柄可达）
@@ -1003,9 +1188,12 @@ export const useDeviceStore = defineStore('devices', () => {
     setActiveWebRTC,
     clearActiveDevice,
     openGlobalConsole,
+    consoleInitialTab,
     toggleGlobalConsole,
     closeGlobalConsole,
     destroyGlobalConsole,
+    activeTopLayer,
+    setActiveTopLayer,
     setConsoleHeight,
     isLicenseExpired,
     licenseErrorMsg,
@@ -1019,6 +1207,7 @@ export const useDeviceStore = defineStore('devices', () => {
     licenseCurrentDevices,
     licensePromo,
     licensePostPromoMaxDevices,
+    licenseDetailsLoaded,
     applyLicenseState,
     fetchLicenseStatus,
     activateLicense,
@@ -1029,6 +1218,12 @@ export const useDeviceStore = defineStore('devices', () => {
     sendGroupControlEvent,
     sendInjectData,
     globalPreviewMode,
+    previewScopeMode,
+    setPreviewScopeMode,
+    previewSelectedTagIds,
+    togglePreviewTag,
+    clearPreviewTags,
+    setPreviewTags,
     globalInteractiveMode,
     searchQuery,
     cardSize,

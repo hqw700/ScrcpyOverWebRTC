@@ -137,6 +137,7 @@ export const defaultCameraPreferences = {
   cameraFps: 30,
   cameraZoomRatio: 1.0,
   cameraOrientation: 'auto',
+  cameraLowPower: false,
   audioSource: 'mic'
 }
 

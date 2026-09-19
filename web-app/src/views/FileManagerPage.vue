@@ -69,7 +69,7 @@
           <button class="icon-btn" @click="showNewFolderPrompt" title="新建文件夹">
             <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path><path d="M12 11v6"></path><path d="M9 14h6"></path></svg>
           </button>
-          <label class="upload-btn" :class="{ disabled: hasActiveUpload }" title="上传文件">
+          <label v-if="!forbidFilePush" class="upload-btn" :class="{ disabled: hasActiveUpload }" title="上传文件">
             <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5"></path><path d="M12 3v12"></path></svg>
             <span>上传</span>
             <input type="file" :disabled="hasActiveUpload" @change="onFileSelected" />
@@ -100,7 +100,7 @@
           @dragleave="dragOver = false"
           @drop.prevent="onFileDropped"
         >
-          <div v-if="dragOver" class="drag-overlay">
+          <div v-if="dragOver && !forbidFilePush" class="drag-overlay">
             <div>释放后上传到当前目录</div>
           </div>
 
@@ -175,10 +175,14 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
+import { useAuthStore } from '@/stores/auth'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { hashFileIncremental } from '@/utils/sha256'
 
 const deviceStore = useDeviceStore()
+const authStore = useAuthStore()
+// forbid_file_push：隐藏文件上传/推送入口（后端同时在 /upload、/api/files/url 强制拦截）
+const forbidFilePush = computed(() => authStore.forbidFilePush)
 const selectedDeviceId = ref('')
 
 let webrtc = null
@@ -612,6 +616,7 @@ function onFileSelected(e) {
 
 function onFileDropped(e) {
   dragOver.value = false
+  if (forbidFilePush.value) return
   const file = e.dataTransfer.files?.[0]
   if (file) startUploadFile(file)
 }

@@ -9,17 +9,19 @@
         <div class="plan-badge" :class="planBadgeClass">{{ planBadgeText }}</div>
 
         <div class="panel-body">
-          <!-- 用量进度条 -->
-          <div class="usage-row">
-            <span class="status-label">虚机用量</span>
-            <span class="status-value highlight">{{ currentDevices }} / {{ deviceStore.licenseMaxDevices }} 台</span>
-          </div>
-          <div class="usage-bar-track">
-            <div class="usage-bar-fill" :class="usageBarClass" :style="{ width: usagePercent + '%' }"></div>
-          </div>
+          <!-- 用量进度条（普通用户拿不到设备上限等详细字段时整体隐藏） -->
+          <template v-if="deviceStore.licenseDetailsLoaded">
+            <div class="usage-row">
+              <span class="status-label">虚机用量</span>
+              <span class="status-value highlight">{{ currentDevices }} / {{ deviceStore.licenseMaxDevices }} 台</span>
+            </div>
+            <div class="usage-bar-track">
+              <div class="usage-bar-fill" :class="usageBarClass" :style="{ width: usagePercent + '%' }"></div>
+            </div>
+          </template>
 
-          <!-- 授权状态明细 -->
-          <div class="license-status-display">
+          <!-- 授权状态明细（详细字段缺失时整块隐藏） -->
+          <div class="license-status-display" v-if="deviceStore.licenseDetailsLoaded">
             <div class="status-item" v-if="deviceStore.licenseActivated">
               <span class="status-label">剩余有效期:</span>
               <span class="status-value highlight">{{ deviceStore.licenseDaysRemaining }} 天</span>
@@ -40,11 +42,11 @@
             到期后恢复 {{ deviceStore.licensePostPromoMaxDevices }} 台
           </div>
 
-          <!-- 机器码 + 一键复制 -->
-          <div class="license-info-row">
+          <!-- 机器码 + 一键复制（仅详细粒度响应中才有，缺失时隐藏） -->
+          <div class="license-info-row" v-if="deviceStore.globalMachineID">
             <span class="info-label">服务器机器码:</span>
             <div class="machine-id-container">
-              <code>{{ deviceStore.globalMachineID || '正在获取...' }}</code>
+              <code>{{ deviceStore.globalMachineID }}</code>
               <button class="copy-btn" @click="copyMachineID" :disabled="!deviceStore.globalMachineID">
                 {{ copySuccess ? '已复制' : '复制' }}
               </button>
@@ -71,7 +73,7 @@
           <!-- 购买激活码入口 -->
           <div class="purchase-row">
             <span class="purchase-tip">没有激活码？</span>
-            <a :href="purchaseURL" target="_blank" rel="noopener" class="purchase-link">🛒 前往闲鱼购买「穿云投屏授权码服务」</a>
+            <a :href="purchaseURL" target="_blank" rel="noopener" class="purchase-link">🛒 前往官网购买「穿云投屏授权码服务」</a>
           </div>
         </div>
       </div>
@@ -90,8 +92,8 @@ defineEmits(['close'])
 
 const deviceStore = useDeviceStore()
 
-// 激活码购买链接（闲鱼「穿云投屏授权码服务」）
-const purchaseURL = 'https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA'
+// 激活码购买链接（通过官网 webrtc-phone.com 统一中转与维护，防止闲鱼短链过期失效）
+const purchaseURL = 'https://webrtc-phone.com/buy.html'
 
 const activationKey = ref('')
 const isActivating = ref(false)

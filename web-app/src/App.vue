@@ -1,9 +1,6 @@
 <template>
-  <!-- 分享免登录页：独立于后台布局与鉴权门，由 vue-router 直接渲染 -->
-  <router-view v-if="isSharePage" />
-  <div v-else-if="!authStore.isLoggedIn" style="width: 100vw; height: 100vh;">
-    <Login />
-  </div>
+  <!-- 免登录页（/login、/share）：独立于后台布局，由 vue-router 直接渲染 -->
+  <router-view v-if="isBarePage" />
   <div v-else class="app-container" :class="{ 'is-resizing': isResizing }">
     <!-- 全局授权到期阻断覆盖层 -->
     <div v-if="deviceStore.isLicenseExpired" class="license-block-overlay">
@@ -49,9 +46,9 @@
         </div>
         
         <div class="license-block-footer">
-          <p>没有激活码？前往闲鱼购买「穿云投屏授权码服务」：</p>
+          <p>没有激活码？前往官网购买「穿云投屏授权码服务」：</p>
           <div class="contact-links">
-            <a href="https://m.tb.cn/h.8UxnpeF?tk=HTNmgBqagHA" target="_blank" rel="noopener" class="footer-purchase-link">🛒 购买激活码</a>
+            <a href="https://webrtc-phone.com/buy.html" target="_blank" rel="noopener" class="footer-purchase-link">🛒 购买激活码</a>
             <span class="footer-divider">|</span>
             <a href="mailto:cloudphone@qq.com" class="footer-email">📧 联系邮箱: cloudphone@qq.com</a>
           </div>
@@ -74,37 +71,28 @@
         </span>
       </button>
       <div class="nav-links">
-        <a href="javascript:void(0)" @click="navigateTo('/')" class="nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showShareAdminPage }">
+        <router-link to="/" class="nav-item" exact-active-class="active">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
             <line x1="12" y1="18" x2="12.01" y2="18"></line>
           </svg>
           <span class="nav-item-text">虚机</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/monitor')" class="nav-item" :class="{ active: showMonitorPage }">
+        </router-link>
+        <router-link to="/monitor" class="nav-item" exact-active-class="active" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"></line>
             <line x1="12" y1="20" x2="12" y2="4"></line>
             <line x1="6" y1="20" x2="6" y2="14"></line>
           </svg>
           <span class="nav-item-text">大盘</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/batch')" class="nav-item" :class="{ active: showBatchPage }" v-if="authStore.isAdmin">
-          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="9" rx="1"></rect>
-            <rect x="14" y="3" width="7" height="5" rx="1"></rect>
-            <rect x="14" y="12" width="7" height="9" rx="1"></rect>
-            <rect x="3" y="16" width="7" height="5" rx="1"></rect>
-          </svg>
-          <span class="nav-item-text">群控</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/files')" class="nav-item" :class="{ active: showFilePage }">
+        </router-link>
+        <router-link to="/files" class="nav-item" exact-active-class="active">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
           <span class="nav-item-text">文件</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/deploy')" class="nav-item" :class="{ active: showDeployPage }">
+        </router-link>
+        <router-link to="/deploy" class="nav-item" exact-active-class="active" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="7" y="2" width="10" height="7" rx="1"></rect>
             <line x1="10" y1="5.5" x2="10" y2="5.51"></line>
@@ -113,37 +101,69 @@
             <path d="M12 16v6"></path>
           </svg>
           <span class="nav-item-text">部署</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/terminal')" class="nav-item" :class="{ active: showTerminalPage }">
+        </router-link>
+        <a href="javascript:void(0)" @click="deviceStore.toggleGlobalConsole()" class="nav-item" title="终端控制台" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="4 17 10 11 4 5"></polyline>
             <line x1="12" y1="19" x2="20" y2="19"></line>
           </svg>
           <span class="nav-item-text">终端</span>
         </a>
-        <a href="javascript:void(0)" @click="navigateTo('/advanced')" class="nav-item" :class="{ active: showAdvancedPage }">
+        <router-link to="/advanced" class="nav-item" exact-active-class="active" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            <rect x="9" y="9" width="6" height="6"></rect>
+            <line x1="9" y1="1" x2="9" y2="4"></line>
+            <line x1="15" y1="1" x2="15" y2="4"></line>
+            <line x1="9" y1="20" x2="9" y2="23"></line>
+            <line x1="15" y1="20" x2="15" y2="23"></line>
+            <line x1="20" y1="9" x2="23" y2="9"></line>
+            <line x1="20" y1="14" x2="23" y2="14"></line>
+            <line x1="1" y1="9" x2="4" y2="9"></line>
+            <line x1="1" y1="14" x2="4" y2="14"></line>
           </svg>
           <span class="nav-item-text">外设</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/shares')" class="nav-item" :class="{ active: showShareAdminPage }" title="分享与卡密管理" v-if="authStore.isAdmin">
-          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-          </svg>
-          <span class="nav-item-text">分享</span>
-        </a>
-        <a href="javascript:void(0)" @click="navigateTo('/admin')" class="nav-item" :class="{ active: showUserAdminPage }" v-if="authStore.role === 'admin'">
+        </router-link>
+        <router-link to="/admin/users" class="nav-item" exact-active-class="active" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
             <circle cx="9" cy="7" r="4"></circle>
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          <span class="nav-item-text">管理</span>
-        </a>
+          <span class="nav-item-text">用户管理</span>
+        </router-link>
+        <router-link to="/admin/devices" class="nav-item" exact-active-class="active" title="设备租约运营" v-if="authStore.isAdmin">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="11" height="17" rx="2"></rect>
+            <path d="M7 5V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-5"></path>
+            <line x1="8.5" y1="18.5" x2="8.51" y2="18.5"></line>
+          </svg>
+          <span class="nav-item-text">设备运营</span>
+        </router-link>
+        <router-link to="/admin/shares" class="nav-item" exact-active-class="active" title="分享与卡密管理" v-if="authStore.isAdmin">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+          <span class="nav-item-text">分享</span>
+        </router-link>
+        <router-link to="/admin/audit" class="nav-item" exact-active-class="active" title="审计日志" v-if="authStore.isAdmin">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+          <span class="nav-item-text">审计</span>
+        </router-link>
+        <router-link to="/admin/settings" class="nav-item" exact-active-class="active" title="平台设置" v-if="authStore.isAdmin">
+          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.3 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.3 2.7h4.4l.3-2.7a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"></path>
+          </svg>
+          <span class="nav-item-text">设置</span>
+        </router-link>
         <a href="javascript:void(0)" @click="handleLogout" class="nav-item logout-nav-item" title="退出登录">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -153,7 +173,7 @@
           <span class="nav-item-text">退出</span>
         </a>
       </div>
-      <div class="nav-tag-group" v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showAdvancedPage && !showShareAdminPage">
+      <div class="nav-tag-group" v-if="isMainMatrixPage && authStore.isAdmin">
         <div class="nav-tag-group-title">
           <span>标签</span>
           <button class="nav-tag-manage-btn" @click="openTagManager">
@@ -219,7 +239,7 @@
       <header class="top-bar" v-if="!isMobile">
         <!-- 1. 左侧：页面主标题、在线设备数与授权徽标 -->
         <div class="top-bar-left">
-          <h1 class="page-title">{{ showDeployPage ? '云端自动化部署' : (showFilePage ? '云设备文件中心' : (showMonitorPage ? '云监控实时大盘' : (showAdvancedPage ? '定制外设模拟' : (showShareAdminPage ? '分享与卡密管理' : (showBatchPage ? '批量任务群控' : (showUserAdminPage ? '用户权限管理' : '云虚机矩阵')))))) }}</h1>
+          <h1 class="page-title">{{ pageTitle }}</h1>
           
           <!-- 当处于主页面“云虚机矩阵”时展示在线状态徽标与授权徽标 -->
           <div class="top-device-stats" v-if="isMainMatrixPage">
@@ -227,10 +247,11 @@
               <span class="stat-dot"></span>
               {{ deviceStore.onlineDevices.length }} 台在线
             </span>
-            <button 
-              class="license-badge-top" 
-              :class="deviceStore.licenseBadgeClass" 
-              :title="deviceStore.licenseBadgeTitle" 
+            <button
+              v-if="authStore.isAdmin"
+              class="license-badge-top"
+              :class="deviceStore.licenseBadgeClass"
+              :title="deviceStore.licenseBadgeTitle"
               @click="showLicensePanel = true"
             >
               {{ deviceStore.licenseBadgeText }}
@@ -288,14 +309,88 @@
                 <div class="display-dropdown-panel" v-if="showDisplayMenu" @click.stop>
                   <div class="dropdown-panel-title">画面与预览设置</div>
                   
-                  <div class="dropdown-item-switch" v-if="authStore.isAdmin">
-                    <label class="switch-row" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放 10fps 实时预览">
+                  <div class="dropdown-item-switch">
+                    <label class="switch-row" title="开启后，可视区域内的虚机将使用 WebCodecs 硬件加速播放实时预览">
                       <span class="switch-title">高频实时预览</span>
                       <input type="checkbox" v-model="deviceStore.globalPreviewMode" class="switch-input" />
                     </label>
                   </div>
 
-                  <div class="dropdown-item-switch" v-if="authStore.isAdmin">
+                  <div class="dropdown-item-scope" v-if="deviceStore.globalPreviewMode">
+                    <div class="scope-row-header">
+                      <span class="scope-title">推流范围</span>
+                      <span class="scope-curr-desc">
+                        {{ 
+                          deviceStore.previewScopeMode === 'visible' ? '屏幕可视' : 
+                          deviceStore.previewScopeMode === 'all' ? '全部在线' : 
+                          deviceStore.previewScopeMode === 'selected' ? '仅勾选' : '标签匹配' 
+                        }}
+                      </span>
+                    </div>
+                    <div class="scope-btn-group">
+                      <button 
+                        class="scope-pill-btn" 
+                        :class="{ active: deviceStore.previewScopeMode === 'visible' }"
+                        @click="deviceStore.setPreviewScopeMode('visible')"
+                        title="仅推流滚动视口内的设备（推荐，省资源）"
+                      >屏幕可视</button>
+                      <button 
+                        class="scope-pill-btn" 
+                        :class="{ active: deviceStore.previewScopeMode === 'all' }"
+                        @click="deviceStore.setPreviewScopeMode('all')"
+                        title="全量所有在线设备持续推流"
+                      >全部在线</button>
+                      <button 
+                        class="scope-pill-btn" 
+                        :class="{ active: deviceStore.previewScopeMode === 'selected' }"
+                        @click="deviceStore.setPreviewScopeMode('selected')"
+                        title="仅推流手动勾选的设备（卡片右上角勾选）"
+                      >勾选设备</button>
+                      <button 
+                        class="scope-pill-btn" 
+                        :class="{ active: deviceStore.previewScopeMode === 'tag' }"
+                        @click="deviceStore.setPreviewScopeMode('tag')"
+                        title="仅推流匹配指定标签的设备"
+                      >标签匹配</button>
+                    </div>
+
+                    <!-- 勾选模式子操作栏 -->
+                    <div v-if="deviceStore.previewScopeMode === 'selected'" class="scope-sub-row">
+                      <span class="scope-sub-hint">已勾选 {{ groupControlStore.selectedSlaveIds.length }} 台</span>
+                      <div class="scope-sub-actions">
+                        <button class="scope-mini-btn" @click.stop="selectAllForPreview">全选在线</button>
+                        <button class="scope-mini-btn" @click.stop="groupControlStore.clearSlaves()">清空</button>
+                      </div>
+                    </div>
+
+                    <!-- 标签匹配子选择区 -->
+                    <div v-if="deviceStore.previewScopeMode === 'tag'" class="scope-tag-panel">
+                      <div class="scope-tag-header">
+                        <span class="scope-tag-title">可选推流标签:</span>
+                        <button 
+                          v-if="deviceStore.previewSelectedTagIds.length > 0" 
+                          class="scope-mini-btn" 
+                          @click.stop="deviceStore.clearPreviewTags()"
+                        >清空</button>
+                      </div>
+                      <div class="scope-tag-chips">
+                        <button 
+                          v-for="tag in tagStore.tags" 
+                          :key="tag.id"
+                          class="scope-tag-chip"
+                          :class="{ active: deviceStore.previewSelectedTagIds.includes(tag.id) }"
+                          :style="getPreviewTagChipStyle(tag)"
+                          @click.stop="deviceStore.togglePreviewTag(tag.id)"
+                        >
+                          <span class="scope-tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                          <span class="scope-tag-text">{{ tag.name }}</span>
+                        </button>
+                        <div v-if="tagStore.tags.length === 0" class="scope-tag-empty">暂无可用标签</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="dropdown-item-switch">
                     <label class="switch-row" :class="{ disabled: !deviceStore.globalPreviewMode }" title="开启后可直接在卡片上触控操作 (需先开启高频预览)">
                       <span class="switch-title">预览直接触控</span>
                       <input type="checkbox" v-model="deviceStore.globalInteractiveMode" :disabled="!deviceStore.globalPreviewMode" class="switch-input" />
@@ -361,9 +456,9 @@
               <span class="btn-text">多机直连 ({{ deviceStore.activeDeviceIds.length }}) ✕</span>
             </button>
 
-            <!-- 群控模式开关按钮 (管理员) -->
+            <!-- 群控模式开关按钮 (管理员 或 拥有2台以上设备的用户) -->
             <button 
-              v-if="authStore.isAdmin"
+              v-if="authStore.isAdmin || deviceStore.devices.length > 1"
               class="top-action-btn group-control-btn" 
               :class="{ active: groupControlStore.isGroupControlActive }" 
               @click.stop="toggleGroupControl"
@@ -378,8 +473,8 @@
               <span class="btn-text">{{ groupControlStore.isGroupControlActive ? '退出群控' : '群控' }}</span>
             </button>
 
-            <!-- 标签管理按钮 -->
-            <button class="top-action-btn" @click="dispatchTopAction('tag-manager')" title="设备标签管理">
+            <!-- 标签管理按钮 (管理员) -->
+            <button class="top-action-btn" @click="dispatchTopAction('tag-manager')" title="设备标签管理" v-if="authStore.isAdmin">
               <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path>
                 <circle cx="8.5" cy="8.5" r="1.4"></circle>
@@ -443,7 +538,7 @@
                       <div class="item-desc">云虚机搭建、直连教程及实机演示</div>
                     </div>
                   </a>
-                  <a href="javascript:void(0)" @click="showLicensePanel = true; showHelpMenu = false" class="help-dropdown-item">
+                  <a v-if="authStore.isAdmin" href="javascript:void(0)" @click="showLicensePanel = true; showHelpMenu = false" class="help-dropdown-item">
                     <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -475,38 +570,32 @@
             <span class="user-role-badge" :class="authStore.role">
               {{ authStore.role === 'admin' ? '管理员' : '普通用户' }}
             </span>
-            <span
-              v-if="accountExpiryText"
-              class="expiry-chip"
-              :class="{ expired: accountExpired }"
-              :title="accountExpiry ? '到期时间: ' + accountExpiry.toLocaleString('zh-CN', { hour12: false }) : ''"
-            >⏳ {{ accountExpiryText }}</span>
           </div>
         </div>
       </header>
       
       <section class="viewport">
-        <transition name="fade" mode="out-in">
-          <DeviceList v-if="!showDeployPage && !showFilePage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage && !showShareAdminPage" />
-          <UserAdminPage v-else-if="showUserAdminPage" />
-          <ShareAdminPage v-else-if="showShareAdminPage" />
-          <DeployPage v-else-if="showDeployPage" />
-          <FileManagerPage v-else-if="showFilePage" />
-          <Dashboard v-else-if="showMonitorPage" />
-          <BatchControlPage v-else-if="showBatchPage" />
-          <AdvancedPage v-else-if="showAdvancedPage" />
-        </transition>
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </section>
 
       <!-- 全局下半屏控制台 (悬浮并可上下拉伸高度) -->
       <div 
         class="global-console-container" 
-        :class="{ 'nav-expanded': isNavExpanded && !isMobile }"
+        :class="{ 
+          'nav-expanded': isNavExpanded && !isMobile,
+          'is-top-layer': deviceStore.activeTopLayer === 'console'
+        }"
         v-show="deviceStore.showGlobalConsole"
         :style="{ height: deviceStore.globalConsoleHeight + 'px' }"
+        @mousedown.capture="deviceStore.setActiveTopLayer('console')"
+        @touchstart.capture="deviceStore.setActiveTopLayer('console')"
       >
         <DeviceConsole 
-          v-if="deviceStore.consoleDeviceId"
+          v-if="deviceStore.showGlobalConsole && deviceStore.consoleDeviceId"
           :key="deviceStore.consoleDeviceId"
           :deviceId="deviceStore.consoleDeviceId" 
           :height="deviceStore.globalConsoleHeight + 'px'" 
@@ -518,11 +607,14 @@
     <aside 
       class="control-panel-wrapper" 
       :class="{ 
-        'is-open': !!deviceStore.activeDeviceId && !showTerminalPage && !showDeployPage && !showMonitorPage && !(isMobile && showFilePage),
+        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files'),
         'is-floating': isFloating && !isMobile,
-        'is-mobile': isMobile
+        'is-mobile': isMobile,
+        'is-top-layer': deviceStore.activeTopLayer === 'connection'
       }"
       :style="panelStyle"
+      @mousedown.capture="deviceStore.setActiveTopLayer('connection')"
+      @touchstart.capture="deviceStore.setActiveTopLayer('connection')"
     >
       <!-- 调整大小的手柄 (PC固定模式) -->
       <div class="side-resizer" v-if="!isFloating && !isMobile" @mousedown="startResizing('left', $event)"></div>
@@ -555,46 +647,37 @@
       </div>
     </aside>
 
-    <!-- 4. 移动端底部导航栏 (仅在主视图显示活跃虚机视频时才隐藏，在文件、终端或列表页均保持可见) -->
-    <nav class="mobile-bottom-nav" v-if="isMobile && (showFilePage || showTerminalPage || showDeployPage || showMonitorPage || showUserAdminPage || showBatchPage || showAdvancedPage || !deviceStore.activeDeviceId)">
-      <button @click="navigateTo('/')" class="mobile-nav-item" :class="{ active: !showDeployPage && !showFilePage && !showTerminalPage && !showMonitorPage && !showUserAdminPage && !showBatchPage && !showAdvancedPage && !showShareAdminPage }">
+    <!-- 4. 移动端底部导航栏 (仅在主视图显示活跃虚机视频时才隐藏，其余页面均保持可见) -->
+    <nav class="mobile-bottom-nav" v-if="isMobile && (route.path !== '/' || !deviceStore.activeDeviceId)">
+      <router-link to="/" class="mobile-nav-item" exact-active-class="active">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
           <line x1="12" y1="18" x2="12.01" y2="18"></line>
         </svg>
         <span class="mobile-nav-text">虚机</span>
-      </button>
-      <button @click="navigateTo('/monitor')" class="mobile-nav-item" :class="{ active: showMonitorPage }">
+      </router-link>
+      <router-link to="/monitor" class="mobile-nav-item" exact-active-class="active" v-if="authStore.isAdmin">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="20" x2="18" y2="10"></line>
           <line x1="12" y1="20" x2="12" y2="4"></line>
           <line x1="6" y1="20" x2="6" y2="14"></line>
         </svg>
         <span class="mobile-nav-text">大盘</span>
-      </button>
-      <button @click="navigateTo('/batch')" class="mobile-nav-item" :class="{ active: showBatchPage }" v-if="authStore.isAdmin">
-        <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="9" rx="1"></rect>
-          <rect x="14" y="3" width="7" height="5" rx="1"></rect>
-          <rect x="14" y="12" width="7" height="9" rx="1"></rect>
-          <rect x="3" y="16" width="7" height="5" rx="1"></rect>
-        </svg>
-        <span class="mobile-nav-text">群控</span>
-      </button>
-      <button @click="navigateTo('/files')" class="mobile-nav-item" :class="{ active: showFilePage }">
+      </router-link>
+      <router-link to="/files" class="mobile-nav-item" exact-active-class="active">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
         </svg>
         <span class="mobile-nav-text">文件</span>
-      </button>
-      <button @click="navigateTo('/terminal')" class="mobile-nav-item" :class="{ active: showTerminalPage }">
+      </router-link>
+      <a href="javascript:void(0)" @click="deviceStore.toggleGlobalConsole()" class="mobile-nav-item" v-if="authStore.isAdmin">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="4 17 10 11 4 5"></polyline>
           <line x1="12" y1="19" x2="20" y2="19"></line>
         </svg>
         <span class="mobile-nav-text">终端</span>
-      </button>
-      <button @click="navigateTo('/admin')" class="mobile-nav-item" :class="{ active: showUserAdminPage }" v-if="authStore.role === 'admin'">
+      </a>
+      <router-link to="/admin/users" class="mobile-nav-item" exact-active-class="active" v-if="authStore.isAdmin">
         <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
           <circle cx="9" cy="7" r="4"></circle>
@@ -602,7 +685,7 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
         </svg>
         <span class="mobile-nav-text">管理</span>
-      </button>
+      </router-link>
     </nav>
     
     <!-- 系统授权管理面板 -->
@@ -612,21 +695,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDeviceStore } from '@/stores/devices'
 import { useTagStore } from '@/stores/tags'
 import { useAuthStore } from '@/stores/auth'
-import DeviceClient from '@/views/DeviceClient.vue'
-import DeviceList from '@/views/DeviceList.vue'
-import DeployPage from '@/views/DeployPage.vue'
-import FileManagerPage from '@/views/FileManagerPage.vue'
 import DeviceConsole from '@/components/DeviceConsole.vue'
-import Dashboard from '@/views/Dashboard.vue'
-import Login from '@/views/Login.vue'
-import UserAdminPage from '@/views/UserAdminPage.vue'
-import BatchControlPage from '@/views/BatchControlPage.vue'
-import AdvancedPage from '@/views/AdvancedPage.vue'
-import ShareAdminPage from '@/views/ShareAdminPage.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
 import MultiDeviceContainer from '@/components/multi/MultiDeviceContainer.vue'
 import { useGroupControlStore } from '@/stores/groupControl'
@@ -637,8 +710,9 @@ const authStore = useAuthStore()
 const groupControlStore = useGroupControlStore()
 
 const route = useRoute()
-// /share 为访客免登录分享页：渲染 router-view，不初始化后台数据与信令
-const isSharePage = computed(() => route.path === '/share')
+const router = useRouter()
+// 免登录页（/login、/share，route.meta.public）：渲染裸 router-view，不初始化后台数据与信令
+const isBarePage = computed(() => !!route.meta.public)
 
 function handleLogout() {
   authStore.logout()
@@ -646,6 +720,19 @@ function handleLogout() {
 
 function toggleGroupControl() {
   groupControlStore.toggleGroupControl()
+}
+
+function selectAllForPreview() {
+  groupControlStore.selectAllOnline(deviceStore.devices)
+}
+
+function getPreviewTagChipStyle(tag) {
+  const isSelected = deviceStore.previewSelectedTagIds.includes(tag.id)
+  return {
+    borderColor: isSelected ? tag.color : 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: isSelected ? `${tag.color}33` : 'transparent',
+    color: isSelected ? '#ffffff' : 'var(--text-secondary, #8b949e)'
+  }
 }
 
 const systemVersion = ref('v0.1.9')
@@ -664,14 +751,6 @@ const isMobile = ref(window.innerWidth <= 1024)
 const isFloating = ref(false)
 const isResizing = ref(false)
 const userAdjusted = ref(false)
-const showDeployPage = ref(false)
-const showFilePage = ref(false)
-const showTerminalPage = ref(false)
-const showMonitorPage = ref(false)
-const showUserAdminPage = ref(false)
-const showBatchPage = ref(false)
-const showAdvancedPage = ref(false)
-const showShareAdminPage = ref(false)
 const isNavExpanded = ref(false)
 const showHelpMenu = ref(false)
 const activationKey = ref('')
@@ -682,16 +761,11 @@ const showLicensePanel = ref(false)
 const showDisplayMenu = ref(false)
 const topSearchInputRef = ref(null)
 
-const isMainMatrixPage = computed(() => 
-  !showDeployPage.value && 
-  !showFilePage.value && 
-  !showTerminalPage.value && 
-  !showMonitorPage.value && 
-  !showUserAdminPage.value && 
-  !showBatchPage.value && 
-  !showAdvancedPage.value && 
-  !showShareAdminPage.value
-)
+// 页面切换由 vue-router 接管：以下派生状态全部基于当前路由
+const pageTitle = computed(() => route.meta.title || '云虚机矩阵')
+const isMainMatrixPage = computed(() => route.path === '/')
+// 部署 / 大盘页面隐藏右侧控制面板（保持原有行为）
+const isPanelHiddenPage = computed(() => route.path === '/deploy' || route.path === '/monitor')
 
 function dispatchTopAction(action) {
   if (action === 'tag-manager') {
@@ -711,30 +785,7 @@ function onGlobalKeyDown(e) {
   }
 }
 
-// 当前账号有效期（/api/me 下发；零值时间 = 永久不显示）
-// nowTick 每秒驱动一次，让倒计时实时走动而不是只在刷新时更新
-const nowTick = ref(Date.now())
-let expiryTimer = null
-
-const accountExpiry = computed(() => {
-  const p = authStore.userPolicy
-  if (!p || !p.expires_at) return null
-  const t = new Date(p.expires_at)
-  if (Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return null
-  return t
-})
-const accountExpired = computed(() => !!accountExpiry.value && accountExpiry.value.getTime() <= nowTick.value)
-const accountExpiryText = computed(() => {
-  const t = accountExpiry.value
-  if (!t) return ''
-  const ms = t.getTime() - nowTick.value
-  if (ms <= 0) return '已到期'
-  const d = Math.floor(ms / 86400000)
-  const h = Math.floor((ms % 86400000) / 3600000).toString().padStart(2, '0')
-  const m = Math.floor((ms % 3600000) / 60000).toString().padStart(2, '0')
-  const s = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0')
-  return d > 0 ? `剩余 ${d} 天 ${h}:${m}:${s}` : `剩余 ${h}:${m}:${s}`
-})
+// 顶栏不再显示账号/租约到期倒计时（账号默认永久，租约剩余时长在设备卡片与连接页展示）
 
 function copyMachineID() {
   if (!deviceStore.globalMachineID) return
@@ -772,8 +823,8 @@ const sideWidth = ref(420)
 // 动态样式计算
 const panelStyle = computed(() => {
   if (isMobile.value) return {}
-  // 面板关闭或者处于文件/终端/部署/大盘页面时不设置宽度并隐藏
-  if (deviceStore.activeDeviceIds.length === 0 || showTerminalPage.value || showDeployPage.value || showMonitorPage.value) {
+  // 面板关闭或者处于部署/大盘页面时不设置宽度并隐藏
+  if (deviceStore.activeDeviceIds.length === 0 || isPanelHiddenPage.value) {
     return { width: '0px', display: 'none' }
   }
   const isMulti = deviceStore.activeDeviceIds.length > 1
@@ -907,7 +958,7 @@ function getTagDeviceCount(tagId) {
 }
 
 const initApp = () => {
-  if (authStore.isLoggedIn && !isSharePage.value) {
+  if (authStore.isLoggedIn && !isBarePage.value) {
     authStore.fetchMe()
     tagStore.load()
     deviceStore.fetchDevices()
@@ -944,21 +995,32 @@ const onWindowClick = () => {
   showDisplayMenu.value = false
 }
 
+// 兼容各页面派发的历史跳转事件：翻译为路由跳转（或全局控制台操作）
 const handleNavigateEvent = (e) => {
-  if (e && e.detail) {
-    navigateTo(e.detail)
+  const path = e && e.detail
+  if (!path) return
+  if (path === '/terminal') {
+    // 历史“终端”入口：不切换页面，切换全局底部终端抽屉显隐
+    deviceStore.toggleGlobalConsole()
+    return
   }
+  if (path === '/batch') {
+    // 兼容历史群控路径：唤起底部全局控制台并定位至批量安装/传输 Tab
+    deviceStore.openGlobalConsole(null, 'files')
+    return
+  }
+  const legacyAlias = { '/admin': '/admin/users', '/shares': '/admin/shares' }
+  router.push(legacyAlias[path] || path)
 }
 
 onMounted(async () => {
   await authStore.checkNoAuthStatus()
   initApp()
   fetchVersion()
-  // 拉取当前用户的管控策略（含账号有效期，顶栏倒计时显示用）
+  // 拉取当前用户的管控策略（画质锁定 + 租约列表等）
   if (authStore.token && !authStore.userPolicy) {
     authStore.fetchMe()
   }
-  expiryTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
   window.addEventListener('resize', updateMedia)
   window.addEventListener('click', onWindowClick)
   window.addEventListener('keydown', onGlobalKeyDown)
@@ -966,13 +1028,23 @@ onMounted(async () => {
   updateMedia() // 确保组件挂载后瞬间重新执行检测，避免初次视口异常
 })
 
-watch(() => authStore.isLoggedIn, (newVal) => {
+// 监听是否离开独立/免登录页面（如从 /login 跳转至 / 首页），触发系统初始化
+watch(isBarePage, (newBare) => {
+  if (!newBare && authStore.isLoggedIn) {
+    initApp()
+  }
+})
+
+watch(() => authStore.isLoggedIn, async (newVal) => {
   if (newVal) {
+    // 登录态生效时（含免密模式异步确认）若仍停留在登录页则先跳转回首页
+    if (route.path === '/login') {
+      await router.push('/')
+    }
     initApp()
   }
 })
 onUnmounted(() => {
-  if (expiryTimer) clearInterval(expiryTimer)
   window.removeEventListener('resize', updateMedia)
   window.removeEventListener('click', onWindowClick)
   window.removeEventListener('keydown', onGlobalKeyDown)
@@ -987,85 +1059,6 @@ watch(() => deviceStore.activeDeviceId, (newId) => {
 
 function closePanel() {
   deviceStore.clearActiveDevice()
-}
-
-function navigateTo(path) {
-  // 普通用户禁用页面：分享管理、群控（直接访问路径时强制回首页）
-  if (!authStore.isAdmin && (path === '/shares' || path === '/batch')) {
-    path = '/'
-  }
-  // 先统一复位分享管理页标记，各分支只需关心自己管辖的标记
-  showShareAdminPage.value = false
-
-  if (path === '/shares') {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-    showShareAdminPage.value = true
-  } else if (path === '/deploy') {
-    showDeployPage.value = true
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-  } else if (path === '/files') {
-    showDeployPage.value = false
-    showFilePage.value = true
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-  } else if (path === '/terminal') {
-    // 点击终端按钮，不进行页面切换，直接切换全局底部终端抽屉的显隐状态
-    deviceStore.toggleGlobalConsole()
-  } else if (path === '/monitor') {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = true
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-  } else if (path === '/batch') {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = true
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-  } else if (path === '/admin') {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = true
-    showAdvancedPage.value = false
-  } else if (path === '/advanced') {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = true
-  } else {
-    showDeployPage.value = false
-    showFilePage.value = false
-    showTerminalPage.value = false
-    showMonitorPage.value = false
-    showBatchPage.value = false
-    showUserAdminPage.value = false
-    showAdvancedPage.value = false
-  }
 }
 </script>
 
@@ -1268,6 +1261,7 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   gap: 10px;
   overflow: hidden;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .side-nav.expanded .nav-item {
@@ -1288,27 +1282,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 
 .nav-item.active { opacity: 1; color: var(--accent); background: rgba(88,166,255,0.1); }
 .nav-item.logout-nav-item:hover { opacity: 1; color: #f85149; background: rgba(248,81,73,0.1); }
-
-/* 顶栏用户名旁的账号有效期倒计时 */
-.expiry-chip {
-  margin-left: 8px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  user-select: none;
-}
-
-.expiry-chip.expired {
-  background: rgba(248, 81, 73, 0.12);
-  border-color: rgba(248, 81, 73, 0.35);
-  color: #f85149;
-}
 
 .top-bar-right {
   display: flex;
@@ -1896,7 +1869,7 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 230px;
+  width: 260px;
   background: #1c2128;
   border: 1px solid #30363d;
   border-radius: 10px;
@@ -1932,6 +1905,163 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 
 .switch-input {
   cursor: pointer;
+}
+
+.dropdown-item-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.scope-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.scope-title {
+  color: #8b949e;
+  font-weight: 500;
+}
+
+.scope-curr-desc {
+  color: #58a6ff;
+  font-size: 10px;
+}
+
+.scope-btn-group {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.scope-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.scope-sub-hint {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.scope-sub-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.scope-mini-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #58a6ff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scope-mini-btn:hover {
+  background: #30363d;
+  color: #79c0ff;
+}
+
+.scope-tag-panel {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scope-tag-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scope-tag-title {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.scope-tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.scope-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.scope-tag-chip:hover {
+  filter: brightness(1.15);
+}
+
+.scope-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.scope-tag-text {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-tag-empty {
+  font-size: 10px;
+  color: #6e7681;
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.scope-pill-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 10px;
+  padding: 4px 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.scope-pill-btn:hover {
+  background: #30363d;
+  color: #c9d1d9;
+}
+
+.scope-pill-btn.active {
+  background: rgba(56, 139, 253, 0.2);
+  border-color: #388bfd;
+  color: #58a6ff;
+  font-weight: 600;
 }
 
 .dropdown-divider {
@@ -2190,7 +2320,7 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .control-panel-wrapper {
   height: 100vh; background: var(--bg-secondary); border-left: 0px solid var(--border);
   display: flex; flex-direction: column; position: relative; z-index: 200;
-  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-left-width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-left-width 0.3s ease, box-shadow 0.25s ease;
   width: 0; /* 关闭时宽度为0 */
   overflow: hidden;
 }
@@ -2198,10 +2328,19 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   border-left: 1px solid var(--border);
   /* 宽度由panelStyle控制 */
 }
+/* 连接面板置顶层（遮挡终端） */
+.control-panel-wrapper.is-top-layer {
+  z-index: 1020 !important;
+  box-shadow: -10px 0 36px rgba(0, 0, 0, 0.75), -1px 0 0 rgba(255, 255, 255, 0.1) !important;
+}
 
 /* 悬浮模式 */
 .control-panel-wrapper.is-floating {
   position: fixed; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); z-index: 1000; transform: none; transition: none;
+}
+.control-panel-wrapper.is-floating.is-top-layer {
+  z-index: 1060 !important;
+  box-shadow: 0 35px 70px rgba(0,0,0,0.8), 0 0 0 1px rgba(88, 166, 255, 0.3) !important;
 }
 
 /* 缩放手柄 */
@@ -2308,8 +2447,14 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   left: var(--nav-width, 64px);
   right: 0;
   z-index: 1000;
-  transition: left 0.22s ease;
+  transition: left 0.22s ease, box-shadow 0.25s ease;
   box-sizing: border-box;
+}
+
+/* 控制台置顶层（遮挡连接面板） */
+.global-console-container.is-top-layer {
+  z-index: 1050 !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 -1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
 .global-console-container.nav-expanded {

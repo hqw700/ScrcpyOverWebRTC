@@ -9,11 +9,16 @@ export const useAuthStore = defineStore('auth', () => {
   const assignedDevices = ref(JSON.parse(localStorage.getItem('auth_devices') || (isDemo ? '["*"]' : '[]')))
   const noAuthMode = ref(isDemo)
   // 当前用户的设置管控策略（/api/me 下发，null = 未加载）：
-  // { forbid_bitrate, forbid_fps, forbid_resolution, forbid_audio, settings, expires_at }
+  // { forbid_bitrate/fps/resolution/audio/file_push/terminal/share, settings, expires_at, leases }
   const userPolicy = ref(null)
 
   const isLoggedIn = computed(() => noAuthMode.value || !!token.value)
   const isAdmin = computed(() => noAuthMode.value || role.value === 'admin')
+
+  // 功能入口屏蔽位（管理员恒不受限；策略未加载时默认放行，由后端兜底拦截）
+  const forbidTerminal = computed(() => !isAdmin.value && !!userPolicy.value?.forbid_terminal)
+  const forbidFilePush = computed(() => !isAdmin.value && !!userPolicy.value?.forbid_file_push)
+  const forbidShare = computed(() => !isAdmin.value && !!userPolicy.value?.forbid_share)
 
   async function login(user, pass) {
     try {
@@ -73,7 +78,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       if (token.value) {
         await fetch('/api/logout', {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token.value}` }
         })
       }
     } catch (error) {
@@ -136,14 +142,18 @@ export const useAuthStore = defineStore('auth', () => {
           localStorage.setItem('ai_provider', data.ai_config.ai_provider || '')
         }
 
-        // 缓存用户的设置管控策略（画质/音频锁定 + 管理员配置值 + 账号有效期）
+        // 缓存用户的设置管控策略（画质/音频锁定 + 管理员配置值 + 账号有效期 + 租约列表）
         userPolicy.value = {
           forbid_bitrate: !!data.forbid_bitrate,
           forbid_fps: !!data.forbid_fps,
           forbid_resolution: !!data.forbid_resolution,
           forbid_audio: !!data.forbid_audio,
+          forbid_file_push: !!data.forbid_file_push,
+          forbid_terminal: !!data.forbid_terminal,
+          forbid_share: !!data.forbid_share,
           settings: data.settings || null,
-          expires_at: data.expires_at || null
+          expires_at: data.expires_at || null,
+          leases: Array.isArray(data.leases) ? data.leases : []
         }
       }
     } catch (e) {
@@ -176,6 +186,9 @@ export const useAuthStore = defineStore('auth', () => {
     assignedDevices,
     noAuthMode,
     userPolicy,
+    forbidTerminal,
+    forbidFilePush,
+    forbidShare,
     isLoggedIn,
     isAdmin,
     login,

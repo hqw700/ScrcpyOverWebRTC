@@ -13,6 +13,7 @@
             <span class="osd-item osd-lens">📷 {{ currentLensName }}</span>
             <span class="osd-divider">|</span>
             <span class="osd-item osd-res">{{ currentResText }}</span>
+            <span class="osd-badge eco-dot" v-if="localSettings.cameraLowPower">🌿 节能中</span>
             <span class="osd-item osd-fps" v-if="videoStats">{{ videoStats.fps }}fps</span>
             <span class="osd-divider" v-if="videoStats">|</span>
             <span class="osd-item osd-bitrate" v-if="videoStats" :title="`视频接收码率 (目标: ${videoStats.targetBitrate || localSettings.bitrate || 4} Mbps)`">
@@ -163,7 +164,7 @@
               <p class="error-msg">❌ 连接失败</p>
               <p class="error-tip">{{ currentWebRTC.error.value }}</p>
               <button class="retry-btn" @click="retry">重试</button>
-              <template v-if="!isWebSocketMode">
+              <template v-if="!isWebSocketMode && authStore.isAdmin">
                 <p class="error-tip ws-fallback-hint">若 UDP 被防火墙/NAT 拦截导致 WebRTC 反复失败，可改走 TCP 穿透通道：</p>
                 <button class="retry-btn ws-fallback-btn" @click="toggleStreamMode">⚡ 改用 WebSocket 投屏</button>
               </template>
@@ -214,6 +215,10 @@
                 </button>
               </div>
               <div class="fab-divider"></div>
+              <button class="fab-item" :class="{ 'cam-active': localSettings.cameraLowPower }" @click="toggleCameraLowPower(); showMobileMenu=false">
+                {{ localSettings.cameraLowPower ? '🌿 节能模式 (已开启)' : '⚡ 开启安防节能 (防发热)' }}
+              </button>
+              <div class="fab-divider"></div>
               <button class="fab-item" @click="rotateCamera(); showMobileMenu=false">
                 🔄 旋转 90° (当前 {{ cameraRotation }}°)
               </button>
@@ -241,15 +246,16 @@
 
             <!-- 常规云手机快捷菜单 -->
             <template v-else>
-              <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
+              <button v-if="authStore.isAdmin || deviceStore.devices.length > 1" class="fab-item" :class="{ 'group-active': groupControlStore.isGroupControlActive }" @click="toggleGroupControl(); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
                 {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
               </button>
-              <button class="fab-item" :class="{ 'group-active': isWebSocketMode }" @click="toggleStreamMode(); showMobileMenu=false">
+              <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': isWebSocketMode }" @click="toggleStreamMode(); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                 {{ isWebSocketMode ? '切回 WebRTC 直连' : '切换 WebSocket 投屏' }}
               </button>
               <div class="fab-divider"></div>
+              <template v-if="!forbidTerminal">
               <button class="fab-item" @click="quickKey('input keyevent 26'); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> 电源
               </button>
@@ -265,6 +271,7 @@
               <button class="fab-item" @click="quickKey('input keyevent 25'); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="12" x2="15" y2="12"></line></svg> 音量-
               </button>
+              </template>
               <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
                 <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
                 <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
@@ -294,7 +301,11 @@
                   <path d="M12 11v6M9 14l3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
                 </svg> 收剪贴板
               </button>
+              <button class="fab-item" @click="showMobileQuickTextModal = true; showMobileMenu = false">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg> 快捷文本
+              </button>
               
+              <template v-if="!forbidTerminal">
               <div class="fab-divider" v-if="customButtons.length > 0"></div>
               <div v-for="(btn, idx) in customButtons" :key="idx" class="fab-item-wrapper">
                 <button class="fab-item custom-item" @click="quickKey(btn.cmd); showMobileMenu=false" :title="btn.cmd">
@@ -305,12 +316,13 @@
               <button class="fab-item add-btn" @click="addCustomButton">
                 <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 添加按键
               </button>
+              </template>
               
               <div class="fab-divider"></div>
               <button class="fab-item danger" @click="goBackToList(); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg> 断开连接
               </button>
-              <button class="fab-item danger" @click="quitAgent(); showMobileMenu=false">
+              <button v-if="authStore.isAdmin" class="fab-item danger" @click="quitAgent(); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> 退出 Agent
               </button>
             </template>
@@ -328,7 +340,7 @@
     <!-- PC 右侧控制栏 (常规云手机模式) -->
     <div v-if="!isMobile && !isMini && !isCameraMode" class="control-sidebar" :class="{ 'fs-ui-visible': fsUiVisible }">
       <div class="sidebar-group">
-        <button v-if="authStore.isAdmin" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
+        <button v-if="authStore.isAdmin || deviceStore.devices.length > 1" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? '退出群控主控模式' : '设为群控主控机'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="9" rx="1"></rect>
             <rect x="14" y="3" width="7" height="5" rx="1"></rect>
@@ -337,13 +349,14 @@
           </svg>
           <span class="btn-text">{{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}</span>
         </button>
-        <button class="sidebar-btn" :class="{ active: isWebSocketMode }" @click="toggleStreamMode" :title="isWebSocketMode ? '当前为 WebSocket 投屏，点击切换为 WebRTC 直连' : '当前为 WebRTC 直连，点击切换为 WebSocket 投屏'">
+        <button v-if="authStore.isAdmin" class="sidebar-btn" :class="{ active: isWebSocketMode }" @click="toggleStreamMode" :title="isWebSocketMode ? '当前为 WebSocket 投屏，点击切换为 WebRTC 直连' : '当前为 WebRTC 直连，点击切换为 WebSocket 投屏'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
           <span class="btn-text">{{ isWebSocketMode ? 'WS投屏' : 'WebRTC' }}</span>
         </button>
         <div class="sidebar-divider"></div>
+        <template v-if="!forbidTerminal">
         <button class="sidebar-btn" @click="quickKey('input keyevent 26')" title="电源">
           <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
           <span class="btn-text">电源</span>
@@ -364,12 +377,21 @@
           <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="12" x2="15" y2="12"></line></svg>
           <span class="btn-text">音量-</span>
         </button>
+        </template>
         <button class="sidebar-btn" :class="{ active: pageAudioMuted }" @click="togglePageMute" :title="pageAudioMuted ? '取消页面静音' : '页面静音'">
           <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
           <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
           <span class="btn-text">{{ pageAudioMuted ? '取消静音' : '静音' }}</span>
         </button>
-        <button class="sidebar-btn" :class="{ active: deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId }" @click="toggleConsole" title="控制台">
+        <button 
+          class="sidebar-btn" 
+          :class="{ 
+            active: deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer === 'console',
+            'is-behind': deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console'
+          }" 
+          @click="toggleConsole" 
+          :title="deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console' ? '终端已开启 (点击置顶显示)' : '控制台'"
+        >
           <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
           <span class="btn-text">终端</span>
         </button>
@@ -394,11 +416,24 @@
           </svg>
           <span class="btn-text">收剪贴板</span>
         </button>
+
+        <!-- 快捷文本触发按键 -->
+        <button 
+          class="sidebar-btn quick-text-sidebar-btn" 
+          :class="{ active: showQuickTextDropdown }" 
+          @click.stop="toggleQuickTextDropdown" 
+          title="常用快捷文本"
+        >
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span class="btn-text">快捷文本</span>
+        </button>
       </div>
       
       <div class="sidebar-divider"></div>
       
-      <div class="sidebar-group custom-group">
+      <div class="sidebar-group custom-group" v-if="!forbidTerminal">
         <div v-for="(btn, idx) in customButtons" :key="idx" class="sidebar-btn-wrapper">
           <button class="sidebar-btn custom-btn" @click="quickKey(btn.cmd)" :title="btn.cmd">
             <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
@@ -414,7 +449,7 @@
       
       <div style="flex: 1"></div>
       
-      <button class="sidebar-btn danger" @click="quitAgent" title="退出 Agent">
+      <button v-if="authStore.isAdmin" class="sidebar-btn danger" @click="quitAgent" title="退出 Agent">
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
         <span class="btn-text">退出</span>
       </button>
@@ -427,6 +462,38 @@
       <!-- 底部微小 Agent 版本号展示 -->
       <div class="sidebar-agent-version" :title="'Agent 完整版本号: ' + agentVersion">
         {{ agentVersion.split('-')[0] }}
+      </div>
+    </div>
+
+    <!-- 快捷文本独立弹出面板 (脱离 sidebar 的 overflow 裁剪，确保 100% 正常弹出) -->
+    <div v-if="showQuickTextDropdown && !isMobile" class="quick-text-popover-menu" @click.stop>
+      <div class="popover-header">
+        <span class="popover-title">⚡ 快速文本</span>
+        <div class="popover-header-tools">
+          <button class="popover-manage-link" @click="goToConsoleQuickText" title="前往终端管理短语库">
+            ⚙️ 管理
+          </button>
+          <button class="popover-close-btn" @click="showQuickTextDropdown = false" title="关闭">✕</button>
+        </div>
+      </div>
+      <div class="popover-items-list custom-scrollbar">
+        <div 
+          v-for="qt in quickTextStore.quickTexts" 
+          :key="qt.id" 
+          class="popover-item"
+          @click="injectQuickTextToCurrent(qt)"
+          :title="qt.content"
+        >
+          <div class="item-title-row">
+            <span class="item-title">{{ qt.title }}</span>
+            <span class="item-enter-tag" v-if="qt.autoEnter">↵ 回车</span>
+          </div>
+          <div class="item-snippet">{{ qt.content }}</div>
+        </div>
+        <div v-if="quickTextStore.quickTexts.length === 0" class="popover-empty">
+          暂无快速文本<br/>
+          <a href="javascript:void(0)" @click="goToConsoleQuickText">前往管理添加</a>
+        </div>
       </div>
     </div>
 
@@ -504,6 +571,30 @@
             <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 3.0 }" @click="setZoom(3.0)">3.0x</button>
             <button class="cam-btn preset-btn" :class="{ active: cameraZoom === 5.0 }" @click="setZoom(5.0)">5.0x</button>
             <button class="cam-btn reset-btn" @click="resetPTZ" title="复位缩放和平移">复位</button>
+          </div>
+        </div>
+
+        <!-- 功耗与发热控制 -->
+        <div class="cam-section">
+          <div class="cam-section-header">
+            <span>功耗与发热控制</span>
+            <span class="cam-badge" :class="{ 'eco-badge': localSettings.cameraLowPower }">
+              {{ localSettings.cameraLowPower ? '🌿 节能模式运行中' : '全规格模式' }}
+            </span>
+          </div>
+          <div class="audio-control-row">
+            <button 
+              class="cam-btn eco-toggle-btn" 
+              :class="{ active: localSettings.cameraLowPower }" 
+              @click="toggleCameraLowPower"
+              title="一键关停 OIS防抖/连续对焦/时域降噪/畸变校正/声音软编，锁15FPS，大幅减少发热与CPU开销"
+            >
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12a10 10 0 0 1 10-10z"></path>
+                <path d="M12 6v6l4 2"></path>
+              </svg>
+              <span>{{ localSettings.cameraLowPower ? '🌿 节能模式已开启 (点击恢复)' : '⚡ 开启安防节能模式 (防发热/降载)' }}</span>
+            </button>
           </div>
         </div>
 
@@ -599,6 +690,42 @@
       @reset="resetSettings"
     />
 
+    <!-- 移动端快捷文本弹窗 -->
+    <div v-if="showMobileQuickTextModal" class="modal-overlay" @click.self="showMobileQuickTextModal = false">
+      <div class="modal-card mobile-quick-text-card">
+        <div class="modal-header">
+          <h3>⚡ 快捷文本</h3>
+          <button class="close-btn" @click="showMobileQuickTextModal = false">✕</button>
+        </div>
+        <div class="modal-body custom-scrollbar">
+          <div class="mobile-quick-text-list">
+            <div 
+              v-for="qt in quickTextStore.quickTexts" 
+              :key="qt.id" 
+              class="mobile-qt-item"
+              @click="injectQuickTextToCurrent(qt); showMobileQuickTextModal = false"
+            >
+              <div class="mobile-qt-header">
+                <span class="mobile-qt-title">{{ qt.title }}</span>
+                <span class="mobile-qt-enter" v-if="qt.autoEnter">↵ 回车</span>
+              </div>
+              <div class="mobile-qt-content">{{ qt.content }}</div>
+            </div>
+            <div v-if="quickTextStore.quickTexts.length === 0" class="no-shortcuts">
+              暂无快速短语
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速文本操作轻提示 Toast -->
+    <transition name="fade">
+      <div v-if="quickTextToastMessage" class="quick-text-toast">
+        {{ quickTextToastMessage }}
+      </div>
+    </transition>
+
   </div>
 </template>
 
@@ -613,6 +740,7 @@ import { KeymapEngine } from '@/utils/keymapEngine'
 import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections, getCameraPreferences, saveCameraPreferences } from '@/utils/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupControlStore } from '@/stores/groupControl'
+import { useQuickTextStore } from '@/stores/quickTexts'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
 import ScreenshotModal from '@/components/ScreenshotModal.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
@@ -642,6 +770,61 @@ const emit = defineEmits(['recommend-layout', 'close'])
 const deviceStore = useDeviceStore()
 const currentId = computed(() => props.deviceId)
 const groupControlStore = useGroupControlStore()
+const quickTextStore = useQuickTextStore()
+
+// --- 快捷文本下拉与 Toast 状态 ---
+const showQuickTextDropdown = ref(false)
+const showMobileQuickTextModal = ref(false)
+const quickTextToastMessage = ref('')
+let quickTextToastTimer = null
+
+function triggerQuickTextToast(msg) {
+  quickTextToastMessage.value = msg
+  if (quickTextToastTimer) clearTimeout(quickTextToastTimer)
+  quickTextToastTimer = setTimeout(() => {
+    quickTextToastMessage.value = ''
+  }, 2000)
+}
+
+function toggleQuickTextDropdown() {
+  showQuickTextDropdown.value = !showQuickTextDropdown.value
+}
+
+function injectQuickTextToCurrent(qt) {
+  if (!qt || !currentId.value) return
+  
+  // 优先尝试当前直连实例的 sendInjectText (WebRTC/WebSocket 纯流零中转)
+  let injected = false
+  if (typeof webrtc.sendInjectText === 'function') {
+    injected = webrtc.sendInjectText(qt.content)
+  }
+  
+  // 未建连或通道未就绪则使用信令群控广播通道兜底
+  if (!injected) {
+    quickTextStore.injectToDevice(currentId.value, qt.content, qt.autoEnter)
+  } else if (qt.autoEnter) {
+    setTimeout(() => {
+      if (typeof webrtc.sendInjectKeycode === 'function') {
+        webrtc.sendInjectKeycode(0, 66)
+        setTimeout(() => webrtc.sendInjectKeycode(1, 66), 30)
+      }
+    }, 80)
+  }
+
+  triggerQuickTextToast(`已注入: ${qt.title}`)
+  showQuickTextDropdown.value = false
+}
+
+function goToConsoleQuickText() {
+  showQuickTextDropdown.value = false
+  deviceStore.openGlobalConsole(currentId.value, 'text')
+}
+
+function onGlobalClick(e) {
+  if (showQuickTextDropdown.value && !e.target.closest('.quick-text-popover-menu') && !e.target.closest('.quick-text-sidebar-btn')) {
+    showQuickTextDropdown.value = false
+  }
+}
 
 // 多机直连环境下的焦点判定与音频判定
 const effectiveFocused = computed(() => 
@@ -757,6 +940,9 @@ const cameraSupport = ref(true)
 // 用户级设置管控：管理员配置的锁定项（码率/帧率/分辨率/音频）在 UI 置灰，服务端同步强制
 const authStore = useAuthStore()
 const policyLocked = computed(() => policyLockedSections(authStore.userPolicy))
+// forbid_terminal：快捷键命令按钮（电源/HOME/BACK/音量/自定义按键）均经信令 command 通道下发，
+// 后端已拦截，前端同步隐藏入口避免无效点击
+const forbidTerminal = computed(() => authStore.forbidTerminal)
 
 const currentSessionMode = deviceStore.getDeviceMode(currentId.value)
 const initialSettings = getDeviceSettings(currentId.value)
@@ -771,6 +957,11 @@ if (currentSessionMode === 'camera') {
   initialSettings.cameraZoomRatio = camPref.cameraZoomRatio || 1.0
   initialSettings.cameraOrientation = camPref.cameraOrientation || 'auto'
   initialSettings.audioSource = camPref.audioSource || 'mic'
+  initialSettings.cameraLowPower = Boolean(camPref.cameraLowPower)
+  if (initialSettings.cameraLowPower) {
+    initialSettings.audio = false
+    initialSettings.pageAudioMuted = true
+  }
 } else {
   initialSettings.videoSource = 'display'
 }
@@ -811,7 +1002,8 @@ const scrcpyOptions = computed(() => {
     camera_high_speed: localSettings.value.cameraHighSpeed,
     camera_ar: localSettings.value.cameraAr,
     camera_zoom: localSettings.value.cameraZoomRatio || 1.0,
-    camera_orientation: localSettings.value.cameraOrientation || 'auto'
+    camera_orientation: localSettings.value.cameraOrientation || 'auto',
+    camera_low_power: Boolean(localSettings.value.cameraLowPower)
   }
 })
 
@@ -922,6 +1114,26 @@ function selectResolution(res) {
   reconnectStream(`正在切换分辨率至 [${label}]...`)
 }
 
+function toggleCameraLowPower() {
+  const nextVal = !localSettings.value.cameraLowPower
+  localSettings.value.cameraLowPower = nextVal
+  if (nextVal) {
+    localSettings.value.audio = false
+    pageAudioMuted.value = true
+    if (!localSettings.value.cameraFps || localSettings.value.cameraFps > 15) {
+      localSettings.value.cameraFps = 15
+    }
+  } else {
+    localSettings.value.audio = true
+    localSettings.value.cameraFps = 30
+  }
+  saveCameraPreferences(currentId.value, {
+    cameraLowPower: nextVal,
+    cameraFps: localSettings.value.cameraFps
+  })
+  reconnectStream(nextVal ? '正在启动低功耗节能安防模式 (15FPS/关马达/关降噪/关声音)...' : '正在恢复常规监控模式...')
+}
+
 function reconnectStream(msg = '正在切换参数并重新建连...') {
   if (isCameraMode.value) {
     saveCameraPreferences(currentId.value, {
@@ -931,6 +1143,7 @@ function reconnectStream(msg = '正在切换参数并重新建连...') {
       cameraFps: localSettings.value.cameraFps,
       cameraZoomRatio: localSettings.value.cameraZoomRatio || 1.0,
       cameraOrientation: localSettings.value.cameraOrientation || 'auto',
+      cameraLowPower: Boolean(localSettings.value.cameraLowPower),
       audioSource: localSettings.value.audioSource
     })
   }
@@ -1209,6 +1422,11 @@ function resetSettings() {
 
 const toggleConsole = () => {
   if (deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId.value) {
+    // 若控制台已开但处于底层（被连接界面遮挡），点击按钮优先将其提升至最前置顶，而非直接关闭
+    if (deviceStore.activeTopLayer !== 'console') {
+      deviceStore.setActiveTopLayer('console')
+      return
+    }
     deviceStore.closeGlobalConsole()
   } else {
     deviceStore.openGlobalConsole(currentId.value)
@@ -1685,8 +1903,10 @@ function setupWebRTC() {
 
 const handlePopState = (e) => {
   // 当用户按下物理返回键，或者浏览器后退时
-  // 阻止默认行为，而是断开连接
-  deviceStore.clearActiveDevice()
+  // 多机直连下每个 DeviceClient 实例都会收到 popstate 广播：
+  // 只让当前聚焦的实例响应，且只关闭自己，避免一次返回键把 N 台设备全部断开
+  if (!effectiveFocused.value) return
+  deviceStore.closeDevice(currentId.value)
 }
 
 function onWindowFocus() {
@@ -1749,6 +1969,9 @@ onMounted(() => {
   updateCameraClock()
   cameraClockTimer = setInterval(updateCameraClock, 1000)
 
+  quickTextStore.fetchQuickTexts()
+  document.addEventListener('click', onGlobalClick)
+
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('keydown', onGlobalKeyDown)
   document.addEventListener('keyup', onGlobalKeyUp)
@@ -1771,6 +1994,7 @@ function handleFullscreenChange() {
 }
 
 onUnmounted(() => {
+  document.removeEventListener('click', onGlobalClick)
   if (cameraClockTimer) clearInterval(cameraClockTimer)
   if (fsUiHideTimer) { clearTimeout(fsUiHideTimer); fsUiHideTimer = null }
   if (recordingTimer) clearInterval(recordingTimer)
@@ -1887,12 +2111,15 @@ function formatDuration(ms) {
 const connMetaText = computed(() => {
   const name = authStore.username
   if (!name) return ''
+  // 显示当前设备的租约剩余时长（而非账号截止日）；无租约或永久租约时只显示用户名
   const p = authStore.userPolicy
-  const t = p && p.expires_at ? new Date(p.expires_at) : null
+  const leases = p && Array.isArray(p.leases) ? p.leases : []
+  const lease = leases.find(l => l && l.device_id === currentId.value)
+  const t = lease && lease.expires_at ? new Date(lease.expires_at) : null
   if (!t || Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return `👤 ${name}`
   const ms = t.getTime() - nowTick.value
-  if (ms <= 0) return `👤 ${name} · 账号已到期`
-  return `👤 ${name} · 剩余 ${formatDuration(ms)}`
+  if (ms <= 0) return `👤 ${name} · 租约已到期`
+  return `👤 ${name} · 租约剩余 ${formatDuration(ms)}`
 })
 
 const showOverlay = computed(() => currentWebRTC.value.status.value !== 'connected')
@@ -2696,6 +2923,8 @@ function onTouchEnd(e) {
 
 .sidebar-btn:hover { background: #333; border-color: var(--accent); color: white; }
 .sidebar-btn.active { background: rgba(88, 166, 255, 0.18); border-color: var(--accent); color: white; }
+.sidebar-btn.is-behind { background: rgba(255, 255, 255, 0.05); border-color: rgba(88, 166, 255, 0.4); color: #8b949e; }
+.sidebar-btn.is-behind:hover { background: rgba(88, 166, 255, 0.12); border-color: var(--accent); color: white; }
 .sidebar-btn.danger:hover { background: rgba(248, 81, 73, 0.2); border-color: var(--error); color: var(--error); }
 .sidebar-btn.danger { color: #888; }
 .sidebar-btn.add-btn { border-style: dashed; }
@@ -3121,6 +3350,37 @@ function onTouchEnd(e) {
   border-color: rgba(63, 185, 80, 0.3);
 }
 
+.cam-badge.eco-badge {
+  background: rgba(46, 160, 67, 0.2);
+  color: #3fb950;
+  border-color: rgba(63, 185, 80, 0.4);
+}
+
+.eco-toggle-btn {
+  width: 100%;
+  padding: 8px;
+  background: #1c2128;
+  border: 1px dashed #388bfd;
+  color: #79c0ff;
+  font-weight: 500;
+}
+
+.eco-toggle-btn.active {
+  background: rgba(46, 160, 67, 0.15);
+  border: 1px solid #3fb950;
+  color: #3fb950;
+  box-shadow: 0 0 10px rgba(63, 185, 80, 0.15);
+}
+
+.osd-badge.eco-dot {
+  background: rgba(46, 160, 67, 0.35);
+  color: #56d364;
+  border: 1px solid rgba(63, 185, 80, 0.6);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
 .cam-btn-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3259,5 +3519,236 @@ function onTouchEnd(e) {
   border-color: #f85149 !important;
   color: #f85149 !important;
   background: rgba(248, 81, 73, 0.2) !important;
+}
+
+/* 快捷文本下拉菜单与气泡浮层 */
+.quick-text-dropdown-wrapper {
+  position: relative;
+}
+
+.quick-text-popover-menu {
+  position: absolute;
+  right: 74px;
+  top: 140px;
+  width: 250px;
+  max-width: calc(100% - 80px);
+  max-height: 420px;
+  background: rgba(18, 18, 30, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(88, 166, 255, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popover-close-btn {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.popover-close-btn:hover {
+  color: #f0f6fc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.popover-manage-link {
+  background: transparent;
+  border: none;
+  color: #58a6ff;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.popover-manage-link:hover {
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.popover-items-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  overflow-y: auto;
+  max-height: 260px;
+}
+
+.popover-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: all 0.12s ease;
+  text-align: left;
+}
+
+.popover-item:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.item-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.item-enter-tag {
+  font-size: 10px;
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.item-snippet {
+  font-size: 11px;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.popover-empty {
+  padding: 20px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: #8b949e;
+  line-height: 1.6;
+}
+
+.popover-empty a {
+  color: #58a6ff;
+  text-decoration: underline;
+}
+
+/* 快捷文本操作轻提示 Toast */
+.quick-text-toast {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  z-index: 2000;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 移动端快捷文本弹层 */
+.mobile-quick-text-card {
+  max-width: 360px;
+  width: 90%;
+}
+
+.mobile-quick-text-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.mobile-qt-item {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.mobile-qt-item:active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+}
+
+.mobile-qt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-qt-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.mobile-qt-enter {
+  font-size: 10px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.mobile-qt-content {
+  font-size: 12px;
+  color: #8b949e;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>

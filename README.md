@@ -1,5 +1,11 @@
 # Scrcpy over WebRTC (穿云投屏)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![Docker Image Size](https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![GitHub Stars](https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github)](https://github.com/hqw700/ScrcpyOverWebRTC)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE)
+
 中文 | [English](README.en.md)
 
 📖 **官方技术文档与保姆级部署指南**：👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)
@@ -16,13 +22,16 @@
 
 - **极致流畅**: 零拷贝流解析 + 硬件级 PTS 透传，提供 WebCodecs 锁相硬件渲染（对标原生 Scrcpy）与标准 HTML5 视频双引擎。
 - **公网直连**: 原生支持 IPv6 直连穿透 CGNAT，智能 WebRTC P2P 打洞与 TURN 自动兜底。
-- **TCP 投屏直控**: （v0.3.6）新增 WebSocket 投屏直控连接模式，提供 100% TCP 穿透能力，受限企业防火墙与无 TURN 环境下免打洞稳定出流。
-- **多机矩阵**: （v0.3.6）支持多设备同屏并发直控，提供平铺/标签/浮窗四大布局，分屏副视窗双连接隔离与聚焦防冲突。
+- **高频大盘群控**: （v0.3.7）全新 Pub/Sub 发布订阅定向分发架构，多租户 100% 零泄漏隔离；4 挡推流范围过滤（屏幕可视/全量/勾选/标签），节约 90% 带宽；群控并发广播延迟压降至 ~2ms。
+- **租约与用户管理**: （v0.3.7）商用化用户管理升级为一站式管理抽屉，支持设备独占租约（Lease）模型、每台机器到期时间与时长精准管控、7 维度权限 forbid 隔离及到期自动回收。
+- **批量文本下发**: （v0.3.7）控制台新增文本下发 Tab，剪贴板原子通道保证 100% 汉字落屏与可选追加回车；单机直控与大盘群控集成双轨持久化快速短语库。
+- **批量安装收敛与断点续传**: （v0.3.7）运维功能收敛至全局底部控制台（任务进度看板+单机诊断日志）；Agent 端引入 HTTP Range 断点续传与 If-Range 防脏包，解决大文件超时断流。
+- **安卓 App 一体**: （v0.3.7）官方 App 界面基于 Jetpack Compose 深度重塑；新增无需亮屏摄像头监控推流；被控端 Root 模式下全面支持系统开机自启动与后台自愈保活。
+- **TCP 投屏直控**: 新增 WebSocket 投屏直控连接模式，提供 100% TCP 穿透能力，受限企业防火墙与无 TURN 环境下免打洞稳定出流。
+- **多机矩阵**: 支持多设备同屏并发直控，提供平铺/标签/浮窗三大布局，分屏副视窗双连接隔离与聚焦防冲突。
 - **安防监控**: 支持真机熄屏硬件级摄像头直推，专属监控大屏支持物理多摄换挡、PTZ 数字变焦、无损抓拍与录像。
 - **全能交互**: 支持多指触控、物理按键模拟、按键映射 (Keymapping)、IME 汉字无感落屏、静默双向剪贴板与 WebADB 终端。
-- **高效群控**: 支持毫秒级群控同步与大盘直接触控，画幅动态自适应，支持高密数据表格与缩略图悬浮预览。
-- **一键免驱部署**: （v0.3.6）纯浏览器全平台访问；支持域名信令反向代理与 Android 自适应 DNS 解析；支持 WebUSB/WebADB 免驱部署与 Magisk 开机自启。
-- **安卓 App 一体**: 官方 App 主被控一体，被控端支持 Root 与 Shizuku 免电脑自启，支持内置信令单机运行。
+- **一键免驱部署**: 纯浏览器全平台访问；支持域名信令反向代理与 Android 自适应 DNS 解析；支持 WebUSB/WebADB 免驱部署与 Magisk 开机自启。
 - **设备分享**: 支持免密链接与卡密安全分享设备，支持时长、控制权限与访客会话管理。
 - **全生态兼容**: 广泛兼容 Android 物理真机 (Root / 免 Root)、Android 模拟器、redroid 虚拟化容器及各类商业云手机。
 

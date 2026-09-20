@@ -1,5 +1,11 @@
 # Scrcpy over WebRTC (CloudPhone)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![Docker Image Size](https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
+[![GitHub Stars](https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github)](https://github.com/hqw700/ScrcpyOverWebRTC)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE)
+
 [中文](README.md) | English
 
 📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)
@@ -16,13 +22,16 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 - **Ultimate Smoothness**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring both WebCodecs phase-locked hardware rendering (matching native Scrcpy) and standard HTML5 video engines.
 - **Direct Public Network Access**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P NAT hole punching with automatic TURN relay fallback.
-- **100% TCP Streaming**: (v0.3.6) Added WebSocket direct control streaming mode for 100% TCP firewall penetration without TURN servers.
-- **Multi-Device Matrix**: (v0.3.6) Concurrent direct control of multiple devices with Grid, Tabs, and Floating layouts, split-screen duplicate connection isolation and focus guard.
+- **High-Frequency Group Control**: (v0.3.7) Brand new Pub/Sub directional distribution architecture with 100% zero-leak tenant isolation; 4-tier streaming scope filters (Visible/All/Selected/Tag) saving 90% bandwidth; group control broadcast latency reduced to ~2ms.
+- **Lease & User Management**: (v0.3.7) Upgraded commercial user center into an all-in-one drawer with exclusive device lease models, granular expiration dates per machine, 7-dimension permission forbid isolation, and automatic lease recovery.
+- **Batch Text Broadcast**: (v0.3.7) Added Text Broadcast Tab in global console, clipboard atomic passthrough ensuring 100% text/Chinese injection; integrated quick-phrase store with dual cloud/local persistence.
+- **Batch Ops & Resumable Downloads**: (v0.3.7) Converged batch APK install and file push into global console with task progress boards; Agent supports RFC 7233 HTTP Range resumable downloads with If-Range validation.
+- **Integrated Android App**: (v0.3.7) Rebuilt with Jetpack Compose; screen-off hardware camera surveillance streaming; Root mode boot auto-start and background self-healing daemon.
+- **100% TCP Streaming**: WebSocket direct control streaming mode for 100% TCP firewall penetration without TURN servers.
+- **Multi-Device Matrix**: Concurrent direct control of multiple devices with Grid, Tabs, and Floating layouts, split-screen duplicate connection isolation and focus guard.
 - **Surveillance Camera Mode**: Screen-off hardware camera streaming for physical phones, dedicated monitoring console with multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
 - **All-Around Interaction**: Multi-touch, physical key simulation, visual keymapping, IME Chinese input passthrough, silent bidirectional clipboard, and WebADB console.
-- **Efficient Group Control**: Millisecond-level group sync with canvas direct touch, dynamic aspect-ratio adaptation, compact data grid view with hover popover preview.
-- **One-Click Driverless Deployment**: (v0.3.6) Zero client needed (iOS/Android/PC/Mac); supports domain signaling with adaptive Android DNS resolver, WebUSB/WebADB browser deployment, and Magisk boot-start modules.
-- **Integrated Android App**: Official App acts as both controller and controlled end; controlled mode supports Root and Shizuku driverless boot, plus standalone embedded server mode.
+- **One-Click Driverless Deployment**: Zero client needed (iOS/Android/PC/Mac); supports domain signaling with adaptive Android DNS resolver, WebUSB/WebADB browser deployment, and Magisk boot-start modules.
 - **Secure Device Sharing**: Share devices via passwordless links or card keys, with expiration time, permission controls, and active session management.
 - **Broad Ecosystem Compatibility**: Compatible with physical Android phones (Root / Non-Root), emulators, redroid containers, and commercial cloud phones.
 

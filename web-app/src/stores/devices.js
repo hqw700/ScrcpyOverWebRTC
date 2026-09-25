@@ -348,6 +348,30 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  // 直控模式：'single' (单机模式) | 'multi' (多机模式)
+  // 移动端默认且优先采用单机模式 ('single')，桌面端可从 localStorage 读取并默认单机 ('single')
+  const isMobileClient = typeof window !== 'undefined' && (window.innerWidth <= 1024 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent))
+  const savedControlMode = typeof localStorage !== 'undefined' ? localStorage.getItem('cloudphone_control_mode') : null
+  const directControlMode = ref(isMobileClient ? 'single' : (savedControlMode === 'multi' ? 'multi' : 'single'))
+
+  function setDirectControlMode(mode) {
+    if (mode !== 'single' && mode !== 'multi') return
+    directControlMode.value = mode
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('cloudphone_control_mode', mode)
+      } catch (e) {}
+    }
+    // 当从多机切换为单机模式时：若当前打开了多台设备，保留焦点设备，平滑关闭其余设备
+    if (mode === 'single' && activeDeviceIds.value.length > 1) {
+      const keepId = focusedDeviceId.value || activeDeviceIds.value[0]
+      const toClose = activeDeviceIds.value.filter(id => id !== keepId)
+      toClose.forEach(id => closeDevice(id))
+      focusedDeviceId.value = keepId
+      masterDeviceId.value = keepId
+    }
+  }
+
   const activeDeviceIds = ref([])
   const focusedDeviceId = ref(null)
   const masterDeviceId = ref(null)
@@ -409,6 +433,18 @@ export const useDeviceStore = defineStore('devices', () => {
 
   function openDevice(id) {
     if (!id) return
+    // 单机模式下：只保持当前设备直连，若已有其他设备则平滑关闭并切换
+    if (directControlMode.value === 'single') {
+      const others = activeDeviceIds.value.filter(devId => devId !== id)
+      others.forEach(devId => closeDevice(devId))
+      activeDeviceIds.value = [id]
+      focusedDeviceId.value = id
+      masterDeviceId.value = id
+      activeTopLayer.value = 'connection'
+      return
+    }
+
+    // 多机模式：追加并聚焦
     if (!activeDeviceIds.value.includes(id)) {
       activeDeviceIds.value.push(id)
     }
@@ -785,6 +821,14 @@ export const useDeviceStore = defineStore('devices', () => {
               stopTrackingTask()
             }
           }
+        } else if (msg.message_type === 'device_msg' && msg.payload?.type === 'command_result') {
+          commandResultListeners.forEach(cb => {
+            try {
+              cb(msg.payload, msg.device_id)
+            } catch (e) {
+              console.error('[Store] onCommandResult listener error:', e)
+            }
+          })
         } else if (msg.message_type === 'license_update') {
           // 服务端广播的授权状态变更（设备超限被拒、特惠到期降额等）
           applyLicenseState(msg)
@@ -1134,6 +1178,30 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  const commandResultListeners = new Set()
+
+  function onCommandResult(callback) {
+    commandResultListeners.add(callback)
+    return () => {
+      commandResultListeners.delete(callback)
+    }
+  }
+
+  function sendCommand(deviceId, command) {
+    const requestId = Math.random().toString(36).substring(7)
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+      globalWs.send(JSON.stringify({
+        message_type: 'command',
+        device_id: deviceId,
+        request_id: requestId,
+        command: command
+      }))
+    } else {
+      console.warn('[Store] globalWs not open, cannot send command')
+    }
+    return requestId
+  }
+
   return {
     currentTask,
     startTrackingTask,
@@ -1142,6 +1210,8 @@ export const useDeviceStore = defineStore('devices', () => {
     offlineDevices,
     loading,
     error,
+    directControlMode,
+    setDirectControlMode,
     activeDeviceId,
     activeDeviceIds,
     focusedDeviceId,
@@ -1238,6 +1308,8 @@ export const useDeviceStore = defineStore('devices', () => {
     licenseUsagePercent,
     licenseBadgeText,
     licenseBadgeTitle,
-    licenseBadgeClass
+    licenseBadgeClass,
+    sendCommand,
+    onCommandResult
   }
 })

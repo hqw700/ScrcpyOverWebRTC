@@ -296,19 +296,31 @@ function getMetricColorClass(val, warnThreshold, dangerThreshold) {
   return 'normal'
 }
 
-function onRowClick() {
+function onRowClick(e) {
   if (props.device.status !== 'online') return
   if (!showMenu.value) {
     deviceStore.setDeviceMode(props.device.id, 'display')
-    emit('connect', props.device.id)
+    if (e && (e.ctrlKey || e.metaKey)) {
+      if (deviceStore.directControlMode !== 'multi') {
+        deviceStore.setDirectControlMode('multi')
+      }
+      deviceStore.openDevice(props.device.id)
+    } else if (deviceStore.directControlMode === 'multi') {
+      deviceStore.openDevice(props.device.id)
+    } else {
+      emit('connect', props.device.id)
+    }
   }
 }
 
-function onThumbClick() { onRowClick() }
+function onThumbClick(e) { onRowClick(e) }
 
 function onAddToMulti() {
   showMenu.value = false
   deviceStore.setDeviceMode(props.device.id, 'display')
+  if (deviceStore.directControlMode !== 'multi') {
+    deviceStore.setDirectControlMode('multi')
+  }
   deviceStore.openDevice(props.device.id)
 }
 

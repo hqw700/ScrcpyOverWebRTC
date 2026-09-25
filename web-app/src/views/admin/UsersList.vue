@@ -57,7 +57,8 @@
         </div>
       </div>
 
-      <div class="table-wrapper">
+      <!-- 桌面端表格视图 -->
+      <div class="table-wrapper desktop-only">
         <table class="premium-table">
           <thead>
             <tr>
@@ -129,6 +130,114 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- 移动端专享卡片列表 (<=1024px 显示) -->
+      <div class="mobile-user-list mobile-only">
+        <div
+          v-for="user in filteredUsers"
+          :key="user.username"
+          class="mobile-user-card"
+          :class="{ selected: drawerUser && drawerUser.username === user.username }"
+          @click="openDrawer(user)"
+        >
+          <!-- 卡片头部：头像、用户名、当前登录、在线胶囊、角色徽章 -->
+          <div class="m-card-header">
+            <div class="m-user-main">
+              <span class="avatar">{{ user.username[0].toUpperCase() }}</span>
+              <div class="m-name-group">
+                <div class="m-username-row">
+                  <span class="m-username">{{ user.username }}</span>
+                  <span v-if="user.username === authStore.username" class="self-tag">当前登录</span>
+                </div>
+                <div class="m-user-sub">
+                  <span class="m-online-status" :class="{ online: user.online }">
+                    <span class="status-dot" :class="{ online: user.online }"></span>
+                    {{ user.online ? '在线' : '离线' }}
+                  </span>
+                  <span :class="['role-badge', user.role]">
+                    {{ user.role === 'admin' ? '👑 管理员' : '普通用户' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="m-card-chevron">›</div>
+          </div>
+
+          <!-- 卡片核心指标格 -->
+          <div class="m-card-grid">
+            <div class="m-grid-item">
+              <span class="m-grid-label">已分配租约</span>
+              <div class="m-grid-val">
+                <template v-if="leaseSummaryOf(user.username).count > 0">
+                  <span class="device-count lease">{{ leaseSummaryOf(user.username).count }} 台</span>
+                  <span class="remain-mini warn" v-if="leaseSummaryOf(user.username).nearest && leaseSummaryOf(user.username).nearest.remaining_seconds <= 604800">
+                    ({{ formatLeaseRemaining(leaseSummaryOf(user.username).nearest.remaining_seconds) }})
+                  </span>
+                </template>
+                <span v-else class="no-lease-text">未分配</span>
+              </div>
+            </div>
+
+            <div class="m-grid-item">
+              <span class="m-grid-label">账号截止日</span>
+              <div class="m-grid-val">
+                <span class="expire-cell" :class="{ expired: isExpiredAt(user.expires_at) }">
+                  {{ formatExpire(user.expires_at) }}
+                </span>
+                <span class="remain-mini" :class="{ expired: isExpiredAt(user.expires_at) }">
+                  ({{ formatRemain(user.expires_at) }})
+                </span>
+              </div>
+            </div>
+
+            <div class="m-grid-item">
+              <span class="m-grid-label">活跃设备</span>
+              <div class="m-grid-val">
+                <span class="device-count">{{ user.active_devices ? user.active_devices.length : 0 }} 台直控</span>
+              </div>
+            </div>
+
+            <div class="m-grid-item">
+              <span class="m-grid-label">备注说明</span>
+              <div class="m-grid-val m-note-val" :title="user.note">
+                {{ user.note || '无备注' }}
+              </div>
+            </div>
+          </div>
+
+          <!-- 权限锁定提示 (若存在) -->
+          <div v-if="lockSummary(user)" class="m-lock-bar">
+            {{ lockSummary(user) }}
+          </div>
+
+          <!-- 卡片底部快捷操作栏 (防冒泡) -->
+          <div class="m-card-actions" @click.stop>
+            <button class="m-action-btn policy" @click="openDrawer(user, 'policy')" v-if="user.role !== 'admin'" title="权限配置">
+              ⚙️ 权限
+            </button>
+            <button class="m-action-btn default" @click="openEditNoteModal(user)" title="编辑备注">
+              📝 备注
+            </button>
+            <button class="m-action-btn default" @click="openResetPwdModal(user)" title="重置密码">
+              🔒 改密
+            </button>
+            <button class="m-action-btn default" @click="openShareModal(user)" title="分享账号">
+              📤 分享
+            </button>
+            <button class="m-action-btn default" @click="openRenameModal(user)" title="重命名">
+              🏷️ 改名
+            </button>
+            <button class="m-action-btn danger" @click="confirmDelete(user)" v-if="user.username !== authStore.username" title="删除用户">
+              🗑️ 删除
+            </button>
+          </div>
+        </div>
+
+        <div v-if="filteredUsers.length === 0" class="m-empty-card">
+          <div class="m-empty-icon">👥</div>
+          <p>没有找到符合条件的用户</p>
+        </div>
       </div>
     </div>
 
@@ -1472,98 +1581,334 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-/* 移动端适配 (<=1024px)：统计卡片两列、表格横向滚动、弹窗限宽 */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* 移动端适配与重构 (<=1024px)：统计卡片精简、横滑筛选胶囊、卡片列表重构 */
 @media (max-width: 1024px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
   .admin-page-container {
     flex-direction: column;
     height: auto;
     min-height: 100%;
     overflow-y: auto;
-    padding: 8px;
-    gap: 12px;
+    padding: 8px 8px 30px;
+    gap: 10px;
+    box-sizing: border-box;
   }
 
+  /* 统计概览精简化 */
   .stats-overview-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 8px;
   }
 
   .stat-card {
-    padding: 10px 12px;
-    gap: 10px;
+    padding: 8px 10px;
+    gap: 8px;
+    border-radius: 10px;
   }
 
   .stat-icon-wrap {
-    width: 34px;
-    height: 34px;
-    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+  }
+
+  .stat-label {
+    font-size: 11px;
   }
 
   .stat-val {
-    font-size: 18px;
+    font-size: 17px;
   }
 
   .admin-card {
-    padding: 14px;
+    padding: 12px;
     border-radius: 12px;
   }
 
   .panel-header {
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
+    align-items: center;
   }
 
   .header-left {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+    align-items: baseline;
   }
 
   .panel-header h2 {
     font-size: 15px;
   }
 
+  .user-count {
+    font-size: 11.5px;
+  }
+
   .create-user-btn {
-    padding: 7px 12px;
+    padding: 6px 12px;
     font-size: 12px;
+    border-radius: 20px;
   }
 
-  .table-wrapper {
+  /* 搜索与横滑筛选胶囊 */
+  .filter-bar {
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .search-box input {
+    width: 100%;
+    height: 36px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  .status-filters {
+    display: flex;
     overflow-x: auto;
-    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 2px 0 4px;
+    width: 100%;
   }
 
-  .premium-table th {
-    padding: 8px 8px;
+  .status-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-filter-btn {
+    flex-shrink: 0;
+    padding: 5px 12px;
     font-size: 12px;
+    border-radius: 20px;
     white-space: nowrap;
   }
 
-  .premium-table td {
-    padding: 8px 8px;
-    font-size: 12.5px;
+  /* 移动端专属用户卡片列表 */
+  .mobile-user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .avatar {
-    width: 24px;
-    height: 24px;
-    font-size: 12px;
+  .mobile-user-card {
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 12px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    box-sizing: border-box;
   }
 
-  .note-cell {
-    max-width: 80px;
+  .mobile-user-card:active {
+    background: #22272e;
+    border-color: #58a6ff;
   }
 
-  .actions-cell {
+  .mobile-user-card.selected {
+    border-color: #58a6ff;
+    background: rgba(56, 139, 253, 0.08);
+  }
+
+  .m-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .m-user-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .m-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .m-username-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
-    gap: 4px;
-    min-width: 96px;
   }
 
-  .action-btn-mini {
-    width: 28px;
-    height: 28px;
+  .m-username {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+
+  .m-user-sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .m-online-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #8b949e;
+  }
+
+  .m-online-status.online {
+    color: #3fb950;
+  }
+
+  .m-card-chevron {
+    font-size: 18px;
+    color: #6e7681;
+    padding-left: 6px;
+  }
+
+  .m-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    margin-bottom: 10px;
+  }
+
+  .m-grid-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .m-grid-label {
+    font-size: 10.5px;
+    color: #8b949e;
+  }
+
+  .m-grid-val {
+    font-size: 12px;
+    font-weight: 500;
+    color: #c9d1d9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .m-note-val {
+    font-size: 11.5px;
+    color: #8b949e;
+  }
+
+  .remain-mini {
+    font-size: 10.5px;
+    color: #8b949e;
+    margin-left: 3px;
+  }
+
+  .remain-mini.warn {
+    color: #d29922;
+  }
+
+  .remain-mini.expired {
+    color: #f85149;
+  }
+
+  .m-lock-bar {
+    font-size: 11px;
+    color: #f0883e;
+    background: rgba(240, 136, 62, 0.1);
+    border: 1px solid rgba(240, 136, 62, 0.2);
+    border-radius: 6px;
+    padding: 3px 8px;
+    margin-bottom: 10px;
+    display: inline-block;
+  }
+
+  .m-card-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .m-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    font-size: 11.5px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  .m-action-btn.policy {
+    background: rgba(88, 166, 255, 0.1);
+    border-color: rgba(88, 166, 255, 0.3);
+    color: #58a6ff;
+  }
+
+  .m-action-btn.default {
+    background: #21262d;
+    border-color: #30363d;
+    color: #c9d1d9;
+  }
+
+  .m-action-btn.danger {
+    background: rgba(248, 81, 73, 0.1);
+    border-color: rgba(248, 81, 73, 0.25);
+    color: #f85149;
+  }
+
+  .m-action-btn:active {
+    transform: scale(0.97);
+  }
+
+  .m-empty-card {
+    text-align: center;
+    padding: 32px 16px;
+    color: #8b949e;
+    background: #161b22;
+    border: 1px dashed #30363d;
+    border-radius: 12px;
+  }
+
+  .m-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
   }
 
   .glass-modal {

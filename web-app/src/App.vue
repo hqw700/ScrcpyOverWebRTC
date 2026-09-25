@@ -438,13 +438,46 @@
                       高密列表
                     </button>
                   </div>
+
+                  <div class="dropdown-divider"></div>
+
+                  <!-- 直控工作台模式 (单机模式 vs 多机直连) -->
+                  <div class="dropdown-control-mode-group">
+                    <div class="dropdown-panel-title">直控工作台模式</div>
+                    <div class="dropdown-view-toggle">
+                      <button 
+                        class="view-toggle-opt" 
+                        :class="{ active: deviceStore.directControlMode === 'single' }" 
+                        @click="deviceStore.setDirectControlMode('single')"
+                        title="单机深度直控，支持悬浮窗口与横竖屏自适应"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                        </svg>
+                        单机模式
+                      </button>
+                      <button 
+                        class="view-toggle-opt" 
+                        :class="{ active: deviceStore.directControlMode === 'multi' }" 
+                        @click="deviceStore.setDirectControlMode('multi')"
+                        title="多虚机同时直连，支持平铺、标签与浮窗"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="2" y="3" width="8" height="18" rx="2"></rect>
+                          <rect x="14" y="3" width="8" height="18" rx="2"></rect>
+                        </svg>
+                        多机直连
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </transition>
             </div>
 
-            <!-- 多机直连快速关闭按钮 (仅在有多机直连时展示) -->
+            <!-- 直连状态与快速关闭按钮：多机模式 vs 单机模式 -->
             <button 
-              v-if="deviceStore.activeDeviceIds.length > 0"
+              v-if="deviceStore.directControlMode === 'multi' && deviceStore.activeDeviceIds.length > 0"
               class="top-action-btn primary-action-btn active" 
               @click.stop="deviceStore.closeAllDevices()" 
               title="点击关闭全部多机直连"
@@ -454,6 +487,18 @@
                 <rect x="14" y="3" width="8" height="18" rx="2"></rect>
               </svg>
               <span class="btn-text">多机直连 ({{ deviceStore.activeDeviceIds.length }}) ✕</span>
+            </button>
+            <button 
+              v-else-if="deviceStore.directControlMode === 'single' && !!deviceStore.activeDeviceId"
+              class="top-action-btn primary-action-btn active" 
+              @click.stop="deviceStore.clearActiveDevice()" 
+              title="点击退出当前设备直控"
+            >
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+              </svg>
+              <span class="btn-text">直控中 ({{ activeDevice?.info?.model || deviceStore.activeDeviceId }}) ✕</span>
             </button>
 
             <!-- 群控模式开关按钮 (管理员 或 拥有2台以上设备的用户) -->
@@ -581,26 +626,6 @@
           </transition>
         </router-view>
       </section>
-
-      <!-- 全局下半屏控制台 (悬浮并可上下拉伸高度) -->
-      <div 
-        class="global-console-container" 
-        :class="{ 
-          'nav-expanded': isNavExpanded && !isMobile,
-          'is-top-layer': deviceStore.activeTopLayer === 'console'
-        }"
-        v-show="deviceStore.showGlobalConsole"
-        :style="{ height: deviceStore.globalConsoleHeight + 'px' }"
-        @mousedown.capture="deviceStore.setActiveTopLayer('console')"
-        @touchstart.capture="deviceStore.setActiveTopLayer('console')"
-      >
-        <DeviceConsole 
-          v-if="deviceStore.showGlobalConsole && deviceStore.consoleDeviceId"
-          :key="deviceStore.consoleDeviceId"
-          :deviceId="deviceStore.consoleDeviceId" 
-          :height="deviceStore.globalConsoleHeight + 'px'" 
-        />
-      </div>
     </main>
 
     <!-- 3. 右侧控制面板 (支持悬浮和拉伸) -->
@@ -613,8 +638,8 @@
         'is-top-layer': deviceStore.activeTopLayer === 'connection'
       }"
       :style="panelStyle"
-      @mousedown.capture="deviceStore.setActiveTopLayer('connection')"
-      @touchstart.capture="deviceStore.setActiveTopLayer('connection')"
+      @mousedown.capture="!isMobile && deviceStore.setActiveTopLayer('connection')"
+      @touchstart.capture="!isMobile && deviceStore.setActiveTopLayer('connection')"
     >
       <!-- 调整大小的手柄 (PC固定模式) -->
       <div class="side-resizer" v-if="!isFloating && !isMobile" @mousedown="startResizing('left', $event)"></div>
@@ -630,10 +655,64 @@
 
       <!-- 面板内容区 -->
       <div class="panel-inner" v-if="deviceStore.activeDeviceIds.length > 0">
-        <div class="panel-main">
-           <!-- 统一由 MultiDeviceContainer 承载直连工作台 (支持 1~N 台的平铺、标签、主从、浮窗全生命周期) -->
-           <MultiDeviceContainer />
-        </div>
+        <!-- 模式 A：单机直控模式 -->
+        <template v-if="deviceStore.directControlMode === 'single'">
+          <!-- PC 单机顶部工具栏 (移动端不显示) -->
+          <header class="panel-top-bar" @mousedown="startDragging" v-if="!isMobile">
+            <div class="vm-info">
+              <span class="status-dot" :class="{ online: activeDevice?.status === 'online', offline: activeDevice?.status !== 'online' }"></span>
+              <span class="vm-id">{{ activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
+            </div>
+            <div class="panel-tools" @mousedown.stop>
+              <!-- 快捷切为多机模式 -->
+              <button class="tool-btn" @click="deviceStore.setDirectControlMode('multi')" title="切换为多机直连模式">
+                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="8" height="18" rx="2"></rect>
+                  <rect x="14" y="3" width="8" height="18" rx="2"></rect>
+                </svg>
+              </button>
+              <!-- 靠边固定 / 悬浮窗口 -->
+              <button class="tool-btn" @click="toggleFloating" :title="isFloating ? '靠边固定' : '悬浮窗口'">
+                <svg v-if="isFloating" class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <line x1="9" y1="3" x2="9" y2="21"></line>
+                </svg>
+                <svg v-else class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <rect x="7" y="7" width="10" height="10"></rect>
+                </svg>
+              </button>
+              <!-- 关闭按钮 -->
+              <button class="tool-btn close" @click="closePanel" title="关闭控制">
+                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="panel-main">
+            <!-- 渲染 DeviceClient -->
+            <DeviceClient 
+              v-if="deviceStore.activeDeviceId" 
+              :deviceId="deviceStore.activeDeviceId" 
+              :key="`${deviceStore.activeDeviceId}_${deviceStore.getDeviceMode(deviceStore.activeDeviceId)}`"
+              :is-mini="false"
+              :is-focused="true"
+              :audio-muted="false"
+              @recommend-layout="handleRecommendLayout" 
+            />
+          </div>
+        </template>
+
+        <!-- 模式 B：多机直连工作台 (平铺 / 标签 / 浮窗) -->
+        <template v-else>
+          <div class="panel-main">
+            <!-- 统一由 MultiDeviceContainer 承载直连工作台 (支持 1~N 台的平铺、标签、主从、浮窗全生命周期) -->
+            <MultiDeviceContainer />
+          </div>
+        </template>
       </div>
 
       <div class="panel-empty" v-else>
@@ -688,6 +767,40 @@
       </router-link>
     </nav>
     
+    <!-- 5. 移动端终端半屏弹出深色半透明遮罩层 (点击遮罩收起终端) -->
+    <transition name="fade">
+      <div 
+        v-if="isMobile && deviceStore.showGlobalConsole" 
+        class="mobile-console-backdrop" 
+        @click="deviceStore.closeGlobalConsole()"
+        @touchmove.prevent
+        title="点击收起终端"
+      ></div>
+    </transition>
+
+    <!-- 6. 全局下半屏控制台 (移动端半屏弹出抽屉，PC端悬浮并可上下拉伸高度) -->
+    <transition name="console-sheet">
+      <div 
+        class="global-console-container" 
+        :class="{ 
+          'nav-expanded': isNavExpanded && !isMobile,
+          'is-top-layer': deviceStore.activeTopLayer === 'console',
+          'is-mobile-sheet': isMobile
+        }"
+        v-if="deviceStore.showGlobalConsole"
+        :style="isMobile ? undefined : { height: deviceStore.globalConsoleHeight + 'px' }"
+        @mousedown.capture="!isMobile && deviceStore.setActiveTopLayer('console')"
+      >
+        <DeviceConsole 
+          :key="deviceStore.consoleDeviceId || 'default'"
+          :deviceId="deviceStore.consoleDeviceId || 'default'" 
+          :height="isMobile ? '100%' : deviceStore.globalConsoleHeight + 'px'" 
+          :isMobile="isMobile"
+          @close="deviceStore.closeGlobalConsole()"
+        />
+      </div>
+    </transition>
+
     <!-- 系统授权管理面板 -->
     <LicensePanel :visible="showLicensePanel" @close="showLicensePanel = false" />
   </div>
@@ -702,12 +815,18 @@ import { useAuthStore } from '@/stores/auth'
 import DeviceConsole from '@/components/DeviceConsole.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
 import MultiDeviceContainer from '@/components/multi/MultiDeviceContainer.vue'
+import DeviceClient from '@/views/DeviceClient.vue'
 import { useGroupControlStore } from '@/stores/groupControl'
 
 const deviceStore = useDeviceStore()
 const tagStore = useTagStore()
 const authStore = useAuthStore()
 const groupControlStore = useGroupControlStore()
+
+const activeDevice = computed(() => 
+  deviceStore.devices.find(d => d.id === deviceStore.activeDeviceId) ||
+  deviceStore.offlineDevices.find(d => d.id === deviceStore.activeDeviceId)
+)
 
 const route = useRoute()
 const router = useRouter()
@@ -827,7 +946,7 @@ const panelStyle = computed(() => {
   if (deviceStore.activeDeviceIds.length === 0 || isPanelHiddenPage.value) {
     return { width: '0px', display: 'none' }
   }
-  const isMulti = deviceStore.activeDeviceIds.length > 1
+  const isMulti = deviceStore.directControlMode === 'multi' && deviceStore.activeDeviceIds.length > 1
   if (isFloating.value) {
     const defaultMultiW = Math.min(window.innerWidth * 0.85, 1080)
     const defaultMultiH = Math.min(window.innerHeight * 0.88, 850)
@@ -915,7 +1034,12 @@ function startResizing(type, e) {
 
 const updateMedia = () => {
   isMobile.value = window.innerWidth <= 1024
-  if (isMobile.value) isFloating.value = false
+  if (isMobile.value) {
+    isFloating.value = false
+    if (deviceStore.directControlMode !== 'single') {
+      deviceStore.setDirectControlMode('single')
+    }
+  }
 }
 
 function openTagManager() {
@@ -2356,7 +2480,9 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .panel-top-bar { height: 50px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); cursor: grab; }
 .vm-info { display: flex; align-items: center; gap: 8px; pointer-events: none; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+.status-dot.offline { background: #8b949e; }
 .vm-id { font-weight: 600; font-size: 14px; }
+.panel-tools { display: flex; align-items: center; gap: 4px; }
 .tool-btn { background: none; border: none; color: #8b949e; cursor: pointer; padding: 6px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
 .tool-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
 .tool-btn.close:hover { color: #f85149; }
@@ -2441,6 +2567,27 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
+/* 移动端控制台遮罩层 (纯净深色半透明，不使用高斯模糊滤镜，杜绝模糊界面Bug) */
+.mobile-console-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1400;
+  cursor: pointer;
+}
+
+/* 控制台抽屉进出场过渡 (由 Vue transition 驱动，避免类名变更重复触发闪烁) */
+.console-sheet-enter-active,
+.console-sheet-leave-active {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.console-sheet-enter-from,
+.console-sheet-leave-to {
+  transform: translateY(100%);
+  opacity: 0.9;
+}
+
 .global-console-container {
   position: fixed;
   bottom: 0;
@@ -2451,7 +2598,7 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   box-sizing: border-box;
 }
 
-/* 控制台置顶层（遮挡连接面板） */
+/* 控制台置顶层（PC端遮挡连接面板） */
 .global-console-container.is-top-layer {
   z-index: 1050 !important;
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 -1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -2461,9 +2608,23 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   left: 180px;
 }
 
+/* 移动端终端半屏弹出抽屉适配 (z-index: 1500 稳居遮罩层 1400 与底栏 1000 之上) */
 @media (max-width: 1024px) {
-  .global-console-container {
+  .global-console-container,
+  .global-console-container.is-top-layer,
+  .global-console-container.is-mobile-sheet {
     left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    height: 52vh !important;
+    max-height: 85vh;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.95), 0 -1px 0 rgba(255, 255, 255, 0.12) !important;
+    z-index: 1500 !important;
+    overflow: hidden;
+    background: #0f0f1a !important;
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape, 'is-web-fullscreen': isWebFullscreen, 'is-camera-surveillance': isCameraMode }" @mousemove="onFsUiActivity" @touchstart.passive="onFsUiActivity">
+  <div class="device-panel-view" :class="{ 'is-mobile': isMobile, 'mobile-landscape': isMobile && isVideoLandscape && !isScreenLandscape, 'is-web-fullscreen': isWebFullscreen, 'is-camera-surveillance': isCameraMode }" @mousemove="onFsUiActivity" @touchstart.passive="onFsUiActivity">
     <!-- 主内容区 (视频部分) -->
     <div class="device-client-main">
       <!-- 主视频容器 -->
@@ -14,7 +14,7 @@
             <span class="osd-divider">|</span>
             <span class="osd-item osd-res">{{ currentResText }}</span>
             <span class="osd-badge eco-dot" v-if="localSettings.cameraLowPower">🌿 节能中</span>
-            <span class="osd-item osd-fps" v-if="videoStats">{{ videoStats.fps }}fps</span>
+            <span class="osd-item osd-fps" v-if="videoStats" :title="videoStats.fpsLabel ? '4层帧率: SRC(手机采集) | RX(网络接收) | DEC(解码) | PRES(呈现渲染)' : '实时帧率'">{{ videoStats.fpsLabel || (videoStats.fps + 'fps') }}</span>
             <span class="osd-divider" v-if="videoStats">|</span>
             <span class="osd-item osd-bitrate" v-if="videoStats" :title="`视频接收码率 (目标: ${videoStats.targetBitrate || localSettings.bitrate || 4} Mbps)`">
               {{ videoStats.bitrate > 1000 ? (videoStats.bitrate / 1000).toFixed(1) + ' Mbps' : videoStats.bitrate + ' kbps' }}
@@ -37,14 +37,25 @@
           </div>
         </div>
 
-        <!-- 移动端退出按钮 (右上角) -->
-        <button v-if="isMobile" class="mobile-close-fab" @click="deviceStore.clearActiveDevice()" title="关闭连接">
+        <!-- 移动端退出按钮 (右上角，全屏时自动隐藏让画面更纯净) -->
+        <button v-if="isMobile && !isFullscreen && !isWebFullscreen" class="mobile-close-fab" @click="deviceStore.clearActiveDevice()" title="关闭连接">
           ✕
         </button>
 
-        <!-- 悬浮全屏按钮 (移入视频容器内，保证全屏时可见) -->
-        <button class="fullscreen-fab" @click="toggleFullscreen" title="系统全屏">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        <!-- 悬浮全屏按钮 (移入视频容器内，保证全屏时可见，支持全屏下无触碰自动淡隐) -->
+        <button 
+          class="fullscreen-fab" 
+          :class="{ 'is-active': isFullscreen || isWebFullscreen, 'fs-ui-visible': fsUiVisible }"
+          @click="toggleFullscreen" 
+          :title="(isFullscreen || isWebFullscreen) ? '退出全屏' : '全屏显示'"
+        >
+          <svg v-if="isFullscreen || isWebFullscreen" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 10 14 10 20"></polyline>
+            <polyline points="20 10 14 10 14 4"></polyline>
+            <line x1="14" y1="10" x2="21" y2="3"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg v-else class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
         </button>
 
         <!-- 页面全屏按钮 -->
@@ -130,7 +141,7 @@
         <!-- 视频流状态面板 (常规模式左上角) -->
         <div v-if="videoStats && localSettings.showStats !== false && !isCameraMode" class="stats-badge">
           <span v-if="isWebSocketMode" class="stat-conn-type ws-pill" title="WebSocket TCP 二进制流传输">⚡ WS 投屏</span>
-          <span class="stat-fps">{{ videoStats.fps }}fps</span>
+          <span class="stat-fps" :title="videoStats.fpsLabel ? '4层帧率: SRC(手机采集) | RX(网络接收) | DEC(解码) | PRES(呈现渲染)' : '实时帧率'">{{ videoStats.fpsLabel || (videoStats.fps + 'fps') }}</span>
           <span class="stat-delimiter">|</span>
           <template v-if="!isWebSocketMode">
             <span class="stat-delay" title="网络延迟(RTT) + 缓冲(JB) + 解码 + 云端处理">E2E ~{{ videoStats.e2eDelay }}ms</span>
@@ -164,14 +175,18 @@
               <p class="error-msg">❌ 连接失败</p>
               <p class="error-tip">{{ currentWebRTC.error.value }}</p>
               <button class="retry-btn" @click="retry">重试</button>
-              <template v-if="!isWebSocketMode && authStore.isAdmin">
-                <p class="error-tip ws-fallback-hint">若 UDP 被防火墙/NAT 拦截导致 WebRTC 反复失败，可改走 TCP 穿透通道：</p>
+              <template v-if="!isWebSocketMode">
+                <p class="error-tip ws-fallback-hint">若 UDP/WebRTC 握手受阻或兼容性异常，可改走 TCP 100% 穿透通道：</p>
                 <button class="retry-btn ws-fallback-btn" @click="toggleStreamMode">⚡ 改用 WebSocket 投屏</button>
               </template>
             </template>
             <template v-else-if="currentWebRTC.status.value === 'disconnected'">
-              <p>连接已断开</p>
+              <p class="error-msg">连接已断开</p>
               <button class="retry-btn" @click="retry">重新连接</button>
+              <template v-if="!isWebSocketMode">
+                <p class="error-tip ws-fallback-hint">若 WebRTC 握手超时或网络断开，可改走 TCP 穿透通道：</p>
+                <button class="retry-btn ws-fallback-btn" @click="toggleStreamMode">⚡ 改用 WebSocket 投屏</button>
+              </template>
             </template>
           </div>
         </div>
@@ -179,8 +194,8 @@
         <!-- 悬浮菜单展开时的全屏点击遮罩 -->
         <div v-if="(isMobile || isFullscreen || isWebFullscreen) && showMobileMenu" class="fab-overlay" @mousedown.stop.prevent="showMobileMenu = false" @touchstart.stop.prevent="showMobileMenu = false"></div>
 
-        <!-- 手机端悬浮菜单 (移入视频容器内，保证全屏时可见) -->
-        <div v-if="isMobile || isFullscreen || isWebFullscreen" class="mobile-fab-container" :style="fabStyle">
+        <!-- 手机端悬浮菜单 (移入视频容器内，保证全屏时可见，支持全屏下淡出联动) -->
+        <div v-if="isMobile || isFullscreen || isWebFullscreen" class="mobile-fab-container" :class="{ 'fs-ui-visible': fsUiVisible }" :style="fabStyle">
           <button class="mobile-fab-main" :class="{ 'active': showMobileMenu }"
             @mousedown="onFabStart" @mousemove="onFabMove" @mouseup="onFabEnd" @mouseleave="onFabEnd"
             @touchstart.prevent="onFabStart" @touchmove.prevent="onFabMove" @touchend.prevent="onFabEnd">
@@ -235,7 +250,22 @@
               <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
                 {{ pageAudioMuted ? '🔊 开启声音监听' : '🔇 静音' }}
               </button>
+              <button class="fab-item" :class="{ 'group-active': isFullscreen || isWebFullscreen }" @click="toggleFullscreen(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path v-if="!(isFullscreen || isWebFullscreen)" d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                  <template v-else>
+                    <polyline points="4 14 10 14 10 20"></polyline>
+                    <polyline points="20 10 14 10 14 4"></polyline>
+                    <line x1="14" y1="10" x2="21" y2="3"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                  </template>
+                </svg>
+                {{ (isFullscreen || isWebFullscreen) ? '退出全屏' : '全屏显示' }}
+              </button>
               <div class="fab-divider"></div>
+              <button class="fab-item" @click="switchToDisplayMode(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg> 切回手机屏幕
+              </button>
               <button class="fab-item" @click="showSettingsModal = true; showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 监控设置
               </button>
@@ -250,9 +280,21 @@
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
                 {{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}
               </button>
-              <button v-if="authStore.isAdmin" class="fab-item" :class="{ 'group-active': isWebSocketMode }" @click="toggleStreamMode(); showMobileMenu=false">
+              <button class="fab-item" :class="{ 'group-active': isWebSocketMode }" @click="toggleStreamMode(); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                 {{ isWebSocketMode ? '切回 WebRTC 直连' : '切换 WebSocket 投屏' }}
+              </button>
+              <button class="fab-item" :class="{ 'group-active': isFullscreen || isWebFullscreen }" @click="toggleFullscreen(); showMobileMenu=false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path v-if="!(isFullscreen || isWebFullscreen)" d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                  <template v-else>
+                    <polyline points="4 14 10 14 10 20"></polyline>
+                    <polyline points="20 10 14 10 14 4"></polyline>
+                    <line x1="14" y1="10" x2="21" y2="3"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                  </template>
+                </svg>
+                {{ (isFullscreen || isWebFullscreen) ? '退出全屏' : '全屏显示' }}
               </button>
               <div class="fab-divider"></div>
               <template v-if="!forbidTerminal">
@@ -349,7 +391,7 @@
           </svg>
           <span class="btn-text">{{ groupControlStore.isGroupControlActive ? '取消群控' : '群控主控' }}</span>
         </button>
-        <button v-if="authStore.isAdmin" class="sidebar-btn" :class="{ active: isWebSocketMode }" @click="toggleStreamMode" :title="isWebSocketMode ? '当前为 WebSocket 投屏，点击切换为 WebRTC 直连' : '当前为 WebRTC 直连，点击切换为 WebSocket 投屏'">
+        <button class="sidebar-btn" :class="{ active: isWebSocketMode }" @click="toggleStreamMode" :title="isWebSocketMode ? '当前为 WebSocket 投屏，点击切换为 WebRTC 直连' : '当前为 WebRTC 直连，点击切换为 WebSocket 投屏'">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
@@ -655,7 +697,11 @@
 
         <!-- 7. 系统设置与退出 -->
         <div class="cam-section bottom-section">
-          <div class="cam-btn-grid">
+          <div class="cam-btn-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <button class="cam-btn" @click="switchToDisplayMode" title="切回手机屏幕直控模式">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              <span>切回屏幕</span>
+            </button>
             <button class="cam-btn" @click="showSettingsModal = true" title="高级监控与编码设置">
               <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
               <span>设置</span>
@@ -917,6 +963,10 @@ function toggleGroupControl() {
 const goBackToList = () => {
   deviceStore.setDeviceMode(currentId.value, 'display')
   deviceStore.clearActiveDevice()
+}
+
+const switchToDisplayMode = () => {
+  deviceStore.setDeviceMode(currentId.value, 'display')
 }
 
 const videoElement = ref(null)
@@ -1557,6 +1607,9 @@ function toggleStreamMode() {
 
 if (currentId.value) {
   deviceStore.registerWebRTC(currentId.value, webrtc)
+  if (deviceStore.showGlobalConsole && !deviceStore.consoleDeviceId) {
+    deviceStore.consoleDeviceId = currentId.value
+  }
 }
 
 const keymapStore = useKeymapStore()
@@ -1782,17 +1835,22 @@ let layoutInterval = null
 // 手机端和视频方向检测
 const isMobile = ref(window.innerWidth <= 1024)
 const isVideoLandscape = ref(false)
+const isScreenLandscape = ref(window.innerWidth > window.innerHeight)
 
 function updateMobileState() {
   isMobile.value = window.innerWidth <= 1024
+  isScreenLandscape.value = window.innerWidth > window.innerHeight
 }
 
 function onVideoLoaded() { checkAndRecommendLayout() }
 function onVideoResize() { checkAndRecommendLayout() }
 
 // 响应式重新连接
-watch(currentId, (newId) => {
+watch(currentId, (newId, oldId) => {
   if (newId) {
+    if (deviceStore.showGlobalConsole) {
+      deviceStore.consoleDeviceId = newId
+    }
     webrtc.disconnect()
     const sessionMode = deviceStore.getDeviceMode(newId)
     const st = getDeviceSettings(newId)
@@ -2124,8 +2182,8 @@ const connMetaText = computed(() => {
 
 const showOverlay = computed(() => currentWebRTC.value.status.value !== 'connected')
 
-// 是否需要旋转坐标（手机端且视频横屏）
-const needRotateCoords = computed(() => isMobile.value && isVideoLandscape.value)
+// 是否需要旋转坐标（手机端竖屏握持且视频横屏）
+const needRotateCoords = computed(() => isMobile.value && isVideoLandscape.value && !isScreenLandscape.value)
 
 // 存储视频实际尺寸用于坐标转换
 const videoNaturalSize = ref({ width: 0, height: 0 })
@@ -2192,35 +2250,48 @@ function retry() {
   webrtc.connect()
 }
 
-// iOS Safari（及所有 iOS 浏览器内核）不支持任意元素的 Fullscreen API，
+// iOS Safari（及所有 iOS 浏览器内核）不支持任意 HTML 容器的 Fullscreen API，
 // 此时"全屏"按钮自动退化为 CSS 页面全屏
 const nativeFullscreenSupported = ref(!!document.fullscreenEnabled)
 
+const isIOS = computed(() => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+})
+
+const isStandalonePWA = computed(() => {
+  return window.navigator?.standalone === true || 
+    window.matchMedia?.('(display-mode: standalone)').matches
+})
+
 function toggleFullscreen() {
-  if (!nativeFullscreenSupported.value) {
+  // 1. 若当前已处于系统全屏，退出系统全屏
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+    return
+  }
+  // 2. 若当前已处于网页全屏，退出网页全屏
+  if (isWebFullscreen.value) {
     toggleWebFullscreen()
     return
   }
-  if (!document.fullscreenElement) {
-    // 如果处于网页全屏，先退出网页全屏，避免样式污染系统全屏元素
-    if (isWebFullscreen.value) {
-      document.body.classList.remove('web-fullscreen')
-      document.body.classList.remove('has-web-fullscreen')
-      isWebFullscreen.value = false
-    }
-    containerRef.value?.requestFullscreen().catch(() => {
+  // 3. 优先尝试原生系统全屏（如 Android / 桌面端）
+  if (nativeFullscreenSupported.value && containerRef.value?.requestFullscreen) {
+    containerRef.value.requestFullscreen().catch(() => {
+      // 降级为网页全屏（如 iPhone iOS Safari/Chrome）
       toggleWebFullscreen()
     })
   } else {
-    document.exitFullscreen().catch(() => {})
+    // 原生不支持（如 iPhone），直接启用网页全屏
+    toggleWebFullscreen()
   }
 }
 
-// 页面全屏下的悬浮 UI（右侧工具栏）自动隐藏：鼠标/触摸活动时显示，静止 2.5s 后淡出
+// 页面全屏下的悬浮 UI（右侧工具栏、全屏退出按键、移动端浮动操作球）自动隐藏：鼠标/触摸活动时显示，静止 2.5s 后淡出
 const fsUiVisible = ref(true)
 let fsUiHideTimer = null
 function onFsUiActivity() {
-  if (!isWebFullscreen.value) return
+  if (!isWebFullscreen.value && !isFullscreen.value) return
   fsUiVisible.value = true
   if (fsUiHideTimer) clearTimeout(fsUiHideTimer)
   fsUiHideTimer = setTimeout(() => { fsUiVisible.value = false }, 2500)
@@ -2235,6 +2306,11 @@ function toggleWebFullscreen() {
     document.body.classList.add('has-web-fullscreen')
     isWebFullscreen.value = true
     onFsUiActivity()
+
+    // 若是 iOS 设备且当前不是独立的 PWA 模式，弹出友好提示
+    if (isIOS.value && !isStandalonePWA.value) {
+      triggerQuickTextToast('💡 iOS 限制浏览器隐藏地址栏。点击 Safari 底部分享 ⎋ ->「添加到主屏幕」即可免地址栏沉浸全屏')
+    }
   } else {
     document.body.classList.remove('has-web-fullscreen')
     document.body.classList.remove('web-fullscreen')
@@ -2554,6 +2630,7 @@ function onMouseLeave(e) {
 }
 
 function onTouchStart(e) {
+  onFsUiActivity()
   if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i]
@@ -2683,10 +2760,16 @@ function onTouchEnd(e) {
   inset: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  height: 100dvh !important;
   z-index: 9000 !important;
   background: #000 !important;
   display: flex !important;
   flex-direction: row !important;
+  box-sizing: border-box !important;
+  padding-top: env(safe-area-inset-top, 0px) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  padding-left: env(safe-area-inset-left, 0px) !important;
+  padding-right: env(safe-area-inset-right, 0px) !important;
 }
 
 .device-panel-view.is-web-fullscreen .device-client-main {
@@ -2742,9 +2825,41 @@ function onTouchEnd(e) {
   transform: scale(1.1) !important;
 }
 
-.device-panel-view.is-web-fullscreen .fullscreen-fab,
 .device-panel-view.is-web-fullscreen .pip-fab {
   display: none !important;
+}
+
+/* 全屏状态下保持 fullscreen-fab 始终可见以供退出全屏 */
+.device-panel-view.is-web-fullscreen .fullscreen-fab {
+  display: flex !important;
+  z-index: 130 !important;
+}
+
+.fullscreen-fab.is-active {
+  background: rgba(15, 23, 42, 0.8) !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
+}
+
+.fullscreen-fab.is-active:hover {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-color: rgba(56, 189, 248, 0.8) !important;
+  transform: scale(1.08) !important;
+}
+
+/* 移动端全屏状态下悬浮全屏退出按键与浮动菜单球自动渐隐联动，静止 2.5s 后渐隐至无感 */
+.device-panel-view.is-web-fullscreen.is-mobile .fullscreen-fab,
+.device-panel-view.is-web-fullscreen.is-mobile .mobile-fab-container {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.device-panel-view.is-web-fullscreen.is-mobile .fullscreen-fab.fs-ui-visible,
+.device-panel-view.is-web-fullscreen.is-mobile .mobile-fab-container.fs-ui-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .stats-badge {
@@ -2793,6 +2908,10 @@ function onTouchEnd(e) {
 
 .stat-delimiter { color: #555; margin: 0 2px; }
 .stat-warn { color: #f85149; }
+.stat-fps, .stat-delay, .stat-bitrate, .stat-conn-type, .stat-lost {
+  pointer-events: auto;
+  cursor: help;
+}
 .ws-pill {
   color: #c084fc !important;
   font-weight: 700;
@@ -3107,6 +3226,28 @@ function onTouchEnd(e) {
 
 /* 手机端横屏视频全屏显示 - 长边对长边 */
 @media (max-width: 1024px) {
+  /* 移动端右上角按钮与左上角状态栏 Safe Area 避让，彻底杜绝刘海遮挡 */
+  .mobile-close-fab {
+    top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  }
+  
+  .fullscreen-fab {
+    top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    right: calc(60px + env(safe-area-inset-right, 0px)) !important;
+  }
+  
+  .stats-badge {
+    top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+  }
+  
+  .camera-osd-bar {
+    top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+    left: calc(12px + env(safe-area-inset-left, 0px)) !important;
+    right: calc(12px + env(safe-area-inset-right, 0px)) !important;
+  }
+
   .device-panel-view.mobile-landscape {
     position: fixed;
     inset: 0;
@@ -3125,6 +3266,7 @@ function onTouchEnd(e) {
     top: 50%;
     left: 50%;
     width: 100vh;
+    width: 100dvh;
     height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
     object-fit: contain;

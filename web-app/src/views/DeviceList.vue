@@ -832,6 +832,9 @@ function toggleViewMode() {
 }
 
 function openMultiDirectControl() {
+  if (deviceStore.directControlMode !== 'multi') {
+    deviceStore.setDirectControlMode('multi')
+  }
   if (deviceStore.activeDeviceIds.length === 0) {
     const online = deviceStore.onlineDevices.slice(0, 2)
     if (online.length > 0) {
@@ -1393,10 +1396,8 @@ onUnmounted(() => {
 })
 
 function connectDevice(deviceId) {
-  // 默认卡片或列表点击均以屏幕连接为主，若未显式指定模式则确保为 display
-  if (!deviceStore.getDeviceMode(deviceId)) {
-    deviceStore.setDeviceMode(deviceId, 'display')
-  }
+  // 默认卡片或列表点击均以屏幕直连为主
+  deviceStore.setDeviceMode(deviceId, 'display')
   deviceStore.setActiveDevice(deviceId)
 }
 </script>

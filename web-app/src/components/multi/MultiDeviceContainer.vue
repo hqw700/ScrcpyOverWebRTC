@@ -115,6 +115,16 @@
           <span class="tool-text">{{ audioFocusMode === 'exclusive' ? '焦点独占' : '混音模式' }}</span>
         </button>
 
+        <!-- 切为单机模式 -->
+        <button 
+          class="top-tool-btn" 
+          @click="deviceStore.setDirectControlMode('single')"
+          title="切换为单机专属直控模式 (保留当前焦点设备)"
+        >
+          <span class="tool-icon">📱</span>
+          <span class="tool-text">单机模式</span>
+        </button>
+
         <!-- 全部关闭退出 -->
         <button class="close-all-btn" @click="closeAll" title="关闭多机直连工作台">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -535,5 +545,11 @@ onUnmounted(() => {
   display: flex;
   overflow: hidden;
   position: relative;
+}
+
+@media (max-width: 1024px) {
+  .multi-top-bar {
+    display: none !important;
+  }
 }
 </style>

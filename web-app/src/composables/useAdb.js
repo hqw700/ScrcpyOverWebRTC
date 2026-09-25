@@ -20,25 +20,80 @@ export function useAdb(webrtc) {
     }
   }
 
+  let boundContainer = null
+  let focusCleanup = null
+  let resizeObserver = null
+
+  function focus() {
+    if (term) {
+      try {
+        term.focus()
+        const helper = boundContainer?.querySelector('.xterm-helper-textarea') || boundContainer?.querySelector('textarea')
+        if (helper) {
+          helper.focus({ preventScroll: true })
+        }
+      } catch (e) {}
+    }
+  }
+
   async function initAdb(container) {
     if (isAdbConnected.value) return
+    boundContainer = container
 
+    const isMobile = window.innerWidth <= 768
     term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontSize: 14,
-      fontFamily: 'Consolas, "Liberation Mono", Menlo, Courier, monospace',
+      fontSize: isMobile ? 12 : 13,
+      lineHeight: 1.22,
+      fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
       theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#aeafad'
+        background: '#0d1117',
+        foreground: '#c9d1d9',
+        cursor: '#58a6ff'
       },
-      scrollback: 10000
+      scrollback: 10000,
+      convertEol: true,
+      scrollOnUserInput: true
     })
     fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
-    setTimeout(() => { if (fitAddon) try { fitAddon.fit() } catch (e) {} }, 100)
+
+    // 单一手势事件主动聚焦，防止 touchstart + click 重复调用导致界面抖动和失焦
+    const handleTouchOrClick = (e) => {
+      focus()
+    }
+    container.addEventListener('click', handleTouchOrClick)
+    focusCleanup = () => {
+      container.removeEventListener('click', handleTouchOrClick)
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (fitAddon && term) {
+          try {
+            fitAddon.fit()
+            term.scrollToBottom()
+          } catch (e) {}
+        }
+      })
+      resizeObserver.observe(container)
+    }
+
+    try {
+      fitAddon.fit()
+      term.scrollToBottom()
+    } catch (e) {}
+
+    setTimeout(() => {
+      if (fitAddon && term) {
+        try {
+          fitAddon.fit()
+          term.scrollToBottom()
+        } catch (e) {}
+      }
+    }, 150)
 
     term.writeln('\x1b[33m[Shell] 正在建立 WebRTC 终端通道...\x1b[0m')
 
@@ -75,20 +130,46 @@ export function useAdb(webrtc) {
 
       term.writeln('\x1b[33m[Shell] 正在创建独立终端会话...\x1b[0m')
 
-      // 发送初始化窗口行列的 JSON 信息，通知后端以 BARE PTY 裸数据流运行
-      const cols = term.cols || 80
-      const rows = term.rows || 24
+      // 发送初始化窗口行列前先重新 fit 一次，确保准确上报当前移动端或桌面端可视行列
+      if (fitAddon) {
+        try { fitAddon.fit() } catch (e) {}
+      }
+
+      let cols = term.cols || 80
+      let rows = term.rows || 24
+      if (isMobile) {
+        // 手机端半屏抽屉根据容器实际高度精准计算 rows，防止上报过大导致 PTY 滚屏失效
+        const containerH = container.clientHeight || 150
+        const calcRows = Math.max(6, Math.floor((containerH - 10) / 16))
+        rows = (term.rows && term.rows > 0 && term.rows <= 25) ? term.rows : calcRows
+        cols = term.cols || 44
+      }
       const initPayload = JSON.stringify({ type: 'init', rows, cols })
       sessionChannel.sendData(new TextEncoder().encode(initPayload))
 
       term.writeln('\x1b[32m[Shell] 反代终端已就绪\x1b[0m\r\n')
       isAdbConnected.value = true
-      setTimeout(() => { if (fitAddon) try { fitAddon.fit() } catch (e) {} }, 200)
+      setTimeout(() => { 
+        if (fitAddon && term) {
+          try { 
+            fitAddon.fit()
+            term.scrollToBottom()
+          } catch (e) {}
+        }
+      }, 150)
 
       // 绑定当前 session 专属 channel 的接收回调 (直接接收裸字节流并输入到终端)
       sessionChannel.channel.onmessage = (evt) => {
         if (term) {
-          term.write(new Uint8Array(evt.data))
+          term.write(new Uint8Array(evt.data), () => {
+            try { 
+              term.scrollToBottom() 
+              const viewport = boundContainer?.querySelector('.xterm-viewport')
+              if (viewport) {
+                viewport.scrollTop = viewport.scrollHeight
+              }
+            } catch (e) {}
+          })
         }
       }
 
@@ -114,6 +195,16 @@ export function useAdb(webrtc) {
     debugLog('[Shell] Closing session')
     isAdbConnected.value = false
 
+    if (focusCleanup) {
+      focusCleanup()
+      focusCleanup = null
+    }
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    boundContainer = null
+
     if (unwatchWebrtcStatus) {
       unwatchWebrtcStatus()
       unwatchWebrtcStatus = null
@@ -133,10 +224,19 @@ export function useAdb(webrtc) {
   }
 
   function resize() {
-    if (fitAddon) {
-      try { fitAddon.fit() } catch (e) {}
+    if (fitAddon && term) {
+      try {
+        fitAddon.fit()
+        term.scrollToBottom()
+      } catch (e) {}
     }
   }
 
-  return { isAdbConnected, initAdb, closeAdb, resize }
+  function scrollToBottom() {
+    if (term) {
+      try { term.scrollToBottom() } catch (e) {}
+    }
+  }
+
+  return { isAdbConnected, initAdb, closeAdb, resize, scrollToBottom, focus }
 }

@@ -1,7 +1,12 @@
 <template>
-  <div ref="consoleMainRef" class="device-console" :class="{ 'is-maximized': isMaximized }" :style="{ height: isMaximized ? '100vh' : height }">
-    <!-- 顶部拖拽拉伸手柄 -->
-    <div class="console-resizer" v-if="!isMaximized" @mousedown="startResizingConsole" title="拖动调整控制台高度"></div>
+  <div ref="consoleMainRef" class="device-console" :class="{ 'is-maximized': isMaximized, 'is-mobile-view': isMobile }" :style="{ height: isMaximized ? '100vh' : height }">
+    <!-- 移动端半屏抽屉指示条 (仅在移动端展示，点击可直接收起关闭) -->
+    <div class="mobile-sheet-handle-bar" @click="handleConsoleClose" title="点击收起控制台">
+      <span class="sheet-handle-pill"></span>
+    </div>
+
+    <!-- 顶部拖拽拉伸手柄 (PC端使用) -->
+    <div class="console-resizer" v-if="!isMaximized && !isMobile" @mousedown="startResizingConsole" title="拖动调整控制台高度"></div>
 
     <!-- 轻量 Toast 提示 -->
     <transition name="console-fade">
@@ -17,10 +22,11 @@
           v-if="!forbidTerminal"
           :class="{ active: activeTab === 'shell' }"
           @click="activeTab = 'shell'"
-          title="ADB Shell 命令行模式"
+          title="Android Shell 命令分发与并发执行"
         >
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          终端 (Shell)
+          <span class="tab-label-text">执行命令</span>
+          <span class="tab-label-short">命令</span>
         </button>
         <button
           v-if="!forbidTerminal"
@@ -29,7 +35,8 @@
           title="ADB 交互式终端 (xterm.js)"
         >
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><path d="M12 18h.01"></path></svg>
-          ADB 调试
+          <span class="tab-label-text">ADB 调试</span>
+          <span class="tab-label-short">ADB</span>
         </button>
         <button
           v-if="!forbidTerminal"
@@ -38,7 +45,8 @@
           title="AI 智能排障与助手"
         >
           <svg class="tab-icon ai-spin-hover" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>
-          AI 助手
+          <span class="tab-label-text">AI 助手</span>
+          <span class="tab-label-short">AI</span>
           <span class="beta-badge">Agent</span>
         </button>
         <button 
@@ -47,7 +55,8 @@
           title="批量文本下发与快速短语管理"
         >
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          文本下发
+          <span class="tab-label-text">文本下发</span>
+          <span class="tab-label-short">文本</span>
         </button>
         <button
           v-if="authStore.isAdmin"
@@ -56,7 +65,8 @@
           title="批量安装 APK 与文件分发传输"
         >
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="18" x2="12" y2="15"></line></svg>
-          批量安装/传输
+          <span class="tab-label-text">批量安装/传输</span>
+          <span class="tab-label-short">分发</span>
         </button>
       </div>
       
@@ -78,37 +88,11 @@
               {{ d.id }}{{ d.status === 'online' ? '' : ' (离线)' }}
             </option>
           </select>
-          <!-- 终端连接/断开控制按键（forbid_terminal 用户隐藏：P2P 终端/AI 通道一并禁用） -->
-          <template v-if="!forbidTerminal">
-          <button
-            v-if="webrtcStatus === 'connected'"
-            class="console-link-btn disconnect"
-            @click="handleManualDisconnect"
-            title="断开终端直连"
-          >
-            断开
-          </button>
-          <button
-            v-else-if="webrtcStatus === 'connecting'"
-            class="console-link-btn connecting"
-            disabled
-          >
-            连接中...
-          </button>
-          <button
-            v-else
-            class="console-link-btn connect"
-            @click="handleManualConnect"
-            title="建立 WebRTC 终端直连"
-          >
-            ⚡ 连接终端
-          </button>
-          </template>
         </div>
         
         <!-- 全屏最大化切换按钮 -->
         <button 
-          class="console-tool-btn" 
+          class="console-tool-btn max-btn" 
           @click="toggleMaximize" 
           :title="isMaximized ? '还原窗口' : '全屏显示'"
         >
@@ -120,15 +104,15 @@
           </svg>
         </button>
 
-        <!-- 最小化隐藏按钮 (保持连接) -->
-        <button class="console-tool-btn" @click="deviceStore.closeGlobalConsole()" title="收起隐藏控制台 (终端继续后台运行)">
+        <!-- 最小化隐藏按钮 (PC端显示) -->
+        <button class="console-tool-btn pc-only-tool-btn" @click="deviceStore.closeGlobalConsole()" title="收起隐藏控制台 (终端继续后台运行)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
 
-        <!-- 彻底关闭断开按钮 -->
-        <button class="console-close-btn" @click="deviceStore.destroyGlobalConsole()" title="关闭控制台 (断开所有终端连接)">
+        <!-- 关闭控制台按钮 (移动端与PC端统一切换) -->
+        <button class="console-close-btn" @click="handleConsoleClose" :title="isMobile ? '收起控制台' : '关闭控制台 (断开所有终端连接)'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -144,10 +128,31 @@
         <div class="console-history" ref="consoleRef">
           <div v-for="(log, idx) in consoleLogs" :key="idx" :class="['log-item', log.type]">
             <template v-if="log.type === 'batch_result'">
-              <span class="log-cmd">$ [批量] {{ log.cmd }} (发送至 {{ Object.keys(log.results).length }} 台设备)</span>
+              <div class="batch-result-header">
+                <span class="log-cmd">$ {{ Object.keys(log.results).length > 1 ? `[批量执行] ${log.cmd} (共 ${Object.keys(log.results).length} 台)` : log.cmd }}</span>
+                <div class="batch-summary-stats">
+                  <span class="stat-pill success" v-if="getBatchStat(log.results, 'success') > 0">
+                    ✅ {{ Object.keys(log.results).length > 1 ? `${getBatchStat(log.results, 'success')} 成功` : '执行成功' }}
+                  </span>
+                  <span class="stat-pill failed" v-if="getBatchStat(log.results, 'failed') > 0">
+                    ❌ {{ Object.keys(log.results).length > 1 ? `${getBatchStat(log.results, 'failed')} 失败` : '执行失败' }}
+                  </span>
+                  <span class="stat-pill running" v-if="getBatchStat(log.results, 'running') > 0">
+                    ⏳ 执行中
+                  </span>
+                  <button 
+                    v-if="Object.keys(log.results).length > 1 && getBatchStat(log.results, 'failed') > 0"
+                    class="batch-filter-btn"
+                    :class="{ active: log.showFailedOnly }"
+                    @click="log.showFailedOnly = !log.showFailedOnly"
+                  >
+                    {{ log.showFailedOnly ? '查看全部设备' : '仅看失败设备' }}
+                  </button>
+                </div>
+              </div>
               <div class="batch-outputs-list">
                 <div 
-                  v-for="(res, devId) in log.results" 
+                  v-for="(res, devId) in getFilteredBatchResults(log.results, log.showFailedOnly)" 
                   :key="devId" 
                   class="batch-output-row"
                   :class="res.status"
@@ -169,7 +174,7 @@
           </div>
           <div v-if="consoleLogs.length === 0" class="console-empty">
             <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            等待命令下发...
+            等待命令分发执行...
           </div>
         </div>
         <div class="console-shortcuts">
@@ -184,17 +189,37 @@
           <button @click="showShortcutModal = true" class="system-btn edit-btn">⚙️ 自定义</button>
         </div>
 
-        <!-- 并发下发目标设备选择（多设备批量走 /api/tasks，后端 admin-only，普通用户隐藏） -->
+        <!-- 并发下发目标设备选择（高密海量设备选择架构） -->
         <div class="shell-targets-bar" v-if="authStore.isAdmin">
           <div class="targets-control-row">
-            <span class="label">并发目标：</span>
-            <label class="select-all-check" v-if="deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId).length > 0">
-              <input type="checkbox" v-model="isAllDevicesSelected" />
-              <span class="checkbox-custom"></span>
-              <span class="name">全选</span>
-            </label>
+            <div class="targets-left-info">
+              <span class="label">并发目标：</span>
+              <span class="targets-summary-pill" :class="{ 'is-batch': batchShellSelectedIds.length > 0 }">
+                {{ batchShellSelectedIds.length === 0 ? `当前单机 (${deviceId})` : `已选 ${targetDeviceIds.length} 台设备` }}
+              </span>
+            </div>
+
+            <div class="targets-quick-actions">
+              <button
+                class="target-quick-btn"
+                :class="{ active: isAllDevicesSelected }"
+                @click="isAllDevicesSelected = !isAllDevicesSelected"
+                title="快速全选所有在线设备"
+              >
+                ⚡ 全选在线 ({{ deviceStore.devices.filter(d => d.status === 'online').length }})
+              </button>
+              <button
+                v-if="batchShellSelectedIds.length > 0"
+                class="target-quick-btn"
+                @click="batchShellSelectedIds = []"
+                title="清空多选，仅保留当前主设备"
+              >
+                仅当前单机
+              </button>
+            </div>
+
             <div class="tag-filters" v-if="tagStore.tags.length > 0">
-              <span class="tag-filter-label">按标签选择：</span>
+              <span class="tag-filter-label">标签组：</span>
               <button 
                 v-for="tag in tagStore.tags" 
                 :key="tag.id" 
@@ -205,27 +230,105 @@
                   color: isTagAllSelected(tag.id) ? '#fff' : tag.color 
                 }"
                 @click="toggleTagDevices(tag.id)"
+                :title="`快速切换标签【${tag.name}】下的所有在线设备`"
               >
                 {{ tag.name }}
               </button>
             </div>
-          </div>
-          <div class="targets-list">
-            <label class="target-check current" v-if="deviceId && deviceId !== 'default'">
-              <input type="checkbox" checked disabled />
-              <span class="checkbox-custom"></span>
-              <span class="name">{{ deviceId }} (当前)</span>
-            </label>
-            <label 
-              v-for="d in deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId)" 
-              :key="d.id" 
-              class="target-check"
+
+            <button 
+              class="target-picker-toggle-btn"
+              :class="{ open: activeTargetPicker === 'shell' }"
+              @click="openTargetPicker('shell')"
+              title="展开海量设备搜索与精细化勾选列表"
             >
-              <input type="checkbox" :value="d.id" v-model="batchShellSelectedIds" />
-              <span class="checkbox-custom"></span>
-              <span class="name">{{ d.id }}</span>
-            </label>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span>设备选择列表 ({{ targetDeviceIds.length }})</span>
+              <span class="arrow-indicator">{{ activeTargetPicker === 'shell' ? '▲' : '▼' }}</span>
+            </button>
           </div>
+
+          <!-- 展开的高密设备选择弹层（支持 100+ 台搜索过滤、滚动与快速操作） -->
+          <transition name="target-panel-fade">
+            <div class="target-picker-drawer" v-if="activeTargetPicker === 'shell'">
+              <div class="drawer-header">
+                <div class="search-input-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input 
+                    v-model="targetSearchText" 
+                    placeholder="输入设备 ID 或型号模糊快速检索 (如 pixel, redroid)..." 
+                    class="drawer-search-input"
+                  />
+                  <button v-if="targetSearchText" class="search-clear-btn" @click="targetSearchText = ''">✕</button>
+                </div>
+                <div class="drawer-actions">
+                  <button class="drawer-action-btn" @click="selectFilteredTargets('shell')" title="勾选当前筛选出的所有在线设备">全选匹配项</button>
+                  <button class="drawer-action-btn" @click="invertFilteredTargets('shell')" title="反选当前匹配项">反向选择</button>
+                  <button class="drawer-action-btn" @click="batchShellSelectedIds = []" title="清空其他设备">清空</button>
+                  <button class="drawer-action-btn primary" @click="closeTargetPicker">完成 (已选 {{ targetDeviceIds.length }})</button>
+                </div>
+              </div>
+
+              <div class="drawer-tag-strip" v-if="tagStore.tags.length > 0">
+                <span class="strip-label">按标签过滤：</span>
+                <button 
+                  class="drawer-tag-pill" 
+                  :class="{ active: targetActiveTag === null }"
+                  @click="targetActiveTag = null"
+                >
+                  全部 ({{ deviceStore.devices.length }})
+                </button>
+                <button 
+                  v-for="tag in tagStore.tags" 
+                  :key="tag.id"
+                  class="drawer-tag-pill"
+                  :class="{ active: targetActiveTag === tag.id }"
+                  :style="{ borderColor: tag.color, color: targetActiveTag === tag.id ? '#fff' : tag.color, backgroundColor: targetActiveTag === tag.id ? tag.color : 'transparent' }"
+                  @click="targetActiveTag = (targetActiveTag === tag.id ? null : tag.id)"
+                >
+                  {{ tag.name }}
+                </button>
+              </div>
+
+              <div class="drawer-grid custom-scrollbar">
+                <label class="drawer-device-card current" v-if="deviceId && deviceId !== 'default' && isDeviceInFilter(deviceId)">
+                  <input type="checkbox" checked disabled />
+                  <span class="device-status-dot online"></span>
+                  <span class="device-id-text" :title="deviceId">{{ deviceId }}</span>
+                  <span class="current-badge">当前主控</span>
+                </label>
+                <label 
+                  v-for="d in filteredPickerDevices.filter(dev => dev.id !== deviceId)" 
+                  :key="d.id" 
+                  class="drawer-device-card"
+                  :class="{ 'is-selected': batchShellSelectedIds.includes(d.id), 'is-offline': d.status !== 'online' }"
+                >
+                  <input 
+                    type="checkbox" 
+                    :value="d.id" 
+                    v-model="batchShellSelectedIds"
+                    :disabled="d.status !== 'online'"
+                  />
+                  <span class="device-status-dot" :class="d.status"></span>
+                  <span class="device-id-text" :title="d.id">{{ d.id }}</span>
+                  <span v-if="d.status !== 'online'" class="offline-badge">离线</span>
+                  <span 
+                    v-for="tId in (tagStore.deviceTags[d.id] || [])" 
+                    :key="tId" 
+                    class="device-tag-dot"
+                    :style="{ backgroundColor: getTagColor(tId) }"
+                    :title="getTagName(tId)"
+                  ></span>
+                </label>
+                <div v-if="filteredPickerDevices.length === 0" class="drawer-empty-hint">
+                  无匹配设备，请更改搜索条件
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
 
         <div class="console-input-group">
@@ -234,7 +337,7 @@
             @keyup.enter="execCmd"
             @keydown.up.prevent="navigateHistory('up')"
             @keydown.down.prevent="navigateHistory('down')"
-            placeholder="输入 Android Shell 命令分发执行以获取回复..."
+            placeholder="输入 Android Shell 命令分发执行（支持单机或并发批量）..."
             class="cmd-input"
           />
           <button @click="execCmd" class="send-btn" :disabled="!inputCmd.trim()">{{ sendBtnText }}</button>
@@ -261,7 +364,7 @@
               class="add-sess-btn" 
               @click="addAdbSession" 
               title="新建终端会话" 
-              :disabled="adbSessions.length >= 5 || webrtcStatus !== 'connected'"
+              :disabled="adbSessions.length >= 5 || !isAdbReady"
             >
               +
             </button>
@@ -270,24 +373,37 @@
         </div>
 
         <!-- 断连醒目警示条 (若存在已有会话且连接断开) -->
-        <div v-if="adbSessions.length > 0 && webrtcStatus !== 'connected'" class="adb-disconnect-notice">
+        <div v-if="adbSessions.length > 0 && !isAdbReady" class="adb-disconnect-notice">
           <svg class="notice-warn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
-          <span class="notice-text">远程设备连接已断开，当前 ADB 调试会话已终止。</span>
-          <button class="notice-reconnect-btn" @click="handleManualConnect">⚡ 重新连接设备</button>
+          <span class="notice-text">远程设备直连已断开，当前 ADB 调试会话已终止。</span>
+          <button class="notice-reconnect-btn" @click="deviceStore.openDevice(deviceId)">🚀 重新进入设备直控</button>
         </div>
 
         <div v-if="adbSessions.length === 0" class="adb-placeholder">
           <svg class="adb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><polyline points="9 9 9 15 12 12 15 15 15 9"></polyline></svg>
-          <h3>开启交互式 ADB Web 终端</h3>
-          <p v-if="webrtcStatus === 'connected'">基于 WebRTC P2P 数据加密通道直连，支持 Tab 补全、多会话独立并发调试</p>
-          <p v-else class="adb-hint-warn">⚠️ 当前设备未建立终端直连。点击下方按钮即可建立连接并启动 ADB 终端。</p>
-          <button class="adb-connect-btn" @click="handleInitAdb">
-            {{ webrtcStatus === 'connected' ? '初始化 ADB 终端' : '⚡ 连接设备并启动 ADB' }}
-          </button>
+          <template v-if="isAdbReady">
+            <h3>交互式 ADB Web 终端已就绪</h3>
+            <p>基于 WebRTC P2P 数据加密通道直连，支持 Tab 补全、交互操作与多会话并发调试</p>
+            <button class="adb-connect-btn" @click="addAdbSession">
+              + 新建终端会话
+            </button>
+          </template>
+          <template v-else>
+            <h3>ADB 交互终端需在设备直控中运行</h3>
+            <p class="adb-hint-warn">当前设备处于大盘监控模式，未建立屏幕直连通道。请进入设备直控页面，即可直接开启交互式终端。</p>
+            <div class="adb-placeholder-actions">
+              <button class="adb-goto-device-btn" @click="deviceStore.openDevice(deviceId)">
+                🚀 进入设备直控
+              </button>
+              <button class="adb-switch-shell-btn" @click="activeTab = 'shell'">
+                切换至【执行命令】(大盘免直连)
+              </button>
+            </div>
+          </template>
         </div>
 
         <!-- 渲染各会话的多容器 -->
@@ -297,6 +413,7 @@
           :ref="el => { if (el) sessionContainers[sess.id] = el }"
           class="xterm-view-container" 
           v-show="activeSessionId === sess.id"
+          @click="focusAdbTerminal(sess.id)"
         ></div>
       </div>
 
@@ -448,15 +565,18 @@
       <!-- 4. 批量文本下发面板 -->
       <div v-show="activeTab === 'text'" class="text-tab-panel">
         <!-- 侧边快捷短语栏 (类似于 AI 助手的快捷技能侧边栏 aside.ai-skills-sidebar) -->
-        <aside class="quick-text-sidebar">
+        <aside class="quick-text-sidebar" :class="{ collapsed: isQuickTextCollapsed }">
           <div class="sidebar-header">
-            <h4>⚡ 快捷文本库</h4>
+            <h4>⚡ 快捷短语</h4>
             <div class="sidebar-header-actions">
               <button class="add-qt-btn" @click="openCreateQuickTextModal" title="新建快捷短语">+</button>
               <button class="manage-qt-btn" @click="openQuickTextModal" title="短语库管理">⚙️</button>
+              <button class="toggle-collapse-qt-btn" @click="isQuickTextCollapsed = !isQuickTextCollapsed" :title="isQuickTextCollapsed ? '展开短语' : '收起短语'">
+                {{ isQuickTextCollapsed ? '展开' : '收起' }}
+              </button>
             </div>
           </div>
-          <div class="quick-text-items custom-scrollbar">
+          <div class="quick-text-items custom-scrollbar" v-show="!isQuickTextCollapsed">
             <div 
               v-for="qt in quickTextStore.quickTexts" 
               :key="qt.id" 
@@ -508,17 +628,45 @@
             </div>
           </div>
 
-          <!-- 并发下发目标设备选择 -->
+          <!-- 并发下发目标设备选择（高密海量设备选择架构） -->
           <div class="shell-targets-bar">
             <div class="targets-control-row">
-              <span class="label">下发目标：</span>
-              <label class="select-all-check" v-if="deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId).length > 0">
-                <input type="checkbox" v-model="isAllTextTargetsSelected" />
-                <span class="checkbox-custom"></span>
-                <span class="name">全选在线</span>
-              </label>
+              <div class="targets-left-info">
+                <span class="label">下发目标：</span>
+                <span class="targets-summary-pill" :class="{ 'is-batch': effectiveTextTargets.length > 1 }">
+                  已勾选 {{ effectiveTextTargets.length }} 台设备
+                </span>
+              </div>
+
+              <div class="targets-quick-actions">
+                <button
+                  class="target-quick-btn"
+                  :class="{ active: isAllTextTargetsSelected }"
+                  @click="isAllTextTargetsSelected = !isAllTextTargetsSelected"
+                  title="快速全选所有在线设备"
+                >
+                  ⚡ 全选在线 ({{ deviceStore.devices.filter(d => d.status === 'online').length }})
+                </button>
+                <button
+                  class="target-quick-btn"
+                  :class="{ active: textTargetCurrent && batchTextSelectedIds.length === 0 }"
+                  @click="textTargetCurrent = true; batchTextSelectedIds = []"
+                  title="仅选择当前主控单机"
+                >
+                  仅当前单机
+                </button>
+                <button
+                  v-if="effectiveTextTargets.length > 0"
+                  class="target-quick-btn"
+                  @click="textTargetCurrent = false; batchTextSelectedIds = []"
+                  title="清空所有已选设备"
+                >
+                  清空
+                </button>
+              </div>
+
               <div class="tag-filters" v-if="tagStore.tags.length > 0">
-                <span class="tag-filter-label">按标签选择：</span>
+                <span class="tag-filter-label">标签组：</span>
                 <button 
                   v-for="tag in tagStore.tags" 
                   :key="tag.id" 
@@ -529,28 +677,105 @@
                     color: isTagAllSelectedForText(tag.id) ? '#fff' : tag.color 
                   }"
                   @click="toggleTagDevicesForText(tag.id)"
+                  :title="`快速切换标签【${tag.name}】下的所有在线设备`"
                 >
                   {{ tag.name }}
                 </button>
               </div>
-              <span class="targets-selected-summary">已勾选 {{ effectiveTextTargets.length }} 台设备</span>
-            </div>
-            <div class="targets-list">
-              <label class="target-check current" :class="{ 'is-selected': textTargetCurrent }" v-if="deviceId && deviceId !== 'default'">
-                <input type="checkbox" v-model="textTargetCurrent" />
-                <span class="checkbox-custom"></span>
-                <span class="name">{{ deviceId }} (当前)</span>
-              </label>
-              <label 
-                v-for="d in deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId)" 
-                :key="d.id" 
-                class="target-check"
+
+              <button 
+                class="target-picker-toggle-btn"
+                :class="{ open: activeTargetPicker === 'text' }"
+                @click="openTargetPicker('text')"
+                title="展开海量设备搜索与精细化勾选列表"
               >
-                <input type="checkbox" :value="d.id" v-model="batchTextSelectedIds" />
-                <span class="checkbox-custom"></span>
-                <span class="name">{{ d.id }}</span>
-              </label>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <span>设备选择列表 ({{ effectiveTextTargets.length }})</span>
+                <span class="arrow-indicator">{{ activeTargetPicker === 'text' ? '▲' : '▼' }}</span>
+              </button>
             </div>
+
+            <!-- 展开的高密设备选择弹层 -->
+            <transition name="target-panel-fade">
+              <div class="target-picker-drawer" v-if="activeTargetPicker === 'text'">
+                <div class="drawer-header">
+                  <div class="search-input-wrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input 
+                      v-model="targetSearchText" 
+                      placeholder="输入设备 ID 或型号模糊检索..." 
+                      class="drawer-search-input"
+                    />
+                    <button v-if="targetSearchText" class="search-clear-btn" @click="targetSearchText = ''">✕</button>
+                  </div>
+                  <div class="drawer-actions">
+                    <button class="drawer-action-btn" @click="selectFilteredTargets('text')" title="勾选当前筛选出的所有在线设备">全选匹配项</button>
+                    <button class="drawer-action-btn" @click="invertFilteredTargets('text')" title="反选当前匹配项">反向选择</button>
+                    <button class="drawer-action-btn" @click="textTargetCurrent = false; batchTextSelectedIds = []" title="清空全部">清空</button>
+                    <button class="drawer-action-btn primary" @click="closeTargetPicker">完成 (已选 {{ effectiveTextTargets.length }})</button>
+                  </div>
+                </div>
+
+                <div class="drawer-tag-strip" v-if="tagStore.tags.length > 0">
+                  <span class="strip-label">按标签过滤：</span>
+                  <button 
+                    class="drawer-tag-pill" 
+                    :class="{ active: targetActiveTag === null }"
+                    @click="targetActiveTag = null"
+                  >
+                    全部 ({{ deviceStore.devices.length }})
+                  </button>
+                  <button 
+                    v-for="tag in tagStore.tags" 
+                    :key="tag.id"
+                    class="drawer-tag-pill"
+                    :class="{ active: targetActiveTag === tag.id }"
+                    :style="{ borderColor: tag.color, color: targetActiveTag === tag.id ? '#fff' : tag.color, backgroundColor: targetActiveTag === tag.id ? tag.color : 'transparent' }"
+                    @click="targetActiveTag = (targetActiveTag === tag.id ? null : tag.id)"
+                  >
+                    {{ tag.name }}
+                  </button>
+                </div>
+
+                <div class="drawer-grid custom-scrollbar">
+                  <label class="drawer-device-card current" :class="{ 'is-selected': textTargetCurrent }" v-if="deviceId && deviceId !== 'default' && isDeviceInFilter(deviceId)">
+                    <input type="checkbox" v-model="textTargetCurrent" />
+                    <span class="device-status-dot online"></span>
+                    <span class="device-id-text" :title="deviceId">{{ deviceId }}</span>
+                    <span class="current-badge">当前主控</span>
+                  </label>
+                  <label 
+                    v-for="d in filteredPickerDevices.filter(dev => dev.id !== deviceId)" 
+                    :key="d.id" 
+                    class="drawer-device-card"
+                    :class="{ 'is-selected': batchTextSelectedIds.includes(d.id), 'is-offline': d.status !== 'online' }"
+                  >
+                    <input 
+                      type="checkbox" 
+                      :value="d.id" 
+                      v-model="batchTextSelectedIds"
+                      :disabled="d.status !== 'online'"
+                    />
+                    <span class="device-status-dot" :class="d.status"></span>
+                    <span class="device-id-text" :title="d.id">{{ d.id }}</span>
+                    <span v-if="d.status !== 'online'" class="offline-badge">离线</span>
+                    <span 
+                      v-for="tId in (tagStore.deviceTags[d.id] || [])" 
+                      :key="tId" 
+                      class="device-tag-dot"
+                      :style="{ backgroundColor: getTagColor(tId) }"
+                      :title="getTagName(tId)"
+                    ></span>
+                  </label>
+                  <div v-if="filteredPickerDevices.length === 0" class="drawer-empty-hint">
+                    无匹配设备，请更改搜索条件
+                  </div>
+                </div>
+              </div>
+            </transition>
           </div>
 
           <!-- 文本输入与下发区域 -->
@@ -594,17 +819,45 @@
 
       <!-- 5. 批量安装与文件传输面板 -->
       <div v-show="activeTab === 'files'" class="files-tab-panel">
-        <!-- 下发目标设备选择 -->
+        <!-- 下发目标设备选择（高密海量设备选择架构） -->
         <div class="shell-targets-bar files-targets-bar">
           <div class="targets-control-row">
-            <span class="label">下发目标：</span>
-            <label class="select-all-check" v-if="deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId).length > 0">
-              <input type="checkbox" v-model="isAllFilesTargetsSelected" />
-              <span class="checkbox-custom"></span>
-              <span class="name">全选在线</span>
-            </label>
+            <div class="targets-left-info">
+              <span class="label">下发目标：</span>
+              <span class="targets-summary-pill" :class="{ 'is-batch': effectiveFileTargets.length > 1 }">
+                已勾选 {{ effectiveFileTargets.length }} 台设备
+              </span>
+            </div>
+
+            <div class="targets-quick-actions">
+              <button
+                class="target-quick-btn"
+                :class="{ active: isAllFilesTargetsSelected }"
+                @click="isAllFilesTargetsSelected = !isAllFilesTargetsSelected"
+                title="快速全选所有在线设备"
+              >
+                ⚡ 全选在线 ({{ deviceStore.devices.filter(d => d.status === 'online').length }})
+              </button>
+              <button
+                class="target-quick-btn"
+                :class="{ active: fileTargetCurrent && batchFilesSelectedIds.length === 0 }"
+                @click="fileTargetCurrent = true; batchFilesSelectedIds = []"
+                title="仅选择当前主控单机"
+              >
+                仅当前单机
+              </button>
+              <button
+                v-if="effectiveFileTargets.length > 0"
+                class="target-quick-btn"
+                @click="fileTargetCurrent = false; batchFilesSelectedIds = []"
+                title="清空所有已选设备"
+              >
+                清空
+              </button>
+            </div>
+
             <div class="tag-filters" v-if="tagStore.tags.length > 0">
-              <span class="tag-filter-label">按标签选择：</span>
+              <span class="tag-filter-label">标签组：</span>
               <button 
                 v-for="tag in tagStore.tags" 
                 :key="tag.id" 
@@ -615,28 +868,105 @@
                   color: isTagAllSelectedForFiles(tag.id) ? '#fff' : tag.color 
                 }"
                 @click="toggleTagDevicesForFiles(tag.id)"
+                :title="`快速切换标签【${tag.name}】下的所有在线设备`"
               >
                 {{ tag.name }}
               </button>
             </div>
-            <span class="targets-selected-summary">已勾选 {{ effectiveFileTargets.length }} 台设备</span>
-          </div>
-          <div class="targets-list">
-            <label class="target-check current" :class="{ 'is-selected': fileTargetCurrent }" v-if="deviceId && deviceId !== 'default'">
-              <input type="checkbox" v-model="fileTargetCurrent" />
-              <span class="checkbox-custom"></span>
-              <span class="name">{{ deviceId }} (当前)</span>
-            </label>
-            <label 
-              v-for="d in deviceStore.devices.filter(dev => dev.status === 'online' && dev.id !== deviceId)" 
-              :key="d.id" 
-              class="target-check"
+
+            <button 
+              class="target-picker-toggle-btn"
+              :class="{ open: activeTargetPicker === 'files' }"
+              @click="openTargetPicker('files')"
+              title="展开海量设备搜索与精细化勾选列表"
             >
-              <input type="checkbox" :value="d.id" v-model="batchFilesSelectedIds" />
-              <span class="checkbox-custom"></span>
-              <span class="name">{{ d.id }}</span>
-            </label>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span>设备选择列表 ({{ effectiveFileTargets.length }})</span>
+              <span class="arrow-indicator">{{ activeTargetPicker === 'files' ? '▲' : '▼' }}</span>
+            </button>
           </div>
+
+          <!-- 展开的高密设备选择弹层 -->
+          <transition name="target-panel-fade">
+            <div class="target-picker-drawer" v-if="activeTargetPicker === 'files'">
+              <div class="drawer-header">
+                <div class="search-input-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input 
+                    v-model="targetSearchText" 
+                    placeholder="输入设备 ID 或型号模糊检索..." 
+                    class="drawer-search-input"
+                  />
+                  <button v-if="targetSearchText" class="search-clear-btn" @click="targetSearchText = ''">✕</button>
+                </div>
+                <div class="drawer-actions">
+                  <button class="drawer-action-btn" @click="selectFilteredTargets('files')" title="勾选当前筛选出的所有在线设备">全选匹配项</button>
+                  <button class="drawer-action-btn" @click="invertFilteredTargets('files')" title="反选当前匹配项">反向选择</button>
+                  <button class="drawer-action-btn" @click="fileTargetCurrent = false; batchFilesSelectedIds = []" title="清空全部">清空</button>
+                  <button class="drawer-action-btn primary" @click="closeTargetPicker">完成 (已选 {{ effectiveFileTargets.length }})</button>
+                </div>
+              </div>
+
+              <div class="drawer-tag-strip" v-if="tagStore.tags.length > 0">
+                <span class="strip-label">按标签过滤：</span>
+                <button 
+                  class="drawer-tag-pill" 
+                  :class="{ active: targetActiveTag === null }"
+                  @click="targetActiveTag = null"
+                >
+                  全部 ({{ deviceStore.devices.length }})
+                </button>
+                <button 
+                  v-for="tag in tagStore.tags" 
+                  :key="tag.id" 
+                  class="drawer-tag-pill"
+                  :class="{ active: targetActiveTag === tag.id }"
+                  :style="{ borderColor: tag.color, color: targetActiveTag === tag.id ? '#fff' : tag.color, backgroundColor: targetActiveTag === tag.id ? tag.color : 'transparent' }"
+                  @click="targetActiveTag = (targetActiveTag === tag.id ? null : tag.id)"
+                >
+                  {{ tag.name }}
+                </button>
+              </div>
+
+              <div class="drawer-grid custom-scrollbar">
+                <label class="drawer-device-card current" :class="{ 'is-selected': fileTargetCurrent }" v-if="deviceId && deviceId !== 'default' && isDeviceInFilter(deviceId)">
+                  <input type="checkbox" v-model="fileTargetCurrent" />
+                  <span class="device-status-dot online"></span>
+                  <span class="device-id-text" :title="deviceId">{{ deviceId }}</span>
+                  <span class="current-badge">当前主控</span>
+                </label>
+                <label 
+                  v-for="d in filteredPickerDevices.filter(dev => dev.id !== deviceId)" 
+                  :key="d.id" 
+                  class="drawer-device-card"
+                  :class="{ 'is-selected': batchFilesSelectedIds.includes(d.id), 'is-offline': d.status !== 'online' }"
+                >
+                  <input 
+                    type="checkbox" 
+                    :value="d.id" 
+                    v-model="batchFilesSelectedIds"
+                    :disabled="d.status !== 'online'"
+                  />
+                  <span class="device-status-dot" :class="d.status"></span>
+                  <span class="device-id-text" :title="d.id">{{ d.id }}</span>
+                  <span v-if="d.status !== 'online'" class="offline-badge">离线</span>
+                  <span 
+                    v-for="tId in (tagStore.deviceTags[d.id] || [])" 
+                    :key="tId" 
+                    class="device-tag-dot"
+                    :style="{ backgroundColor: getTagColor(tId) }"
+                    :title="getTagName(tId)"
+                  ></span>
+                </label>
+                <div v-if="filteredPickerDevices.length === 0" class="drawer-empty-hint">
+                  无匹配设备，请更改搜索条件
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
 
         <!-- 主内容工作区：左侧表单配置 + 右侧实时任务看板 -->
@@ -821,8 +1151,6 @@
       </div>
     </div>
 
-    <!-- 隐藏的 dummy video，用来满足 useWebRTC 在没有主视频时的画面要求 -->
-    <video ref="dummyVideo" style="display: none;" autoplay playsinline muted></video>
 
     <!-- 自定义快捷指令弹窗 -->
     <div v-if="showShortcutModal" class="shortcut-modal-overlay" @click.self="showShortcutModal = false">
@@ -949,16 +1277,29 @@ const props = defineProps({
   accessMode: {
     type: String,
     default: 'full'
+  },
+  isMobile: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['close'])
 
+const isMaximized = ref(false)
+
+function handleConsoleClose() {
+  emit('close')
+  if (isMaximized.value) {
+    isMaximized.value = false
+  }
+  deviceStore.closeGlobalConsole()
+}
+
 const deviceStore = useDeviceStore()
 const authStore = useAuthStore()
 const tagStore = useTagStore()
 const quickTextStore = useQuickTextStore()
-const dummyVideo = ref(null)
 const consoleRef = ref(null)
 const chatRef = ref(null)
 
@@ -1015,6 +1356,7 @@ const textHistoryRef = ref(null)
 
 const showQuickTextModal = ref(false)
 const editingQuickTexts = ref([])
+const isQuickTextCollapsed = ref(false)
 
 const effectiveTextTargets = computed(() => {
   const list = []
@@ -1455,7 +1797,7 @@ function translateSubtaskStatus(status) {
 
 const inputCmd = ref('')
 
-// 监听 AI / Files Tab 的激活
+// 监听 Tab 的激活与自适应补偿
 watch(activeTab, (newTab) => {
   if (newTab === 'ai') {
     if (webrtc.value && typeof webrtc.value.createAiCommandChannel === 'function') {
@@ -1463,8 +1805,153 @@ watch(activeTab, (newTab) => {
     }
   } else if (newTab === 'files') {
     fetchCloudFiles()
+  } else if (newTab === 'adb') {
+    // 切换至 ADB Tab 时，若 Store 中已存在活跃直控连接但控制台未挂载或状态不同步，立即主动同步
+    const activeInst = deviceStore.getWebRTC(props.deviceId)
+    if (activeInst && (!webrtc.value || webrtcStatus.value !== activeInst.status?.value)) {
+      setupDeviceConnection(props.deviceId, false)
+    }
+    if (isAdbReady.value && adbSessions.value.length === 0) {
+      addAdbSession()
+    }
+    nextTick(() => {
+      setTimeout(() => {
+        const activeSess = adbSessions.value.find(s => s.id === activeSessionId.value)
+        if (activeSess && activeSess.isConnected && activeSess.adbInstance) {
+          activeSess.adbInstance.resize()
+          if (activeSess.adbInstance.scrollToBottom) {
+            activeSess.adbInstance.scrollToBottom()
+          }
+        }
+      }, 60)
+    })
   }
 })
+
+// --- 海量设备目标选择器架构状态 ---
+const activeTargetPicker = ref(null) // 'shell' | 'text' | 'files' | null
+const targetSearchText = ref('')
+const targetActiveTag = ref(null)
+
+function openTargetPicker(type) {
+  targetSearchText.value = ''
+  targetActiveTag.value = null
+  activeTargetPicker.value = activeTargetPicker.value === type ? null : type
+}
+
+function closeTargetPicker() {
+  activeTargetPicker.value = null
+  targetSearchText.value = ''
+  targetActiveTag.value = null
+}
+
+const filteredPickerDevices = computed(() => {
+  const kw = targetSearchText.value.trim().toLowerCase()
+  const tagId = targetActiveTag.value
+  return deviceStore.devices.filter(dev => {
+    if (tagId) {
+      const devTags = tagStore.deviceTags[dev.id] || []
+      if (!devTags.includes(tagId)) return false
+    }
+    if (kw) {
+      const idMatch = dev.id && dev.id.toLowerCase().includes(kw)
+      const modelMatch = dev.model && dev.model.toLowerCase().includes(kw)
+      if (!idMatch && !modelMatch) return false
+    }
+    return true
+  }).sort((a, b) => {
+    if (a.status === 'online' && b.status !== 'online') return -1
+    if (a.status !== 'online' && b.status === 'online') return 1
+    return a.id.localeCompare(b.id)
+  })
+})
+
+function isDeviceInFilter(devId) {
+  const kw = targetSearchText.value.trim().toLowerCase()
+  if (kw && !devId.toLowerCase().includes(kw)) return false
+  if (targetActiveTag.value) {
+    const devTags = tagStore.deviceTags[devId] || []
+    if (!devTags.includes(targetActiveTag.value)) return false
+  }
+  return true
+}
+
+function getTagColor(tagId) {
+  const t = tagStore.tags.find(item => item.id === tagId)
+  return t ? t.color : '#58a6ff'
+}
+
+function getTagName(tagId) {
+  const t = tagStore.tags.find(item => item.id === tagId)
+  return t ? t.name : ''
+}
+
+function selectFilteredTargets(type) {
+  const onlineFiltered = filteredPickerDevices.value.filter(d => d.status === 'online' && d.id !== props.deviceId)
+  const ids = onlineFiltered.map(d => d.id)
+  if (type === 'shell') {
+    const set = new Set([...batchShellSelectedIds.value, ...ids])
+    batchShellSelectedIds.value = Array.from(set)
+  } else if (type === 'text') {
+    textTargetCurrent.value = true
+    const set = new Set([...batchTextSelectedIds.value, ...ids])
+    batchTextSelectedIds.value = Array.from(set)
+  } else if (type === 'files') {
+    fileTargetCurrent.value = true
+    const set = new Set([...batchFilesSelectedIds.value, ...ids])
+    batchFilesSelectedIds.value = Array.from(set)
+  }
+}
+
+function invertFilteredTargets(type) {
+  const onlineFiltered = filteredPickerDevices.value.filter(d => d.status === 'online' && d.id !== props.deviceId)
+  if (type === 'shell') {
+    const currentSelected = new Set(batchShellSelectedIds.value)
+    const newSelected = []
+    onlineFiltered.forEach(d => {
+      if (!currentSelected.has(d.id)) {
+        newSelected.push(d.id)
+      }
+    })
+    batchShellSelectedIds.value = newSelected
+  } else if (type === 'text') {
+    const currentSelected = new Set(batchTextSelectedIds.value)
+    const newSelected = []
+    onlineFiltered.forEach(d => {
+      if (!currentSelected.has(d.id)) {
+        newSelected.push(d.id)
+      }
+    })
+    batchTextSelectedIds.value = newSelected
+  } else if (type === 'files') {
+    const currentSelected = new Set(batchFilesSelectedIds.value)
+    const newSelected = []
+    onlineFiltered.forEach(d => {
+      if (!currentSelected.has(d.id)) {
+        newSelected.push(d.id)
+      }
+    })
+    batchFilesSelectedIds.value = newSelected
+  }
+}
+
+// 批量结果辅助统计函数
+function getBatchStat(results, status) {
+  if (!results) return 0
+  return Object.values(results).filter(r => r.status === status).length
+}
+
+function getFilteredBatchResults(results, showFailedOnly) {
+  if (!results) return {}
+  if (!showFailedOnly) return results
+  const out = {}
+  for (const [k, v] of Object.entries(results)) {
+    if (v.status === 'failed') {
+      out[k] = v
+    }
+  }
+  return out
+}
 
 // --- 批量 Shell 与单台整合状态 ---
 const batchShellSelectedIds = ref([])
@@ -1635,13 +2122,23 @@ const adbSessions = ref([])
 const activeSessionId = ref(null)
 const nextSessionId = ref(1)
 const sessionContainers = {}
-const isMaximized = ref(false)
 const consoleMainRef = ref(null)
 
 const isAdbConnected = computed(() => {
   if (activeSessionId.value === null) return false
   const sess = adbSessions.value.find(s => s.id === activeSessionId.value)
   return sess ? sess.isConnected : false
+})
+
+const isAdbReady = computed(() => {
+  if (webrtcStatus.value === 'connected' && webrtc.value) return true
+  if (props.deviceId) {
+    const activeInst = deviceStore.getWebRTC(props.deviceId)
+    if (activeInst && activeInst.status?.value === 'connected') {
+      return true
+    }
+  }
+  return false
 })
 
 function onDeviceSelectChange(e) {
@@ -1714,177 +2211,81 @@ const visibleMessages = computed(() => {
 
 const statusText = computed(() => {
   if (webrtcError.value) return `错误: ${webrtcError.value}`
-  if (webrtcStatus.value === 'connected') return '终端已连接 (在线)'
+  if (isAdbReady.value) return '终端已连接 (在线)'
   if (webrtcStatus.value === 'connecting') return '终端连接中...'
   return '终端未连接'
 })
 
 const statusClass = computed(() => {
   return {
-    connected: webrtcStatus.value === 'connected' && !webrtcError.value,
+    connected: isAdbReady.value && !webrtcError.value,
     connecting: webrtcStatus.value === 'connecting' && !webrtcError.value,
-    disconnected: webrtcStatus.value === 'disconnected' || !!webrtcError.value,
+    disconnected: !isAdbReady.value && (webrtcStatus.value === 'disconnected' || !!webrtcError.value),
     error: !!webrtcError.value
   }
 })
 
-// 初始化与连接管理
-async function setupDeviceConnection(deviceId, forceConnect = false) {
+// 初始化与连接管理 (自动复用设备直控主屏的 WebRTC 实例)
+function setupDeviceConnection(deviceId) {
   if (!deviceId || deviceId === 'default') return
-  // 防御：若控制台处于收起/折叠状态，绝不建立后台静默 WebRTC 连接
-  if (!deviceStore.showGlobalConsole) return
   
   // 检查是否已有活跃的控制面板 WebRTC 实例
   let activeInstance = deviceStore.getWebRTC(deviceId)
   if (activeInstance) {
-    console.log('[Console] Reusing active WebRTC session for device:', deviceId)
-    cleanupConnection(false)
+    if (unwatchStatus) { unwatchStatus(); unwatchStatus = null }
+    if (unwatchError) { unwatchError(); unwatchError = null }
     webrtcConnecting.value = false
     webrtcError.value = null
     webrtc.value = activeInstance
     isSharedConnection.value = true
-    webrtcStatus.value = webrtc.value.status?.value || 'connected'
-    webrtcError.value = webrtc.value.error?.value || null
+    webrtcStatus.value = activeInstance.status?.value || 'connecting'
+    webrtcError.value = activeInstance.error?.value || null
     
     // 监听 WebRTC 状态变化
-    unwatchStatus = watch(() => webrtc.value?.status?.value, (newStatus) => {
+    unwatchStatus = watch(() => activeInstance.status?.value, (newStatus) => {
       const prevStatus = webrtcStatus.value
-      webrtcStatus.value = newStatus || 'connected'
-      if (newStatus === 'disconnected' || newStatus === 'failed') {
+      webrtcStatus.value = newStatus || 'disconnected'
+      if (newStatus === 'connected') {
+        webrtcConnecting.value = false
+        // 若当前处于 ADB Tab 且尚无会话，自动开启 ADB 会话
+        if (activeTab.value === 'adb' && adbSessions.value.length === 0) {
+          addAdbSession()
+        }
+      } else if (newStatus === 'disconnected' || newStatus === 'failed' || newStatus === 'error') {
         webrtcConnecting.value = false
         // 标记所有 ADB 会话为断开
         adbSessions.value.forEach(s => {
           s.isConnected = false
         })
         if (prevStatus === 'connected') {
-          showToastNotice('⚠️ 远程设备连接已断开，ADB 调试已断开', 'warning')
-          consoleLogs.value.push({ type: 'error', text: '[系统提示] 远程设备连接已断开。' })
+          showToastNotice('⚠️ 远程设备直连已断开，ADB 调试已断开', 'warning')
+          consoleLogs.value.push({ type: 'error', text: '[系统提示] 远程设备直连已断开。' })
           scrollToBottom()
         }
       }
     }, { immediate: true })
 
-    unwatchError = watch(() => webrtc.value?.error?.value, (newErr) => {
+    unwatchError = watch(() => activeInstance.error?.value, (newErr) => {
       webrtcError.value = newErr || null
     }, { immediate: true })
     
     // 设置命令结果监听 (支持 Shell 终端打印)
-    webrtc.value.onCommandResult(onCommandResultHandler)
+    activeInstance.onCommandResult(onCommandResultHandler)
+
+    // 若复用时已经处于 connected 状态，且当前在 ADB Tab 且无会话，自动拉起会话
+    if (webrtcStatus.value === 'connected' && activeTab.value === 'adb' && adbSessions.value.length === 0) {
+      addAdbSession()
+    }
     return
   }
 
-  // 没有活跃的控制面板 WebRTC 实例
-  if (!forceConnect) {
-    // 默认不主动发起 headless WebRTC 直连，避免无故占用设备及触发推流
-    cleanupConnection(false)
-    webrtc.value = null
-    isSharedConnection.value = false
-    webrtcStatus.value = 'disconnected'
-    webrtcConnecting.value = false
-    webrtcError.value = null
-    return
-  }
-
-  // 用户显式触发手动连接（如点击【⚡ 连接终端】或【⚡ 连接设备并启动 ADB】）
+  // 没有活跃的直控 WebRTC 实例（处于大盘浏览监控模式）
   cleanupConnection(false)
-  webrtcConnecting.value = true
-  webrtcError.value = null
-  console.log('[Console] Connecting WebRTC (headless, manual) for device:', deviceId)
-  webrtcStatus.value = 'connecting'
+  webrtc.value = null
   isSharedConnection.value = false
-  try {
-    const settings = getDeviceSettings(deviceId)
-    const scrcpyOptions = {
-      max_fps: settings.fps,
-      max_size: settings.size,
-      bitrate: settings.bitrate * 1000000,
-      min_bitrate: settings.minBitrate * 1000000,
-      max_bitrate: settings.maxBitrate * 1000000,
-      bwe: settings.bwe,
-      audio: settings.audio,
-      audio_gain: settings.audioGain,
-      audio_source: settings.audioSource,
-      audio_dup: settings.audioDup,
-      audio_low_latency: settings.audioLowLatency,
-      debug: settings.debug,
-      snapshot_interval: settings.snapshotInterval,
-      power_off: settings.powerOff,
-      video_source: settings.videoSource,
-      camera_facing: settings.cameraFacing,
-      camera_id: settings.cameraId,
-      camera_size: settings.cameraSize,
-      camera_fps: settings.cameraFps,
-      camera_high_speed: settings.cameraHighSpeed,
-      camera_ar: settings.cameraAr,
-      // 只读分享：屏蔽触控/键盘/剪贴板等一切输入注入
-      view_only: props.accessMode === 'view_only'
-    }
-
-    webrtc.value = useWebRTC(deviceId, scrcpyOptions)
-    
-    unwatchStatus = watch(() => webrtc.value?.status?.value, (newStatus) => {
-      const prevStatus = webrtcStatus.value
-      webrtcStatus.value = newStatus || 'disconnected'
-      if (newStatus === 'connected') {
-        webrtcConnecting.value = false
-      } else if (newStatus === 'failed' || newStatus === 'disconnected') {
-        webrtcConnecting.value = false
-        adbSessions.value.forEach(s => {
-          s.isConnected = false
-        })
-        if (prevStatus === 'connected') {
-          showToastNotice('⚠️ 远程设备连接已断开，ADB 调试已断开', 'warning')
-          consoleLogs.value.push({ type: 'error', text: '[系统提示] 远程设备连接已断开。' })
-          scrollToBottom()
-        }
-      }
-    }, { immediate: true })
-
-    unwatchError = watch(() => webrtc.value?.error?.value, (newErr) => {
-      webrtcError.value = newErr || null
-    }, { immediate: true })
-
-    setTimeout(() => {
-      if (webrtc.value && dummyVideo.value) {
-        webrtc.value.setVideoGetter(() => dummyVideo.value)
-        webrtc.value.connect(props.shareToken, props.sharePassword)
-        webrtc.value.onCommandResult(onCommandResultHandler)
-      }
-    }, 50)
-  } catch (e) {
-    console.error('[Console] Failed to connect device:', e)
-    webrtcStatus.value = 'disconnected'
-    webrtcError.value = e.message || '初始化失败'
-    webrtcConnecting.value = false
-  }
-}
-
-async function handleManualConnect() {
-  if (!props.deviceId || props.deviceId === 'default') return
-  await setupDeviceConnection(props.deviceId, true)
-}
-
-function handleManualDisconnect() {
-  cleanupConnection(false)
-  showToastNotice('已断开终端直连', 'info')
-}
-
-async function handleInitAdb() {
-  if (webrtcStatus.value === 'connected' && webrtc.value) {
-    addAdbSession()
-    return
-  }
-  await setupDeviceConnection(props.deviceId, true)
-  const stopWatch = watch(webrtcStatus, (st) => {
-    if (st === 'connected') {
-      stopWatch()
-      if (adbSessions.value.length === 0) {
-        addAdbSession()
-      }
-    } else if (st === 'disconnected' || st === 'failed') {
-      stopWatch()
-    }
-  })
+  webrtcStatus.value = 'disconnected'
+  webrtcConnecting.value = false
+  webrtcError.value = null
 }
 
 function onCommandResultHandler(res) {
@@ -1978,29 +2379,53 @@ async function execCmd() {
   inputCmd.value = ''
 
   const targets = targetDeviceIds.value
+  if (targets.length === 0) return
 
+  // 高危批量指令安全拦截保护（防止误触导致群控机器团灭）
+  const highRiskPattern = /\b(reboot|rm\s+-rf|wipe|format|pm\s+clear|recovery|fastboot|bootloader)\b/i
+  if (targets.length > 1 && highRiskPattern.test(cmd)) {
+    const ok = window.confirm(`⚠️ 安全拦截警示：检测到高危批量指令: "${cmd}"\n即将同时在 ${targets.length} 台设备上并发执行！\n该指令可能导致设备重启、格式化或数据被永久清空。\n\n确认要继续执行吗？`)
+    if (!ok) return
+  }
+
+  // 日志条数上限控制，避免 DOM 节点暴增卡顿
+  if (consoleLogs.value.length > 250) {
+    consoleLogs.value.splice(0, 50)
+  }
+
+  // 单台目标设备下发：无论是否直连 WebRTC，统一走极速信令 command 通道并实时回显终端
   if (targets.length === 1) {
-    // 仅当前一台设备，走原生 WebRTC 极速实时通道
-    if (!webrtc.value || webrtcStatus.value !== 'connected') {
-      consoleLogs.value.push({ type: 'error', text: '当前设备未连接终端。请在顶部点击【⚡ 连接终端】或在大盘中连接设备。' })
-      scrollToBottom()
-      return
-    }
+    const targetId = targets[0]
     consoleLogs.value.push({ type: 'info', cmd: cmd, text: '执行中...' })
-    webrtc.value.sendCommand(cmd)
+    
+    let sentViaDirect = false
+    const activeRtc = deviceStore.getWebRTC(targetId) || webrtc.value
+    const isDirectConnected = (activeRtc?.status?.value === 'connected') || (webrtcStatus.value === 'connected' && webrtc.value)
+    if (activeRtc && isDirectConnected) {
+      const reqId = activeRtc.sendCommand(cmd)
+      if (reqId) {
+        sentViaDirect = true
+      }
+    }
+
+    // 若未直连、或直连通道已失效（如直连已断开，sendCommand 返回 null），无缝走全局 WebSocket 通道
+    if (!sentViaDirect) {
+      deviceStore.sendCommand(targetId, cmd)
+    }
     scrollToBottom()
   } else {
-    // 多台目标设备，走批量 HTTP 任务下发通道
+    // 多台目标设备时，走批量任务调度通道
     const logItem = ref({
       type: 'batch_result',
       cmd: cmd,
       taskId: '',
+      showFailedOnly: false,
       results: {}
     })
     
     // 初始化所有目标设备的状态
     targets.forEach(id => {
-      logItem.value.results[id] = { status: 'running', output: 'Pending...' }
+      logItem.value.results[id] = { status: 'running', output: '正在分发执行...' }
     })
     
     consoleLogs.value.push(logItem.value)
@@ -2021,8 +2446,16 @@ async function execCmd() {
         })
       })
 
+      if (!res.ok) {
+        const errText = await res.text()
+        targets.forEach(id => {
+          logItem.value.results[id] = { status: 'failed', output: errText || `HTTP ${res.status}` }
+        })
+        return
+      }
+
       const data = await res.json()
-      if (res.ok && data.status === 'success') {
+      if (data.status === 'success') {
         logItem.value.taskId = data.task_id
         deviceStore.startTrackingTask(data.task_id)
       } else {
@@ -2055,19 +2488,28 @@ function scrollToBottom() {
 function toggleMaximize() {
   isMaximized.value = !isMaximized.value
   nextTick(() => {
-    const activeSess = adbSessions.value.find(s => s.id === activeSessionId.value)
-    if (activeSess && activeSess.isConnected && activeSess.adbInstance) {
-      activeSess.adbInstance.resize()
-    }
+    setTimeout(() => {
+      const activeSess = adbSessions.value.find(s => s.id === activeSessionId.value)
+      if (activeSess && activeSess.isConnected && activeSess.adbInstance) {
+        activeSess.adbInstance.resize()
+        if (activeSess.adbInstance.scrollToBottom) {
+          activeSess.adbInstance.scrollToBottom()
+        }
+      }
+    }, 60)
   })
 }
 
 // 二级多会话终端管理
 function addAdbSession() {
-  if (webrtcStatus.value !== 'connected' || !webrtc.value) {
-    showToastNotice('当前未连接设备，请先点击【⚡ 连接终端】建立连接', 'warning')
+  if (!isAdbReady.value) {
+    showToastNotice('当前未连接设备直控，请先进入设备直控建立连接', 'warning')
     return
   }
+  if (!webrtc.value && props.deviceId) {
+    setupDeviceConnection(props.deviceId, false)
+  }
+  if (!webrtc.value) return
   const id = nextSessionId.value++
   const newSession = {
     id,
@@ -2085,12 +2527,24 @@ function addAdbSession() {
 }
 
 function startAdbForSession(sess) {
-  if (webrtc.value) {
-    const container = sessionContainers[sess.id]
-    if (!container) return
+  if (!webrtc.value) return
+  let retryCount = 0
+  const maxRetries = 10
 
-    const { isAdbConnected: adbConnected, initAdb, closeAdb: close, resize: termResize } = useAdb(webrtc.value)
-    sess.adbInstance = { initAdb, closeAdb: close, resize: termResize }
+  const attemptInit = () => {
+    const container = sessionContainers[sess.id]
+    if (!container) {
+      if (retryCount++ < maxRetries) {
+        setTimeout(attemptInit, 50)
+      } else {
+        console.warn(`[Console] Session container #${sess.id} failed to mount in time`)
+      }
+      return
+    }
+    if (sess.adbInstance) return
+
+    const { isAdbConnected: adbConnected, initAdb, closeAdb: close, resize: termResize, scrollToBottom: termScroll, focus: termFocus } = useAdb(webrtc.value)
+    sess.adbInstance = { initAdb, closeAdb: close, resize: termResize, scrollToBottom: termScroll, focus: termFocus }
     
     sess.unwatch = watch(adbConnected, (val) => {
       sess.isConnected = val
@@ -2098,15 +2552,37 @@ function startAdbForSession(sess) {
     
     sess.adbInstance.initAdb(container)
   }
+
+  nextTick(attemptInit)
+}
+
+function focusAdbTerminal(id) {
+  const container = sessionContainers[id]
+  if (container) {
+    const helper = container.querySelector('.xterm-helper-textarea') || container.querySelector('textarea')
+    if (helper) {
+      try { helper.focus({ preventScroll: true }) } catch (e) {}
+    }
+  }
+  const sess = adbSessions.value.find(s => s.id === id)
+  if (sess && sess.adbInstance && sess.adbInstance.focus) {
+    try { sess.adbInstance.focus() } catch (e) {}
+  }
 }
 
 function switchAdbSession(id) {
   activeSessionId.value = id
   nextTick(() => {
-    const sess = adbSessions.value.find(s => s.id === id)
-    if (sess && sess.adbInstance && sess.isConnected) {
-      sess.adbInstance.resize()
-    }
+    setTimeout(() => {
+      const sess = adbSessions.value.find(s => s.id === id)
+      if (sess && sess.adbInstance && sess.isConnected) {
+        sess.adbInstance.resize()
+        if (sess.adbInstance.scrollToBottom) {
+          sess.adbInstance.scrollToBottom()
+        }
+        focusAdbTerminal(id)
+      }
+    }, 30)
   })
 }
 
@@ -2566,11 +3042,22 @@ watch(() => props.deviceId, (newId) => {
   }
 })
 
-// 监听活动连接的重建，保持同步
+// 监听活动连接的生命周期（新建、重建、断开移除），保持同步
 watch(() => deviceStore.activeWebRTCMap, (newMap) => {
-  if (props.deviceId && newMap.has(props.deviceId)) {
-    console.log('[Console] Active WebRTC changed, updating console connection...')
-    setupDeviceConnection(props.deviceId, false)
+  if (props.deviceId) {
+    const hasActive = newMap && newMap.has(props.deviceId)
+    if (hasActive) {
+      console.log('[Console] Active WebRTC attached, updating console connection...')
+      setupDeviceConnection(props.deviceId, false)
+    } else if (webrtc.value || webrtcStatus.value !== 'disconnected') {
+      console.log('[Console] Active WebRTC removed, resetting console direct connection...')
+      cleanupConnection(false)
+      webrtc.value = null
+      isSharedConnection.value = false
+      webrtcStatus.value = 'disconnected'
+      webrtcConnecting.value = false
+      webrtcError.value = null
+    }
   }
 }, { deep: true })
 
@@ -2583,12 +3070,23 @@ function startResizingConsole(e) {
     const dy = ev.clientY - startY
     // 向上拉 dy 为负，所以 startHeight - dy 就是变大
     const newHeight = startHeight - dy
-    deviceStore.setConsoleHeight(newHeight)
+    const winHeight = window.innerHeight || 800
+    const clampedHeight = Math.max(160, Math.min(winHeight - 60, newHeight))
+    deviceStore.setConsoleHeight(clampedHeight)
   }
 
   const onMouseUp = () => {
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
+    nextTick(() => {
+      const activeSess = adbSessions.value.find(s => s.id === activeSessionId.value)
+      if (activeSess && activeSess.isConnected && activeSess.adbInstance) {
+        activeSess.adbInstance.resize()
+        if (activeSess.adbInstance.scrollToBottom) {
+          activeSess.adbInstance.scrollToBottom()
+        }
+      }
+    })
   }
 
   document.addEventListener('mousemove', onMouseMove)
@@ -2596,19 +3094,30 @@ function startResizingConsole(e) {
 }
 
 let resizeObserver = null
+let unregisterDeviceStoreCmd = null
 
 onMounted(() => {
   setupDeviceConnection(props.deviceId, false)
   loadShortcuts()
   quickTextStore.fetchQuickTexts()
   tagStore.load()
+
+  // 监听大盘免直连全局 WebSocket 下发的命令执行结果
+  unregisterDeviceStoreCmd = deviceStore.onCommandResult((res, devId) => {
+    if (!devId || devId === props.deviceId || targetDeviceIds.value.includes(devId)) {
+      onCommandResultHandler(res)
+    }
+  })
   
   if (typeof ResizeObserver !== 'undefined' && consoleMainRef.value) {
     resizeObserver = new ResizeObserver(() => {
-      // 当容器高度或宽度变化时，让当前连接活跃的 ADB 终端自适应
+      // 当容器高度或宽度变化时，让当前连接活跃的 ADB 终端自适应并滚到底部
       const activeSess = adbSessions.value.find(s => s.id === activeSessionId.value)
       if (activeSess && activeSess.isConnected && activeSess.adbInstance) {
         activeSess.adbInstance.resize()
+        if (activeSess.adbInstance.scrollToBottom) {
+          activeSess.adbInstance.scrollToBottom()
+        }
       }
     })
     resizeObserver.observe(consoleMainRef.value)
@@ -2617,6 +3126,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanupConnection()
+  if (unregisterDeviceStoreCmd) {
+    unregisterDeviceStoreCmd()
+    unregisterDeviceStoreCmd = null
+  }
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -2653,6 +3166,19 @@ onUnmounted(() => {
 
 .console-resizer:hover {
   background: rgba(88, 166, 255, 0.45);
+}
+
+/* 移动端半屏抽屉指示条 (PC端默认隐藏) */
+.mobile-sheet-handle-bar {
+  display: none;
+}
+
+.tab-label-short {
+  display: none;
+}
+
+.tab-label-text {
+  display: inline;
 }
 
 /* 选项卡头部栏 */
@@ -3053,9 +3579,11 @@ onUnmounted(() => {
 /* 2. ADB 交互终端样式 */
 .adb-tab-panel {
   flex: 1;
-  height: 100%;
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .adb-placeholder {
@@ -3092,7 +3620,7 @@ onUnmounted(() => {
 }
 
 .adb-connect-btn {
-  background: #58a6ff;
+  background: #238636;
   color: white;
   border: none;
   padding: 10px 24px;
@@ -3100,26 +3628,73 @@ onUnmounted(() => {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(35, 134, 54, 0.3);
 }
 
-.adb-connect-btn:hover:not(:disabled) {
-  background: #1f85ff;
+.adb-connect-btn:hover {
+  background: #2ea043;
+  transform: translateY(-1px);
 }
 
-.adb-connect-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.adb-placeholder-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.adb-goto-device-btn {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adb-goto-device-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+}
+
+.adb-switch-shell-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #c9d1d9;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.adb-switch-shell-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f0f6fc;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .xterm-view-container {
   flex: 1;
   width: 100%;
-  height: 0;
+  height: auto;
   min-height: 0;
-  padding: 12px;
+  padding: 6px 10px 10px 10px;
   box-sizing: border-box;
-  background: #000;
+  background: #0d1117;
+  overflow: hidden;
+  position: relative;
+  touch-action: pan-y;
 }
 
 /* 3. AI 助手界面样式 */
@@ -3630,34 +4205,280 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-/* 响应式样式 (移动端适配) */
-@media (max-width: 768px) {
-  .ai-tab-panel,
-  .text-tab-panel {
+/* 响应式样式 (移动端适配与半屏抽屉优化) */
+@media (max-width: 1024px) {
+  .device-console {
+    height: 100% !important;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .mobile-sheet-handle-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    width: 100%;
+    cursor: pointer;
+    background: #161b22;
+    flex-shrink: 0;
+    padding-top: 5px;
+    box-sizing: border-box;
+  }
+
+  .sheet-handle-pill {
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: #484f58;
+    transition: background 0.2s, transform 0.2s;
+  }
+
+  .mobile-sheet-handle-bar:active .sheet-handle-pill {
+    background: #8b949e;
+    transform: scale(1.08);
+  }
+
+  .tab-label-text {
+    display: none;
+  }
+
+  .tab-label-short {
+    display: inline;
+  }
+
+  .pc-only-tool-btn {
+    display: none !important;
+  }
+
+  .console-tabs-bar {
+    padding: 0 8px;
+    height: 38px;
+    min-height: 38px;
+  }
+
+  .tabs-group {
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex: 1;
+    margin-right: 6px;
+  }
+
+  .tabs-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabs-group button {
+    padding: 6px 8px;
+    font-size: 11.5px;
+    gap: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    border-bottom-width: 2px;
+  }
+
+  .tab-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .beta-badge {
+    display: none;
+  }
+
+  .console-right-tools {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .console-device-badge {
+    padding: 2px 6px;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .device-selector-dropdown {
+    max-width: 78px;
+    font-size: 11px;
+    padding: 2px 4px;
+  }
+
+  .console-close-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba(248, 81, 73, 0.12);
+    color: #f85149;
+    border-radius: 6px;
+  }
+
+  .console-tool-btn.max-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .console-tool-btn svg, .console-close-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  /* Shell Tab 空间紧凑优化 */
+  .console-history {
+    padding: 8px 10px;
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .console-shortcuts {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px 8px;
+    gap: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .console-shortcuts::-webkit-scrollbar {
+    display: none;
+  }
+
+  .console-shortcuts button {
+    padding: 3px 8px;
+    font-size: 10.5px;
+    height: 24px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .shell-targets-bar {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .targets-control-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 6px;
+  }
+
+  .targets-control-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .console-input-group {
+    padding: 4px 8px;
+    gap: 6px;
+    background: #161b22;
+  }
+
+  .cmd-input {
+    height: 32px;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+
+  .send-btn {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 11.5px;
+  }
+
+  /* ADB Tab 空间紧凑优化 */
+  .adb-sessions-bar {
+    padding: 3px 8px;
+    height: 30px;
+  }
+
+  .adb-tabs-group {
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .adb-session-tab {
+    padding: 2px 8px;
+    font-size: 11px;
+    height: 24px;
+  }
+
+  .max-sess-tip {
+    display: none;
+  }
+
+  .adb-placeholder {
+    padding: 16px;
+    gap: 8px;
+  }
+
+  .adb-placeholder h3 {
+    font-size: 14px;
+  }
+
+  .adb-placeholder p {
+    font-size: 11.5px;
+  }
+
+  .adb-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .adb-placeholder-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  :deep(.xterm) {
+    font-size: 11px !important;
+  }
+
+  /* AI 快捷技能模板侧边栏紧凑横滑 */
+  .ai-tab-panel {
     flex-direction: column;
   }
   
-  .ai-skills-sidebar,
-  .quick-text-sidebar {
+  .ai-skills-sidebar {
     width: 100%;
-    height: 110px;
+    height: 68px;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 4px 8px;
+    box-sizing: border-box;
   }
-  
-  .skills-list,
-  .quick-text-items {
+
+  .skills-list {
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 6px;
-    height: 76px;
+    padding: 2px 0;
+    height: 38px;
+    gap: 6px;
+    scrollbar-width: none;
+  }
+
+  .skills-list::-webkit-scrollbar {
+    display: none;
   }
   
-  .skill-item,
-  .quick-text-card {
-    width: 140px;
+  .skill-item {
+    width: 110px;
     flex-shrink: 0;
+    padding: 4px 6px;
+    height: 34px;
+  }
+
+  .skill-name {
+    font-size: 10.5px;
+  }
+
+  .skill-desc {
+    display: none;
   }
 }
 
@@ -3846,104 +4667,459 @@ onUnmounted(() => {
   gap: 10px;
 }
 
-/* 批量与单台整合终端样式 */
+/* 现代海量目标设备选择器架构样式 */
 .shell-targets-bar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  background: #161b22;
+  gap: 0;
+  background: #141720;
   border-top: 1px solid #30363d;
   border-bottom: 1px solid #30363d;
-  padding: 8px 16px;
+  padding: 8px 14px;
   box-sizing: border-box;
+  position: relative;
+  z-index: 50;
 }
 
 .targets-control-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 10px;
   width: 100%;
 }
 
-.select-all-check {
-  display: inline-flex;
+.targets-left-info {
+  display: flex;
   align-items: center;
-  font-size: 12px;
-  color: #c9d1d9;
-  cursor: pointer;
-  user-select: none;
+  gap: 6px;
 }
 
-.select-all-check input {
-  margin-right: 6px;
+.targets-left-info .label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.targets-summary-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(139, 148, 158, 0.15);
+  color: #c9d1d9;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.targets-summary-pill.is-batch {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+.targets-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.target-quick-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
   cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.target-quick-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.target-quick-btn.active {
+  background: rgba(88, 166, 255, 0.2);
+  color: #58a6ff;
+  border-color: #58a6ff;
 }
 
 .tag-filters {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
 .tag-filter-label {
-  font-size: 12px;
+  font-size: 11px;
   color: #8b949e;
 }
 
 .tag-filter-btn {
-  padding: 2px 8px;
+  padding: 1px 7px;
   font-size: 11px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   outline: none;
   font-weight: 500;
   background: transparent;
+  white-space: nowrap;
 }
 
 .tag-filter-btn:hover {
   filter: brightness(1.2);
 }
 
-.shell-targets-bar .label {
+.target-picker-toggle-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #8b949e;
+  background: rgba(88, 166, 255, 0.12);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.shell-targets-bar .targets-list {
+.target-picker-toggle-btn:hover {
+  background: rgba(88, 166, 255, 0.22);
+  border-color: #58a6ff;
+}
+
+.target-picker-toggle-btn.open {
+  background: #1f6feb;
+  color: #ffffff;
+  border-color: #388bfd;
+}
+
+.target-picker-toggle-btn .btn-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.target-picker-toggle-btn .arrow-indicator {
+  font-size: 9px;
+  margin-left: 2px;
+}
+
+/* 展开的高密设备选择抽屉面板（支持 100~500+ 台不撑爆） */
+.target-picker-drawer {
+  margin-top: 8px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.target-check {
+.search-input-wrap {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 3px 8px;
+  gap: 6px;
+}
+
+.search-input-wrap .search-icon {
+  width: 13px;
+  height: 13px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.drawer-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f0f6fc;
+  font-size: 12px;
+  outline: none;
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.drawer-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.drawer-action-btn {
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #c9d1d9;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.drawer-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.drawer-action-btn.primary {
+  background: #238636;
+  border-color: #2ea043;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.drawer-action-btn.primary:hover {
+  background: #2ea043;
+}
+
+.drawer-tag-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.drawer-tag-strip .strip-label {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.drawer-tag-pill {
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drawer-tag-pill.active {
+  background: rgba(88, 166, 255, 0.2);
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+/* 高密多列网格，固定高度滚动 */
+.drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.drawer-device-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
   font-size: 12px;
   color: #c9d1d9;
   cursor: pointer;
+  transition: all 0.15s ease;
   user-select: none;
 }
 
-.target-check.current {
-  opacity: 0.8;
-  cursor: default;
+.drawer-device-card:hover:not(.is-offline) {
+  border-color: #58a6ff;
+  background: #1c2129;
 }
 
-.target-check input[type="checkbox"] {
+.drawer-device-card.is-selected {
+  border-color: #1f6feb;
+  background: rgba(31, 111, 235, 0.12);
+  color: #ffffff;
+}
+
+.drawer-device-card.current {
+  opacity: 0.85;
+  border-color: rgba(63, 185, 80, 0.4);
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.drawer-device-card.is-offline {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.drawer-device-card input[type="checkbox"] {
   width: 13px;
   height: 13px;
   accent-color: #58a6ff;
   cursor: pointer;
 }
 
-.target-check.current input[type="checkbox"] {
-  cursor: default;
+.device-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #8b949e;
+}
+
+.device-status-dot.online {
+  background: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+}
+
+.device-id-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+}
+
+.current-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(63, 185, 80, 0.2);
+  color: #3fb950;
+  white-space: nowrap;
+}
+
+.offline-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(248, 81, 73, 0.2);
+  color: #f85149;
+  white-space: nowrap;
+}
+
+.device-tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.drawer-empty-hint {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #8b949e;
+  font-size: 12px;
+  padding: 24px 0;
+}
+
+/* 抽屉平滑过渡 */
+.target-panel-fade-enter-active,
+.target-panel-fade-leave-active {
+  transition: all 0.2s ease-out;
+}
+
+.target-panel-fade-enter-from,
+.target-panel-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* 批量结果聚合卡片样式 */
+.batch-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.batch-summary-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-pill {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.stat-pill.success {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+}
+
+.stat-pill.failed {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+  font-weight: 600;
+}
+
+.stat-pill.running {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
+.batch-filter-btn {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #c9d1d9;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.batch-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.batch-filter-btn.active {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: #f85149;
+  color: #f85149;
 }
 
 /* 整合历史面板中的批量输出渲染 */
@@ -4030,12 +5206,12 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-/* 覆盖 xterm.js 视口与屏幕渲染的底部留白，防输入行遮挡 */
-:deep(.xterm-viewport) {
-  padding-bottom: 32px !important;
+/* 规范 xterm 铺满视口，内部滚动区域与光标精准对齐 */
+:deep(.xterm) {
+  height: 100%;
 }
-:deep(.xterm-screen) {
-  padding-bottom: 32px !important;
+:deep(.xterm-viewport) {
+  overflow-y: auto !important;
 }
 
 .console-shortcuts button.system-btn {
@@ -5205,5 +6381,579 @@ onUnmounted(() => {
   max-height: 400px;
   overflow-y: auto;
   margin: 0;
+}
+
+/* 移动端深度适配与全覆盖样式 (位于样式表最末尾，确保优先级最高，彻底杜绝任何基础样式覆盖) */
+@media (max-width: 1024px) {
+  /* 终极防护：绝对确保 Vue v-show 指令的 display: none 在任何情况下拥有最高权重，杜绝多面板同显与各占一半 */
+  .device-console [style*="display: none"],
+  .device-console .shell-tab-panel[style*="display: none"],
+  .device-console .adb-tab-panel[style*="display: none"],
+  .device-console .ai-tab-panel[style*="display: none"],
+  .device-console .text-tab-panel[style*="display: none"],
+  .device-console .files-tab-panel[style*="display: none"] {
+    display: none !important;
+  }
+
+  /* 移动端 xterm 终端焦点与键盘防缩放防闪烁适配 */
+  :deep(.xterm-helper-textarea) {
+    font-size: 16px !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 1px !important;
+    height: 1px !important;
+    pointer-events: none !important;
+  }
+
+  :deep(.xterm-viewport) {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* 4. 批量文本下发面板 移动端横滑胶囊库重构 */
+  .device-console .text-tab-panel {
+    flex-direction: column !important;
+    overflow: hidden !important;
+    height: 100% !important;
+  }
+
+  /* 快捷短语侧边栏转换为极简顶部单行横滑胶囊条 */
+  .device-console .quick-text-sidebar {
+    width: 100% !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: #11141c !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    transition: height 0.2s ease !important;
+  }
+
+  .device-console .quick-text-sidebar.collapsed {
+    height: 24px !important;
+    min-height: 24px !important;
+    background: #0d1017 !important;
+  }
+
+  .device-console .quick-text-sidebar .sidebar-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    margin-bottom: 0 !important;
+    padding: 0 !important;
+    border-bottom: none !important;
+  }
+
+  .device-console .quick-text-sidebar .sidebar-header h4 {
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    color: #8b949e !important;
+    white-space: nowrap !important;
+    margin: 0 !important;
+  }
+
+  .device-console .quick-text-sidebar .sidebar-header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .device-console .quick-text-sidebar .add-qt-btn,
+  .device-console .quick-text-sidebar .manage-qt-btn {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 10px !important;
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .device-console .toggle-collapse-qt-btn {
+    background: rgba(88, 166, 255, 0.12) !important;
+    border: 1px solid rgba(88, 166, 255, 0.25) !important;
+    color: #58a6ff !important;
+    font-size: 9.5px !important;
+    padding: 0 5px !important;
+    height: 18px !important;
+    line-height: 16px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+  }
+
+  .device-console .quick-text-items {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding: 0 !important;
+    height: 100% !important;
+    gap: 5px !important;
+  }
+
+  .device-console .quick-text-items::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* 移动端短语卡片：现代轻巧胶囊 Pill */
+  .device-console .quick-text-card {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding: 1px 7px !important;
+    height: 22px !important;
+    border-radius: 999px !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border: 1px solid rgba(56, 189, 248, 0.22) !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    width: auto !important;
+    max-width: 130px !important;
+    box-sizing: border-box !important;
+    transition: all 0.15s ease !important;
+    margin: 0 !important;
+  }
+
+  .device-console .quick-text-card:active {
+    transform: scale(0.96) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+  }
+
+  .device-console .qt-card-header {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    overflow: hidden !important;
+  }
+
+  .device-console .qt-card-title {
+    font-size: 10.5px !important;
+    color: #7dd3fc !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .device-console .qt-card-enter-badge {
+    font-size: 8.5px !important;
+    padding: 0 2px !important;
+    border-radius: 3px !important;
+    background: rgba(34, 197, 94, 0.25) !important;
+    color: #4ade80 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .device-console .qt-card-snippet,
+  .device-console .qt-card-actions {
+    display: none !important;
+  }
+
+  .device-console .qt-sidebar-empty {
+    flex-direction: row !important;
+    padding: 0 4px !important;
+    gap: 4px !important;
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .device-console .qt-empty-add-btn {
+    padding: 1px 5px !important;
+    font-size: 9.5px !important;
+  }
+
+  /* 文本面板主体与历史记录 */
+  .device-console .text-main-area {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+  }
+
+  .device-console .text-history {
+    flex: 0 1 auto !important;
+    min-height: 32px !important;
+    max-height: 80px !important;
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    overflow-y: auto !important;
+  }
+
+  .device-console .text-history .console-empty {
+    padding: 4px 6px !important;
+    font-size: 10px !important;
+    gap: 4px !important;
+    min-height: 24px !important;
+  }
+
+  .device-console .text-history .console-empty .empty-icon {
+    display: none !important;
+  }
+
+  .device-console .text-log-header {
+    font-size: 10px !important;
+    gap: 4px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .device-console .text-log-badge {
+    font-size: 10px !important;
+  }
+
+  .device-console .text-log-body {
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    margin: 1px 0 3px 0 !important;
+    border-radius: 4px !important;
+  }
+
+  .device-console .text-log-dev-pills {
+    gap: 3px !important;
+  }
+
+  .device-console .text-dev-pill {
+    font-size: 9px !important;
+    padding: 0 3px !important;
+  }
+
+  /* 文本输入底部区域 */
+  .device-console .text-input-section {
+    padding: 6px 8px 6px !important;
+    background: #141820 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .device-console .batch-text-textarea {
+    min-height: 48px !important;
+    max-height: 90px !important;
+    font-size: 13.5px !important;
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
+    line-height: 1.35 !important;
+  }
+
+  .device-console .text-input-actions {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .device-console .text-options {
+    gap: 6px !important;
+  }
+
+  .device-console .text-options .checkbox-label {
+    font-size: 10.5px !important;
+    gap: 3px !important;
+  }
+
+  .device-console .text-char-count {
+    font-size: 9.5px !important;
+  }
+
+  .device-console .btn-group {
+    gap: 4px !important;
+  }
+
+  .device-console .clear-text-btn {
+    padding: 3px 6px !important;
+    font-size: 10.5px !important;
+    height: 26px !important;
+  }
+
+  .device-console .text-send-btn {
+    padding: 4px 10px !important;
+    font-size: 11.5px !important;
+    height: 28px !important;
+    white-space: nowrap !important;
+  }
+
+  /* 5. 批量安装与文件传输面板 移动端适配 (严禁声明 display: flex !important，以免覆盖 Vue v-show 行内 display: none) */
+  .device-console .files-tab-panel {
+    overflow-y: auto !important;
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .device-console .files-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+  }
+
+  .device-console .files-config-card,
+  .device-console .files-dashboard-card {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .device-console .card-section-title {
+    font-size: 12px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .device-console .upload-dropzone {
+    padding: 10px 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .device-console .dropzone-icon {
+    width: 22px !important;
+    height: 22px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .device-console .dropzone-text {
+    font-size: 11.5px !important;
+  }
+
+  .device-console .dropzone-sub {
+    display: none !important;
+  }
+
+  .device-console .file-name-badge {
+    font-size: 11px !important;
+  }
+
+  .device-console .file-size-badge {
+    font-size: 10.5px !important;
+  }
+
+  .device-console .form-item {
+    gap: 4px !important;
+  }
+
+  .device-console .form-label {
+    font-size: 11px !important;
+  }
+
+  .device-console .form-select,
+  .device-console .form-input {
+    padding: 6px 8px !important;
+    font-size: 11.5px !important;
+    height: 32px !important;
+  }
+
+  .device-console .form-row {
+    flex-direction: column !important;
+    gap: 6px !important;
+  }
+
+  .device-console .submit-batch-btn {
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+    height: 36px !important;
+    border-radius: 6px !important;
+  }
+
+  .device-console .task-summary-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 6px 8px !important;
+  }
+
+  .device-console .task-meta-left {
+    gap: 6px !important;
+    font-size: 10.5px !important;
+  }
+
+  .device-console .task-stats-group {
+    gap: 6px !important;
+    justify-content: flex-start !important;
+  }
+
+  .device-console .stat-pill {
+    font-size: 10.5px !important;
+    padding: 1px 6px !important;
+  }
+
+  .device-console .subtask-table-wrap {
+    max-height: 180px !important;
+    overflow-x: auto !important;
+  }
+
+  .device-console .subtask-table {
+    font-size: 11px !important;
+  }
+
+  .device-console .subtask-table th,
+  .device-console .subtask-table td {
+    padding: 6px 5px !important;
+  }
+
+  .device-console .subtask-table th:last-child,
+  .device-console .subtask-table td.time-cell {
+    display: none !important;
+  }
+
+  .device-console .dev-id-cell {
+    max-width: 110px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .device-console .status-pill {
+    font-size: 10px !important;
+    padding: 1px 4px !important;
+  }
+
+  .device-console .sub-progress-track {
+    width: 36px !important;
+    height: 5px !important;
+    margin-right: 4px !important;
+  }
+
+  .device-console .sub-progress-text {
+    font-size: 10px !important;
+  }
+
+  .device-console .view-output-btn {
+    padding: 1px 5px !important;
+    font-size: 10px !important;
+  }
+
+  /* 设备选择抽屉面板移动端紧凑化 */
+  .device-console .target-picker-drawer {
+    margin-top: 6px !important;
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    max-height: 180px !important;
+  }
+
+  .device-console .drawer-header {
+    gap: 6px !important;
+  }
+
+  .device-console .search-input-wrap {
+    min-width: 120px !important;
+    height: 26px !important;
+    padding: 2px 6px !important;
+  }
+
+  .device-console .drawer-search-input {
+    font-size: 11px !important;
+  }
+
+  .device-console .drawer-actions {
+    gap: 4px !important;
+  }
+
+  .device-console .drawer-action-btn {
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+
+  .device-console .drawer-tag-strip {
+    gap: 4px !important;
+    padding-bottom: 3px !important;
+  }
+
+  .device-console .drawer-tag-strip .strip-label {
+    font-size: 10px !important;
+  }
+
+  .device-console .drawer-tag-pill {
+    font-size: 10px !important;
+    padding: 1px 5px !important;
+  }
+
+  .device-console .drawer-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    gap: 4px !important;
+    max-height: 110px !important;
+  }
+
+  .device-console .drawer-device-card {
+    padding: 3px 6px !important;
+    gap: 4px !important;
+    font-size: 10.5px !important;
+  }
+
+  .device-console .drawer-device-card .device-id-text {
+    font-size: 10.5px !important;
+    max-width: 80px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  /* 快捷短语管理模态框移动端适配 */
+  .quick-text-modal-card {
+    width: 95% !important;
+    max-width: 95% !important;
+    max-height: 85vh !important;
+  }
+
+  .quick-text-modal-card .modal-body {
+    padding: 10px 12px !important;
+  }
+
+  .quick-text-edit-row {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .edit-row-header {
+    gap: 6px !important;
+  }
+
+  .edit-title-input {
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+  }
+
+  .auto-enter-check {
+    font-size: 11px !important;
+  }
+
+  .edit-content-textarea {
+    font-size: 12px !important;
+    padding: 5px 8px !important;
+    min-height: 44px !important;
+  }
+
+  .quick-text-modal-card .modal-footer {
+    padding: 8px 12px !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .quick-text-modal-card .modal-footer .btn {
+    padding: 5px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .log-modal-card {
+    width: 95% !important;
+    max-width: 95% !important;
+  }
+
+  .batch-log-pre {
+    font-size: 11px !important;
+    max-height: 50vh !important;
+  }
 }
 </style>

@@ -63,7 +63,10 @@ export function useWebRTC(deviceId, options = {}) {
     return def
   }
 
+  let isDisposed = false
+
   function connect(shareTokenParam = null, sharePwdParam = '') {
+    isDisposed = false
     status.value = 'connecting'
     error.value = null
 
@@ -203,18 +206,23 @@ function handleDeviceMessage(payload) {
       }))
         .then(() => pc.createAnswer())
         .then(answer => {
-          // 重新启用 SDP Munging：这次使用正确的单位 (bps)
           let sdp = answer.sdp;
-          // 1. 设置带宽 AS (kbps) 为 20000 = 20Mbps
-          sdp = sdp.replace(/m=video (.*)\r\n/g, `m=video $1\r\nb=AS:20000\r\n`);
-          // 2. 针对常见 H.264 profile 设置 google 特有参数 (bps) 20000000 = 20Mbps
-          sdp = sdp.replace(/a=fmtp:(102|96) (.*)\r\n/g, `a=fmtp:$1 $2;x-google-start-bitrate=20000000;x-google-max-bitrate=20000000\r\n`);
+          // 检测浏览器是否拒绝了视频媒体行 (m=video 0)
+          if (/m=video 0/i.test(sdp)) {
+            debugWarn('[WebRTC] 浏览器拒收了视频媒体流 (m=video 0)，可能因当前环境不支持该编解码器规格。建议改用 WebSocket 投屏。')
+            error.value = '浏览器拒收了视频流，建议改用 WebSocket 投屏模式'
+          } else {
+            // 仅对有效视频行 (端口 > 0) 注入带宽 AS 20000 (20Mbps)
+            sdp = sdp.replace(/m=video ([1-9]\d* .*)\r\n/g, 'm=video $1\r\nb=AS:20000\r\n');
+            // 针对任意协商选中的 H.264 profile (102, 104, 106, 108, 110, 112, 96 等) 注入 google 码率参数 (bps)
+            sdp = sdp.replace(/a=fmtp:(\d+) (.*)\r\n/g, 'a=fmtp:$1 $2;x-google-start-bitrate=20000000;x-google-max-bitrate=20000000\r\n');
+          }
 
           const newAnswer = new RTCSessionDescription({
             type: 'answer',
             sdp: sdp
           });
-          debugLog('[WebRTC] Answer SDP munged to 20Mbps (bps)')
+          debugLog('[WebRTC] Answer SDP processed')
           return pc.setLocalDescription(newAnswer);
         })
         .then(() => {
@@ -291,8 +299,9 @@ function handleDeviceMessage(payload) {
         request_id: requestId,
         command: command
       }))
+      return requestId
     }
-    return requestId
+    return null
   }
 
   function executeCommand(command, timeoutMs = 15000) {
@@ -670,6 +679,8 @@ function handleDeviceMessage(payload) {
         if (!exists) {
           videoStream.addTrack(evt.track)
         }
+        video.muted = true
+        video.playsInline = true
         video.srcObject = videoStream
         debugLog('[WebRTC] Set srcObject to video element')
         // 强制播放
@@ -834,7 +845,7 @@ function handleDeviceMessage(payload) {
   }
 
   // --- 统计监控逻辑 ---
-  let prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
+  let prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0, framesReceived: 0, framesPresented: 0 }
   let pauseCount = 0
   let wasPaused = false
 
@@ -880,6 +891,27 @@ function handleDeviceMessage(payload) {
         }
       }
 
+      const activeEl = (isWebCodecsActive.value && canvasElementGetter)
+        ? canvasElementGetter()
+        : (videoElementGetter ? videoElementGetter() : null)
+
+      // 注册标准 requestVideoFrameCallback 捕获渲染呈现帧率 (PRES)
+      if (activeEl && activeEl.requestVideoFrameCallback && !activeEl.__rvfcHooked) {
+        activeEl.__rvfcHooked = true
+        activeEl.__presCount = 0
+        function _rvLoop(now, metadata) {
+          if (metadata && typeof metadata.presentedFrames === 'number') {
+            activeEl.__presCount = metadata.presentedFrames
+          } else {
+            activeEl.__presCount = (activeEl.__presCount || 0) + 1
+          }
+          if (activeEl && activeEl.requestVideoFrameCallback) {
+            activeEl.requestVideoFrameCallback(_rvLoop)
+          }
+        }
+        activeEl.requestVideoFrameCallback(_rvLoop)
+      }
+
       for (const report of stats.values()) {
         if (report.type === 'inbound-rtp' && report.kind === 'video') {
           const now = report.timestamp
@@ -896,38 +928,29 @@ function handleDeviceMessage(payload) {
             decodeTimeNum = 0.5 // WebCodecs GPU 硬件解码耗时 < 0.5ms
             jbDelayNum = 0     // 极速锁相直通模式绕过了 JitterBuffer
           } else {
-            const newFrames = framesDecodedVal - prevStats.framesDecoded
+            const newFrames = framesDecodedVal - (prevStats.framesDecoded || 0)
             fps = dt > 0 ? (newFrames / dt).toFixed(0) : 0
             jbDelayNum = (report.jitterBufferDelay / (report.jitterBufferEmittedCount || 1) * 1000) || 0
             decodeTimeNum = (report.totalDecodeTime / (framesDecodedVal || 1) * 1000) || 0
 
+            // 静音抑制 decode-pause 刷屏，仅记录状态与 pauseCount，避免静止画面持续污染控制台
             if (dt > 0 && newFrames === 0 && !wasPaused && status.value === 'connected') {
               pauseCount++
               wasPaused = true
-              debugWarn('[VideoTrace] decode-pause', {
-                pauseCount,
-                ts: Date.now(),
-                dtMs: Math.round(dt * 1000),
-                framesDecoded: framesDecodedVal,
-                bytesReceived: report.bytesReceived,
-                pliCount: report.pliCount || 0,
-                packetsLost: report.packetsLost || 0,
-                jitterBufferDelay: report.jitterBufferDelay,
-                jitterBufferEmittedCount: report.jitterBufferEmittedCount
-              })
             } else if (newFrames > 0) {
-              if (wasPaused) {
-                debugInfo('[VideoTrace] decode-resume', {
-                  ts: Date.now(),
-                  newFrames,
-                  framesDecoded: framesDecodedVal,
-                  pliCount: report.pliCount || 0,
-                  packetsLost: report.packetsLost || 0
-                })
-              }
               wasPaused = false
             }
           }
+
+          const rxT = report.framesReceived || 0
+          const presT = activeEl ? (activeEl.__presCount || framesDecodedVal) : framesDecodedVal
+
+          const dRx = rxT - (prevStats.framesReceived || 0)
+          const dPres = presT - (prevStats.framesPresented || 0)
+          const rxFps = dt > 0 ? Math.round(dRx / dt) : 0
+          const presFps = dt > 0 ? Math.round(dPres / dt) : 0
+          const srcFps = report.framesPerSecond !== undefined ? Math.round(report.framesPerSecond) : rxFps
+          const fLbl = `SRC ${srcFps} | RX ${rxFps} | DEC ${fps} | PRES ${presFps}`
 
           const bitrate = dt > 0 ? ((report.bytesReceived - prevStats.bytesReceived) * 8 / dt / 1000).toFixed(0) : 0
           const jbDelay = jbDelayNum.toFixed(0)
@@ -938,13 +961,49 @@ function handleDeviceMessage(payload) {
           const pliCount = report.pliCount || 0
           const lostCount = report.packetsLost || 0
 
+          // 挂载全局诊断快照，方便 DevTools 控制台直接审查
+          window.__streamStats = {
+            timestamp: Date.now(),
+            mode: 'webrtc',
+            srcFps,
+            rxFps,
+            decodeFps: Number(fps),
+            presentFps: presFps,
+            fpsLabel: fLbl,
+            bitrateKbps: Number(bitrate),
+            avgJitterBufferMs: Number(jbDelay),
+            avgDecodeMs: Math.round(decodeTimeNum * 10) / 10,
+            rttMs: Number(currentRtt.toFixed(0)),
+            packetLossTotal: lostCount,
+            framesReceived: rxT,
+            framesDecoded: framesDecodedVal,
+            framesPresented: presT
+          }
+
           prevStats = {
             timestamp: now,
             bytesReceived: report.bytesReceived,
-            framesDecoded: framesDecodedVal
+            framesDecoded: framesDecodedVal,
+            framesReceived: rxT,
+            framesPresented: presT
           }
 
-          return { fps, bitrate, jbDelay, e2eDelay, rtt: currentRtt.toFixed(0), pliCount, pauseCount, lostCount, connectionType }
+          return { 
+            fps, 
+            fpsLabel: fLbl,
+            srcFps, 
+            rxFps, 
+            decodeFps: Number(fps), 
+            presentFps: presFps, 
+            bitrate, 
+            jbDelay, 
+            e2eDelay, 
+            rtt: currentRtt.toFixed(0), 
+            pliCount, 
+            pauseCount, 
+            lostCount, 
+            connectionType 
+          }
         }
       }
     } catch (e) {
@@ -954,7 +1013,7 @@ function handleDeviceMessage(payload) {
   }
 
   function resetStats() {
-    prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0 }
+    prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0, framesReceived: 0, framesPresented: 0 }
     pauseCount = 0
     wasPaused = false
   }
@@ -1491,6 +1550,8 @@ function handleDeviceMessage(payload) {
   }
 
   function disconnect() {
+    if (isDisposed) return
+    isDisposed = true
     stopCameraStreaming()
     if (webcodecsRenderer) {
       webcodecsRenderer.stop()

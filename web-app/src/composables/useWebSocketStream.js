@@ -632,10 +632,19 @@ export function useWebSocketStream(deviceId, options = {}) {
     }
   }
 
+  let targetFps = 30
+
   async function getVideoStats() {
     const kbps = Math.round(realBitrate.value / 1000)
+    const currentFps = realFps.value
+    const fLbl = `SRC ${targetFps} | RX ${currentFps} | DEC ${currentFps} | PRES ${currentFps}`
     return {
-      fps: realFps.value,
+      fps: currentFps,
+      fpsLabel: fLbl,
+      srcFps: targetFps,
+      rxFps: currentFps,
+      decodeFps: currentFps,
+      presentFps: currentFps,
       bitrate: kbps,
       targetBitrate: targetBitrateMbps.value,
       packetsLost: 0,
@@ -652,16 +661,20 @@ export function useWebSocketStream(deviceId, options = {}) {
     realBitrate.value = 0
   }
 
+  let isDisposed = false
+
   // --- 连接与断连生命周期 ---
   function connect() {
     if (status.value === 'connected' || status.value === 'connecting') return
+    isDisposed = false
     status.value = 'connecting'
     error.value = null
     hasReceivedKeyFrame = false
     isFirstFrameRendered.value = false
 
     // 获取期望的高清参数（默认 30fps / 1080p / 4Mbps）
-    const fps = options.max_fps || 30
+    targetFps = options.max_fps || 30
+    const fps = targetFps
     const maxSize = options.max_size || 1080
     if (options.bitrate) {
       targetBitrateMbps.value = options.bitrate >= 10000 ? Math.round(options.bitrate / 100000) / 10 : options.bitrate
@@ -687,6 +700,8 @@ export function useWebSocketStream(deviceId, options = {}) {
   }
 
   function disconnect() {
+    if (isDisposed) return
+    isDisposed = true
     status.value = 'disconnected'
     stopStatsLoop()
     clearConnectTimeout()

@@ -1438,4 +1438,75 @@ watch(() => props.user.username, () => {
 .drawer-enter-from .user-drawer, .drawer-leave-to .user-drawer {
   transform: translateX(40px);
 }
+
+/* 移动端详情抽屉全屏适配与触控优化 */
+@media (max-width: 768px) {
+  .user-drawer {
+    width: 100vw !important;
+    border-left: none;
+    box-shadow: none;
+  }
+
+  .drawer-header {
+    padding: 12px 14px;
+  }
+
+  .avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .drawer-username {
+    font-size: 14.5px;
+  }
+
+  .drawer-close {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 16px;
+  }
+
+  .drawer-tabs {
+    padding: 0 6px;
+    scrollbar-width: none;
+  }
+
+  .drawer-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .drawer-tab {
+    padding: 10px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .drawer-body {
+    padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .basic-actions {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .drawer-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    justify-content: center;
+  }
+
+  .policy-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
 </style>

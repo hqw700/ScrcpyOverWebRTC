@@ -689,4 +689,162 @@ async function handleSend() {
   transform: none;
   box-shadow: none;
 }
+
+/* 移动端响应式适配 */
+@media (max-width: 768px) {
+  .batch-text-modal {
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 90vh;
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 10px 14px;
+  }
+
+  .header-icon {
+    font-size: 16px;
+  }
+
+  .modal-title {
+    font-size: 14px;
+  }
+
+  .close-btn {
+    padding: 4px 6px;
+    font-size: 14px;
+  }
+
+  .modal-body {
+    padding: 12px 14px;
+    gap: 10px;
+    max-height: calc(90vh - 105px);
+  }
+
+  /* 目标设备展示条 */
+  .target-strip {
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+
+  .strip-title-row {
+    margin-bottom: 6px;
+  }
+
+  .strip-label {
+    font-size: 11px;
+  }
+
+  .strip-clear-btn {
+    font-size: 10.5px;
+  }
+
+  .strip-chips-wrap {
+    max-height: 56px;
+    gap: 4px;
+  }
+
+  .device-chip {
+    padding: 1px 6px;
+    font-size: 11px;
+    border-radius: 4px;
+  }
+
+  /* 常用快速短语：移动端单行横滑胶囊 */
+  .quick-texts-section {
+    gap: 6px;
+  }
+
+  .qt-section-label {
+    font-size: 11px;
+  }
+
+  .save-as-qt-btn {
+    font-size: 10.5px;
+    padding: 2px 6px;
+  }
+
+  .qt-pills-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-height: none;
+    padding: 2px 0;
+    gap: 5px;
+  }
+
+  .qt-pills-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .qt-pill {
+    padding: 2px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+    border-radius: 10px;
+  }
+
+  .save-qt-box {
+    padding: 5px 6px;
+    gap: 6px;
+  }
+
+  .save-qt-input {
+    font-size: 11.5px;
+    padding: 3px 6px;
+  }
+
+  .save-qt-cancel,
+  .save-qt-confirm {
+    font-size: 10.5px;
+    padding: 3px 6px;
+  }
+
+  /* 文本编辑区 */
+  .batch-textarea {
+    min-height: 56px;
+    font-size: 13.5px;
+    padding: 8px 10px;
+  }
+
+  .editor-tools-row {
+    font-size: 11px;
+  }
+
+  .auto-enter-label {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .char-count {
+    font-size: 10px;
+  }
+
+  .clear-text-btn {
+    font-size: 11px;
+  }
+
+  /* 底部操作栏 */
+  .modal-footer {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .btn-cancel {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .btn-send {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 </style>

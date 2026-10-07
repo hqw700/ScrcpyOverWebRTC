@@ -1880,13 +1880,13 @@ function isDeviceInFilter(devId) {
 }
 
 function getTagColor(tagId) {
-  const t = tagStore.tags.find(item => item.id === tagId)
-  return t ? t.color : '#58a6ff'
+  const tag = tagStore.tags.find(item => item.id === tagId)
+  return tag ? tag.color : '#58a6ff'
 }
 
 function getTagName(tagId) {
-  const t = tagStore.tags.find(item => item.id === tagId)
-  return t ? t.name : ''
+  const tag = tagStore.tags.find(item => item.id === tagId)
+  return tag ? tag.name : ''
 }
 
 function selectFilteredTargets(type) {

@@ -487,9 +487,9 @@ const statusOptions = computed(() => [
 const onlineUsersCount = computed(() => users.value.filter(u => u.online).length)
 const expiringUsersCount = computed(() => {
   return users.value.filter(u => {
-    const t = parseExpire(u.expires_at)
-    if (!t) return false
-    return t.getTime() <= Date.now() + 7 * 86400000
+    const expDate = parseExpire(u.expires_at)
+    if (!expDate) return false
+    return expDate.getTime() <= Date.now() + 7 * 86400000
   }).length
 })
 
@@ -504,9 +504,9 @@ const filteredUsers = computed(() => {
       case 'offline': return !u.online
       case 'expired': return isExpiredAt(u.expires_at)
       case 'expiring': {
-        const t = parseExpire(u.expires_at)
-        if (!t) return false
-        const ms = t.getTime() - Date.now()
+        const expDate = parseExpire(u.expires_at)
+        if (!expDate) return false
+        const ms = expDate.getTime() - Date.now()
         return ms > 0 && ms <= 7 * 86400000
       }
       default: return true

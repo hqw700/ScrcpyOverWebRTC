@@ -235,10 +235,10 @@ const serverAddresses = ref([])
 const selectedAddress = ref('')
 
 function getAuthHeaders() {
-  const t = localStorage.getItem('auth_token') || ''
+  const token = localStorage.getItem('auth_token') || ''
   const headers = { 'Content-Type': 'application/json' }
-  if (t) {
-    headers['Authorization'] = `Bearer ${t}`
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
   }
   return headers
 }
@@ -251,6 +251,13 @@ async function createShare() {
   if (expireOption.value === 'custom') {
     seconds = (customDays.value || 1) * 86400
   }
+
+  // 提取当前设备已配置的设置（如 1-4M），注入为访客默认设置
+  let currentSettings = null
+  try {
+    const raw = localStorage.getItem('cloudphone_device_settings_' + props.deviceId) || localStorage.getItem('cloudphone_settings')
+    if (raw) currentSettings = JSON.parse(raw)
+  } catch (e) {}
 
   try {
     const res = await fetch('/api/share/create', {
@@ -265,7 +272,8 @@ async function createShare() {
         forbid_bitrate: !allowBitrate.value,
         forbid_fps: !allowFps.value,
         forbid_resolution: !allowResolution.value,
-        forbid_audio: !allowAudio.value
+        forbid_audio: !allowAudio.value,
+        guest_settings: currentSettings || undefined
       })
     })
 
@@ -358,11 +366,11 @@ async function fetchServerAddresses() {
 
 function formatTime(expiresAt) {
   if (!expiresAt) return '-'
-  const t = new Date(expiresAt)
-  if (Number.isNaN(t.getTime())) return '-'
+  const dateObj = new Date(expiresAt)
+  if (Number.isNaN(dateObj.getTime())) return '-'
   // Go time.Time 零值序列化为 "0001-01-01T00:00:00Z"，代表永久有效
-  if (t.getFullYear() <= 1) return t('share.durationForever')
-  return t.toLocaleString('zh-CN', { hour12: false })
+  if (dateObj.getFullYear() <= 1) return t('share.durationForever')
+  return dateObj.toLocaleString('zh-CN', { hour12: false })
 }
 
 watch(() => props.visible, (val) => {

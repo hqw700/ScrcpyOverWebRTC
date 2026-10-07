@@ -116,19 +116,31 @@
                   <label class="item-label">{{ $t('users.drawer.leaseDuration') }}</label>
                   <div class="lease-duration-row">
                     <select v-model="createLeaseForm.duration" class="drawer-select">
+                      <option :value="1800">{{ $t('users.drawer.mins30') }}</option>
+                      <option :value="3600">{{ $t('users.drawer.hour1') }}</option>
+                      <option :value="7200">{{ $t('users.drawer.hours2') }}</option>
+                      <option :value="21600">{{ $t('users.drawer.hours6') }}</option>
                       <option :value="86400">{{ $t('users.drawer.days1') }}</option>
                       <option :value="604800">{{ $t('users.drawer.days7') }}</option>
                       <option :value="2592000">{{ $t('users.drawer.days30') }}</option>
-                      <option value="custom">{{ $t('users.drawer.customDays') }}</option>
+                      <option :value="0">{{ $t('users.drawer.permanentOption') }}</option>
+                      <option value="custom">{{ $t('users.drawer.customDuration') }}</option>
                     </select>
-                    <input
-                      v-if="createLeaseForm.duration === 'custom'"
-                      v-model.number="createLeaseForm.customDays"
-                      type="number"
-                      min="1"
-                      :placeholder="$t('users.drawer.customDaysPlaceholder')"
-                      class="drawer-select custom-days-input"
-                    />
+                    <template v-if="createLeaseForm.duration === 'custom'">
+                      <input
+                        v-model.number="createLeaseForm.customVal"
+                        type="number"
+                        min="1"
+                        :placeholder="$t('users.drawer.customDurationPlaceholder')"
+                        class="drawer-select custom-days-input"
+                        style="width: 75px; flex: 0 0 75px"
+                      />
+                      <select v-model="createLeaseForm.customUnit" class="drawer-select" style="width: 75px; flex: 0 0 75px">
+                        <option value="minute">{{ $t('users.drawer.unitMinute') }}</option>
+                        <option value="hour">{{ $t('users.drawer.unitHour') }}</option>
+                        <option value="day">{{ $t('users.drawer.unitDay') }}</option>
+                      </select>
+                    </template>
                   </div>
                 </div>
                 <div class="form-item">
@@ -168,19 +180,30 @@
                   <div class="lease-actions" v-if="lease.active">
                     <template v-if="extendingLeaseId === lease.lease_id">
                       <select v-model="extendChoice" class="extend-select">
+                        <option :value="1800">+{{ $t('users.drawer.mins30') }}</option>
+                        <option :value="3600">+{{ $t('users.drawer.hour1') }}</option>
+                        <option :value="7200">+{{ $t('users.drawer.hours2') }}</option>
+                        <option :value="21600">+{{ $t('users.drawer.hours6') }}</option>
                         <option :value="86400">+{{ $t('users.drawer.days1') }}</option>
                         <option :value="604800">+{{ $t('users.drawer.days7') }}</option>
                         <option :value="2592000">+{{ $t('users.drawer.days30') }}</option>
-                        <option value="custom">{{ $t('users.drawer.customDays') }}</option>
+                        <option value="custom">{{ $t('users.drawer.customDuration') }}</option>
                       </select>
-                      <input
-                        v-if="extendChoice === 'custom'"
-                        v-model.number="extendCustomDays"
-                        type="number"
-                        min="1"
-                        :placeholder="$t('users.drawer.customDaysPlaceholder')"
-                        class="extend-days"
-                      />
+                      <template v-if="extendChoice === 'custom'">
+                        <input
+                          v-model.number="extendCustomVal"
+                          type="number"
+                          min="1"
+                          :placeholder="$t('users.drawer.customDurationPlaceholder')"
+                          class="extend-days"
+                          style="width: 60px"
+                        />
+                        <select v-model="extendCustomUnit" class="extend-select" style="min-width: 60px">
+                          <option value="minute">{{ $t('users.drawer.unitMinute') }}</option>
+                          <option value="hour">{{ $t('users.drawer.unitHour') }}</option>
+                          <option value="day">{{ $t('users.drawer.unitDay') }}</option>
+                        </select>
+                      </template>
                       <button class="drawer-btn primary small" @click="submitExtend(lease)" :disabled="leaseOperating">{{ $t('users.drawer.confirm') }}</button>
                       <button class="drawer-btn small" @click="cancelExtend">{{ $t('users.drawer.cancel') }}</button>
                     </template>
@@ -366,9 +389,9 @@ function showToast(msg, type = 'success') {
 }
 
 function formatTime(iso) {
-  const t = new Date(iso)
-  if (Number.isNaN(t.getTime())) return '-'
-  return t.toLocaleString('zh-CN', { hour12: false })
+  const dateObj = new Date(iso)
+  if (Number.isNaN(dateObj.getTime())) return '-'
+  return dateObj.toLocaleString('zh-CN', { hour12: false })
 }
 
 // ---------------- Tab 2: 设备租约 ----------------
@@ -377,16 +400,19 @@ const leasesLoading = ref(false)
 const leaseError = ref('')
 const leaseOperating = ref(false)
 
+const unitMultipliers = { minute: 60, hour: 3600, day: 86400 }
+
 // 续期内联表单
 const extendingLeaseId = ref(null)
 const extendChoice = ref(604800)
-const extendCustomDays = ref(7)
+const extendCustomVal = ref(1)
+const extendCustomUnit = ref('hour')
 
 // 开租约内联表单
 const showCreateLease = ref(false)
 const idleDevices = ref([])
 const idleDevicesLoading = ref(false)
-const createLeaseForm = ref({ deviceId: '', duration: 604800, customDays: 7, note: '' })
+const createLeaseForm = ref({ deviceId: '', duration: 604800, customVal: 1, customUnit: 'hour', note: '' })
 
 function isLeaseExpiringSoon(lease) {
   return lease.remaining_seconds >= 0 && lease.remaining_seconds <= 7 * 86400
@@ -410,7 +436,7 @@ async function fetchLeases() {
 
 async function openCreateLease() {
   showCreateLease.value = true
-  createLeaseForm.value = { deviceId: '', duration: 604800, customDays: 7, note: '' }
+  createLeaseForm.value = { deviceId: '', duration: 604800, customVal: 1, customUnit: 'hour', note: '' }
   idleDevicesLoading.value = true
   try {
     // admin 视角：响应带 lease 字段，无 lease 即空闲设备
@@ -439,8 +465,9 @@ async function openCreateLease() {
 async function submitCreateLease() {
   const form = createLeaseForm.value
   if (!form.deviceId) return
+  const mult = unitMultipliers[form.customUnit] || 86400
   const duration = form.duration === 'custom'
-    ? Math.max(1, form.customDays || 1) * 86400
+    ? Math.max(1, form.customVal || 1) * mult
     : Number(form.duration)
   leaseOperating.value = true
   leaseError.value = ''
@@ -483,7 +510,8 @@ async function submitCreateLease() {
 function startExtend(lease) {
   extendingLeaseId.value = lease.lease_id
   extendChoice.value = 604800
-  extendCustomDays.value = 7
+  extendCustomVal.value = 1
+  extendCustomUnit.value = 'hour'
 }
 
 function cancelExtend() {
@@ -491,8 +519,9 @@ function cancelExtend() {
 }
 
 async function submitExtend(lease) {
+  const mult = unitMultipliers[extendCustomUnit.value] || 86400
   const seconds = extendChoice.value === 'custom'
-    ? Math.max(1, extendCustomDays.value || 1) * 86400
+    ? Math.max(1, extendCustomVal.value || 1) * mult
     : Number(extendChoice.value)
   leaseOperating.value = true
   leaseError.value = ''

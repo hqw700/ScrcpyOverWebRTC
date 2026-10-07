@@ -2636,25 +2636,25 @@ function onTouchStart(e) {
   onFsUiActivity()
   if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
-    const t = e.changedTouches[i]
-    const coord = rotateCoords(t.clientX, t.clientY)
-    webrtc.sendTouch(0, t.clientX, t.clientY, t.identifier, coord)
+    const touch = e.changedTouches[i]
+    const coord = rotateCoords(touch.clientX, touch.clientY)
+    webrtc.sendTouch(0, touch.clientX, touch.clientY, touch.identifier, coord)
   }
 }
 function onTouchMove(e) {
   if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
-    const t = e.changedTouches[i]
-    const coord = rotateCoords(t.clientX, t.clientY)
-    webrtc.sendTouch(2, t.clientX, t.clientY, t.identifier, coord)
+    const touch = e.changedTouches[i]
+    const coord = rotateCoords(touch.clientX, touch.clientY)
+    webrtc.sendTouch(2, touch.clientX, touch.clientY, touch.identifier, coord)
   }
 }
 function onTouchEnd(e) {
   if (isCameraMode.value) return
   for (let i = 0; i < e.changedTouches.length; i++) {
-    const t = e.changedTouches[i]
-    const coord = rotateCoords(t.clientX, t.clientY)
-    webrtc.sendTouch(1, t.clientX, t.clientY, t.identifier, coord)
+    const touch = e.changedTouches[i]
+    const coord = rotateCoords(touch.clientX, touch.clientY)
+    webrtc.sendTouch(1, touch.clientX, touch.clientY, touch.identifier, coord)
   }
 }
 </script>

@@ -103,9 +103,9 @@ function onEditorSave(newSettings) {
 }
 
 function getAuthHeaders() {
-  const t = localStorage.getItem('auth_token') || ''
+  const token = localStorage.getItem('auth_token') || ''
   const headers = { 'Content-Type': 'application/json' }
-  if (t) headers['Authorization'] = `Bearer ${t}`
+  if (token) headers['Authorization'] = `Bearer ${token}`
   return headers
 }
 

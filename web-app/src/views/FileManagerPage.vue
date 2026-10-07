@@ -155,15 +155,15 @@
             <button @click="clearFinishedTransfers">{{ $t('files.clearFinished') }}</button>
           </div>
           <div class="transfer-list">
-            <div v-for="t in activeTransfers" :key="t.id" class="transfer-item" :class="t.status">
+            <div v-for="task in activeTransfers" :key="task.id" class="transfer-item" :class="task.status">
               <div class="transfer-main">
-                <span class="transfer-name" :title="t.name">{{ t.name }}</span>
-                <span class="transfer-status">{{ transferLabel(t) }}</span>
+                <span class="transfer-name" :title="task.name">{{ task.name }}</span>
+                <span class="transfer-status">{{ transferLabel(task) }}</span>
               </div>
               <div class="transfer-progress">
-                <div :style="{ width: t.progress + '%' }"></div>
+                <div :style="{ width: task.progress + '%' }"></div>
               </div>
-              <button v-if="isTransferDone(t)" @click="removeTransfer(t.id)">×</button>
+              <button v-if="isTransferDone(task)" @click="removeTransfer(task.id)">×</button>
             </div>
           </div>
         </aside>
@@ -260,10 +260,13 @@ watch(currentPath, (path) => {
   pathDraft.value = path
 })
 
+let listLoadingTimer = null
+
 function cleanWebRTC() {
   if (unwatchStatus) { unwatchStatus(); unwatchStatus = null }
   if (unwatchError) { unwatchError(); unwatchError = null }
   if (unwatchReady) { unwatchReady(); unwatchReady = null }
+  if (listLoadingTimer) { clearTimeout(listLoadingTimer); listLoadingTimer = null }
 
   if (webrtc) {
     if (!isSharedConnection) {
@@ -420,6 +423,12 @@ function joinPath(base, name) {
 function refreshFileList() {
   if (!isFileChannelReady.value || !webrtc) return
   filesLoading.value = true
+  if (listLoadingTimer) clearTimeout(listLoadingTimer)
+  listLoadingTimer = setTimeout(() => {
+    if (filesLoading.value) {
+      filesLoading.value = false
+    }
+  }, 10000)
   webrtc.sendFileChannelCmd({ type: 'list', path: currentPath.value })
 }
 
@@ -769,6 +778,7 @@ function handleFileChannelMessage(data) {
     const msg = JSON.parse(data)
     switch (msg.type) {
       case 'list_reply':
+        if (listLoadingTimer) { clearTimeout(listLoadingTimer); listLoadingTimer = null }
         filesLoading.value = false
         if (msg.success) {
           currentPath.value = msg.path || currentPath.value
@@ -970,23 +980,24 @@ function failInstallSession(session, message) {
   startNextInstall()
 }
 
-function transferLabel(t) {
+function transferLabel(task) {
   const map = {
-    upload: '上传',
-    'upload-install': t.status === 'installing' ? '安装中' : '上传',
-    download: '下载',
-    install: '安装'
+    upload: t('files.uploadBtn'),
+    'upload-install': task.status === 'installing' ? t('files.statusInstalling') : t('files.uploadBtn'),
+    download: t('files.download'),
+    install: t('files.installApk')
   }
-  if (t.status === 'queued') return t('files.statusQueued')
-  if (t.status === 'checking') return t('files.statusChecking')
-  if (t.status === 'success') return t('files.statusCompleted')
-  if (t.status === 'failed') return t('files.statusFailed')
-  const speedStr = t.speed ? ` (${t.speed})` : ''
-  return `${map[t.type] || '任务'} ${t.progress}%${speedStr}`
+  if (task.status === 'queued') return t('files.statusQueued')
+  if (task.status === 'checking') return t('files.statusChecking')
+  if (task.status === 'installing') return t('files.statusInstalling')
+  if (task.status === 'success') return t('files.statusCompleted')
+  if (task.status === 'failed') return task.message ? `${t('files.statusFailed')}: ${task.message}` : t('files.statusFailed')
+  const speedStr = task.speed ? ` (${task.speed})` : ''
+  return `${map[task.type] || t('files.taskLabel')} ${task.progress}%${speedStr}`
 }
 
-function isTransferDone(t) {
-  return ['success', 'failed'].includes(t.status)
+function isTransferDone(task) {
+  return ['success', 'failed'].includes(task.status)
 }
 
 function removeTransfer(id) {

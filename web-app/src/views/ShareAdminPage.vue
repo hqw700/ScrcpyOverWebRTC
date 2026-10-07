@@ -164,9 +164,9 @@ watch(tipsCollapsed, (v) => {
 })
 
 function getAuthHeaders() {
-  const t = localStorage.getItem('auth_token') || ''
+  const token = localStorage.getItem('auth_token') || ''
   const headers = { 'Content-Type': 'application/json' }
-  if (t) headers['Authorization'] = `Bearer ${t}`
+  if (token) headers['Authorization'] = `Bearer ${token}`
   return headers
 }
 
@@ -260,9 +260,9 @@ function onGuestConfigSaved() {
 
 function parseExpire(expiresAt) {
   if (!expiresAt) return null
-  const t = new Date(expiresAt)
-  if (Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return null // Go 零值时间 = 永久
-  return t
+  const expDate = new Date(expiresAt)
+  if (Number.isNaN(expDate.getTime()) || expDate.getFullYear() <= 1) return null // Go 零值时间 = 永久
+  return expDate
 }
 
 function formatExpire(expiresAt) {

@@ -111,21 +111,30 @@
             <div class="form-group">
               <label>{{ $t('devicesAdmin.durationLabel') }}</label>
               <select v-model="createForm.duration">
+                <option :value="1800">{{ $t('devicesAdmin.mins30') }}</option>
+                <option :value="3600">{{ $t('devicesAdmin.hour1') }}</option>
+                <option :value="7200">{{ $t('devicesAdmin.hours2') }}</option>
+                <option :value="21600">{{ $t('devicesAdmin.hours6') }}</option>
                 <option :value="86400">{{ $t('devicesAdmin.day1') }}</option>
                 <option :value="604800">{{ $t('devicesAdmin.days7') }}</option>
                 <option :value="2592000">{{ $t('devicesAdmin.days30') }}</option>
                 <option :value="7776000">{{ $t('devicesAdmin.days90') }}</option>
                 <option :value="0">{{ $t('devicesAdmin.permanent') }}</option>
-                <option value="custom">{{ $t('devicesAdmin.customDays') }}</option>
+                <option value="custom">{{ $t('devicesAdmin.customDuration') }}</option>
               </select>
-              <input
-                v-if="createForm.duration === 'custom'"
-                v-model.number="createForm.customDays"
-                type="number"
-                min="1"
-                :placeholder="$t('devicesAdmin.enterDaysPlaceholder')"
-                style="margin-top: 8px"
-              />
+              <div class="custom-duration-grid" v-if="createForm.duration === 'custom'">
+                <input
+                  v-model.number="createForm.customVal"
+                  type="number"
+                  min="1"
+                  :placeholder="$t('devicesAdmin.enterDurationPlaceholder')"
+                />
+                <select v-model="createForm.customUnit">
+                  <option value="minute">{{ $t('devicesAdmin.unitMinute') }}</option>
+                  <option value="hour">{{ $t('devicesAdmin.unitHour') }}</option>
+                  <option value="day">{{ $t('devicesAdmin.unitDay') }}</option>
+                </select>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ $t('devicesAdmin.noteLabel') }}</label>
@@ -157,20 +166,29 @@
             <div class="form-group">
               <label>{{ $t('devicesAdmin.appendDurationLabel') }}</label>
               <select v-model="extendForm.duration">
+                <option :value="1800">+{{ $t('devicesAdmin.mins30') }}</option>
+                <option :value="3600">+{{ $t('devicesAdmin.hour1') }}</option>
+                <option :value="7200">+{{ $t('devicesAdmin.hours2') }}</option>
+                <option :value="21600">+{{ $t('devicesAdmin.hours6') }}</option>
                 <option :value="86400">+{{ $t('devicesAdmin.day1') }}</option>
                 <option :value="604800">+{{ $t('devicesAdmin.days7') }}</option>
                 <option :value="2592000">+{{ $t('devicesAdmin.days30') }}</option>
                 <option :value="7776000">+{{ $t('devicesAdmin.days90') }}</option>
-                <option value="custom">{{ $t('devicesAdmin.customDays') }}</option>
+                <option value="custom">{{ $t('devicesAdmin.customDuration') }}</option>
               </select>
-              <input
-                v-if="extendForm.duration === 'custom'"
-                v-model.number="extendForm.customDays"
-                type="number"
-                min="1"
-                :placeholder="$t('devicesAdmin.enterDaysPlaceholder')"
-                style="margin-top: 8px"
-              />
+              <div class="custom-duration-grid" v-if="extendForm.duration === 'custom'">
+                <input
+                  v-model.number="extendForm.customVal"
+                  type="number"
+                  min="1"
+                  :placeholder="$t('devicesAdmin.enterDurationPlaceholder')"
+                />
+                <select v-model="extendForm.customUnit">
+                  <option value="minute">{{ $t('devicesAdmin.unitMinute') }}</option>
+                  <option value="hour">{{ $t('devicesAdmin.unitHour') }}</option>
+                  <option value="day">{{ $t('devicesAdmin.unitDay') }}</option>
+                </select>
+              </div>
             </div>
           </div>
           <div class="modal-footer">
@@ -259,16 +277,18 @@ function refresh() {
   deviceStore.fetchDevices()
 }
 
+const unitMultipliers = { minute: 60, hour: 3600, day: 86400 }
+
 // --- 开租约 ---
 const createTarget = ref(null)
-const createForm = ref({ username: '', duration: 604800, customDays: 7, note: '' })
+const createForm = ref({ username: '', duration: 604800, customVal: 1, customUnit: 'hour', note: '' })
 const tenantUsers = ref([])
 const modalError = ref('')
 const modalSubmitting = ref(false)
 
 async function openCreateModal(dev) {
   createTarget.value = dev
-  createForm.value = { username: '', duration: 604800, customDays: 7, note: '' }
+  createForm.value = { username: '', duration: 604800, customVal: 1, customUnit: 'hour', note: '' }
   modalError.value = ''
   if (tenantUsers.value.length === 0) {
     try {
@@ -285,8 +305,9 @@ async function submitCreate() {
   modalSubmitting.value = true
   modalError.value = ''
   try {
+    const mult = unitMultipliers[createForm.value.customUnit] || 86400
     const duration = createForm.value.duration === 'custom'
-      ? Math.max(1, createForm.value.customDays || 1) * 86400
+      ? Math.max(1, createForm.value.customVal || 1) * mult
       : Number(createForm.value.duration)
     const res = await fetch('/api/admin/leases/create', {
       method: 'POST',
@@ -324,11 +345,11 @@ async function submitCreate() {
 
 // --- 续期 ---
 const extendTarget = ref(null)
-const extendForm = ref({ duration: 604800, customDays: 7 })
+const extendForm = ref({ duration: 604800, customVal: 1, customUnit: 'hour' })
 
 function openExtendModal(dev) {
   extendTarget.value = dev
-  extendForm.value = { duration: 604800, customDays: 7 }
+  extendForm.value = { duration: 604800, customVal: 1, customUnit: 'hour' }
   modalError.value = ''
 }
 
@@ -337,8 +358,9 @@ async function submitExtend() {
   modalSubmitting.value = true
   modalError.value = ''
   try {
+    const mult = unitMultipliers[extendForm.value.customUnit] || 86400
     const duration = extendForm.value.duration === 'custom'
-      ? Math.max(1, extendForm.value.customDays || 1) * 86400
+      ? Math.max(1, extendForm.value.customVal || 1) * mult
       : Number(extendForm.value.duration)
     const res = await fetch('/api/admin/leases/extend', {
       method: 'POST',
@@ -795,6 +817,13 @@ onMounted(() => {
 
 .form-group input:focus, .form-group select:focus {
   border-color: #58a6ff;
+}
+
+.custom-duration-grid {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .modal-footer {

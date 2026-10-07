@@ -935,8 +935,8 @@ function setMobileCols(n) {
 
 // lastSeen 时间戳（无值或非法值视为 0，排序时排最后）
 function lastSeenTime(device) {
-  const t = device.lastSeen ? new Date(device.lastSeen).getTime() : 0
-  return Number.isNaN(t) ? 0 : t
+  const ts = device.lastSeen ? new Date(device.lastSeen).getTime() : 0
+  return Number.isNaN(ts) ? 0 : ts
 }
 
 function selectAllOnline() {
@@ -1039,15 +1039,15 @@ let accountExpiryTimer = setInterval(() => { accountNowTick.value = Date.now() }
 const accountExpiryTime = computed(() => {
   const p = authStore.userPolicy
   if (!p || !p.expires_at) return null
-  const t = new Date(p.expires_at)
-  if (Number.isNaN(t.getTime()) || t.getFullYear() <= 1) return null
-  return t
+  const expDate = new Date(p.expires_at)
+  if (Number.isNaN(expDate.getTime()) || expDate.getFullYear() <= 1) return null
+  return expDate
 })
 const accountExpired = computed(() => !!accountExpiryTime.value && accountExpiryTime.value.getTime() <= accountNowTick.value)
 const accountExpiryChip = computed(() => {
-  const t = accountExpiryTime.value
-  if (!t) return ''
-  const ms = t.getTime() - accountNowTick.value
+  const expTime = accountExpiryTime.value
+  if (!expTime) return ''
+  const ms = expTime.getTime() - accountNowTick.value
   if (ms <= 0) return t('license.expired')
   const d = Math.floor(ms / 86400000)
   const h = Math.floor((ms % 86400000) / 3600000).toString().padStart(2, '0')

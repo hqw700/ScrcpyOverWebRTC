@@ -209,6 +209,15 @@ function loadShareSettings() {
       }
     }
   } catch (e) {}
+
+  // 历史旧缓存自愈防御：若访客本地残留了旧的 8Mbps/20Mbps 默认值且分享未显式指定，自动对齐
+  if (base.minBitrate >= 8 && (!props.guestSettings || !props.guestSettings.minBitrate)) {
+    base.minBitrate = 1
+  }
+  if (base.maxBitrate >= 20 && (!props.guestSettings || !props.guestSettings.maxBitrate)) {
+    base.maxBitrate = 4
+  }
+
   return base
 }
 
@@ -229,8 +238,8 @@ function buildOptions() {
     max_fps: s.fps,
     max_size: s.size,
     bitrate: s.bitrate * 1000000,
-    min_bitrate: (s.minBitrate || 8) * 1000000,
-    max_bitrate: (s.maxBitrate || 20) * 1000000,
+    min_bitrate: (s.minBitrate || 1) * 1000000,
+    max_bitrate: (s.maxBitrate || 4) * 1000000,
     bwe: s.bwe,
     audio: s.audio,
     audio_gain: s.audioGain,

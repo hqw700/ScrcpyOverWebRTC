@@ -58,5 +58,6 @@ export function formatLeaseRemaining(remainingSeconds) {
   const m = Math.floor((remainingSeconds % 3600) / 60)
   if (d > 0) return tt('common.remainDaysHours', `剩余 ${d} 天 ${h} 小时`, { d, h })
   if (h > 0) return tt('common.remainHoursMins', `剩余 ${h} 小时 ${m} 分`, { h, m })
-  return tt('common.remainMins', `剩余 ${m} 分`, { m })
+  if (m > 0) return tt('common.remainMins', `剩余 ${m} 分`, { m })
+  return tt('common.remainSeconds', `剩余 ${remainingSeconds} 秒`, { s: remainingSeconds })
 }

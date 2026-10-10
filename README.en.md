@@ -20,30 +20,16 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
-- **Guest Share Fullscreen Redesign**: (v0.4.1) Removed redundant top bar on guest share page, adapted to mobile safe areas and immersive viewport; added flexible lease duration and friendly busy-state prompt.
-- **Preview Traffic & Screen-off Backoff**: (v0.4.1) Added screen-off detection with intelligent standby backoff; completely suppresses frame updates when unchanged to cut bandwidth and host CPU overhead.
-- **Dedicated TURN Dynamic Routing**: (v0.4.1) Controlled agents can dynamically assign nearby TURN servers, inherited automatically by direct control and guest shares for resilient multi-cloud NAT traversal.
-- **Cloud Phone Stability & Kitsune Mask**: (v0.4.1) Fixed access crashes caused by screenshot failures on headless/virtual cloud phones; Magisk module fully adapted to Kitsune Mask.
-- **Full-Site Deep i18n & Bilingual Support**: (v0.4.0) Dashboard, device direct control, surveillance console, WebADB terminal, file manager, and system settings now feature 100% seamless English / Chinese switching with local preference persistence; bilingual dictionaries are strictly verified.
-- **Smart Update Alert & User Feedback**: (v0.4.0) Added intelligent version update awareness dialog, supporting one-click submission of feedback, suggestions, and diagnostic logs right from the web console.
-- **Android App Keepalive & Full English Localization**: (v0.4.0) Introduced specialUse foreground service with watchdog auto-respawn, eliminating status bar icon flashing and boosting keepalive resilience; full UI English localization across XML, Compose, and dialogs; optimized Root and Shizuku boot auto-start and headless untethered hosting.
-- **Transmission Channel & Network Robustness**: (v0.4.0) Optimized weak network reconnection and long-session heartbeat handling, with intelligent stream mutexing to cut bandwidth and codec overhead.
-- **Ultimate Smoothness**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring both WebCodecs phase-locked hardware rendering (matching native Scrcpy) and standard HTML5 video engines.
-- **Direct Public Network Access**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P NAT hole punching with automatic TURN relay fallback.
-- **Mobile & PC Dual Control**: Mobile browser defaults to immersive single-device fullscreen, fixing iOS H.264 playback, Safari fullscreen tips, and terminal jumping; PC single-device floating windows and free resizing fully revived with seamless single/multi-device mode hot-switching.
-- **Redroid Cloud Phone One-Click Support**: Added out-of-the-box AIO image build tools (`release/redroid`), auto-detecting and importing official images and AOSP offline tarballs with boot auto-start and instant setup.
-- **Magisk Offline Config & ADB Batch Launcher**: Offline ZIP configurator for Magisk modules without manual terminal commands (Windows zero-Python batch/PowerShell & shell scripts); automated ADB multi-device concurrent batch starter.
-- **Non-Root Host App (Shizuku)**: Modern Kotlin host app supporting Shizuku (UID 2000 shell) and Root dual-channel PC-free operation, with Android 14+ foreground service and self-healing watchdog.
-- **High-Frequency Group Control**: Brand new Pub/Sub directional distribution architecture with 100% zero-leak tenant isolation; 4-tier streaming scope filters (Visible/All/Selected/Tag) saving 90% bandwidth; group control broadcast latency reduced to ~2ms.
-- **Lease & User Management**: Upgraded commercial user center into an all-in-one drawer with exclusive device lease models, granular expiration dates per machine, 7-dimension permission forbid isolation, and automatic lease recovery.
-- **Batch Text Broadcast**: Added Text Broadcast Tab in global console, clipboard atomic passthrough ensuring 100% text/Chinese injection; integrated quick-phrase store with dual cloud/local persistence.
-- **Batch Ops & Resumable Downloads**: Converged batch APK install and file push into global console with task progress boards; Agent supports RFC 7233 HTTP Range resumable downloads with If-Range validation.
-- **100% TCP Streaming**: WebSocket direct control streaming mode for 100% TCP firewall penetration without TURN servers.
-- **Multi-Device Matrix**: Concurrent direct control of multiple devices with Grid, Tabs, and Floating layouts, split-screen duplicate connection isolation and focus guard.
-- **Surveillance Camera Mode**: Screen-off hardware camera streaming for physical phones, dedicated monitoring console with multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
-- **All-Around Interaction**: Multi-touch, physical key simulation, visual keymapping, IME Chinese input passthrough, silent bidirectional clipboard, and WebADB console.
-- **One-Click Driverless Deployment**: Zero client needed (iOS/Android/PC/Mac); supports domain signaling with adaptive Android DNS resolver, WebUSB/WebADB browser deployment, and Magisk boot-start modules.
-- **Broad Ecosystem Compatibility**: Compatible with physical Android phones (Root / Non-Root), emulators, redroid containers, and commercial cloud phones.
+- **Ultra-Low Latency & High Performance**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring WebCodecs phase-locked hardware rendering (matching native Scrcpy latency) and standard HTML5 video engines.
+- **Clientless Browser-Native Access**: No client apps, drivers, or plugins required on the control side; access and control instantly through any modern web browser (PC / Mac / iOS / Android).
+- **Public P2P NAT Traversal & Multi-Channel Streaming**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P hole punching with TURN relay fallback; plus WebSocket direct control for 100% TCP firewall penetration.
+- **High-Frequency Matrix & Group Fleet Control**: Smooth 60fps live monitoring across dozens of devices simultaneously (Grid, Tabs, and Floating layouts); supports batch touch gestures, keystroke macros, and text broadcast.
+- **Comprehensive Interaction & Input Tools**: Multi-touch, physical key simulation, visual keymapping (keyboard & joystick), silent bidirectional clipboard sync, 100% IME Chinese input passthrough, and web-based WebADB console.
+- **Screen-Off Camera & Surveillance Mode**: Hardware-level screen-off camera streaming with microphone monitoring; dedicated surveillance console featuring multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
+- **Guest Share Links & Multi-Tenant Management**: Multi-user tenant isolation with granular exclusive lease controls; one-click generation of mobile-adapted, immersive guest sharing links.
+- **Driverless One-Click Deployment & Auto-Start**: Browser-based WebUSB / WebADB driverless initialization; Magisk module for kernel-level boot auto-start; and Android client supporting Root & Shizuku (root-free ADB) dual engines.
+- **Broad Ecosystem Compatibility**: Fully compatible with physical Android phones (Root / Non-Root), Redroid cloud virtualization containers, emulators, and commercial cloud phones.
+- **Full-Site Deep i18n & Bilingual Support**: 100% seamless English and Simplified Chinese switching with local persistence across dashboard, direct control, surveillance console, file manager, and terminal tools.
 
 ## 2. Quick Start
 

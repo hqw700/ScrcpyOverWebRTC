@@ -1,34 +1,6 @@
 <template>
   <div class="share-page-container">
-    <!-- 顶部状态栏 -->
-    <header class="share-header glow-bottom">
-      <div class="header-left">
-        <div class="logo">
-          <span class="pulse-dot"></span>
-          <span class="title-text">{{ $t('share.guestAccessTitle') }}</span>
-        </div>
-        <div v-if="shareInfo" class="device-info-pill">
-          <span class="icon">📱</span>
-          <span class="device-name">{{ shareInfo.device_name || shareInfo.device_id }}</span>
-          <span v-if="shareInfo.card_code" class="card-tag">{{ shareInfo.card_code }}</span>
-        </div>
-      </div>
 
-      <div class="header-center" v-if="shareInfo">
-        <div class="countdown-badge" :class="{ 'warning': remainingSeconds < 300 }">
-          <span class="clock-icon">⏱️</span>
-          <span class="label">{{ $t('share.remainingTime') }}</span>
-          <span class="time-value">{{ formatCountdown(remainingSeconds) }}</span>
-        </div>
-      </div>
-
-      <div class="header-right" v-if="shareInfo">
-        <span :class="['mode-tag', shareInfo.access_mode]">
-          {{ shareInfo.access_mode === 'full' ? $t('share.modeFull') : $t('share.modeViewOnly') }}
-        </span>
-        <button class="btn-refresh" @click="reloadPage" :title="('share.reconnectBtn')">{{ $t('share.reconnectBtn') }}</button>
-      </div>
-    </header>
 
     <!-- 主体显示区 -->
     <main class="share-main">
@@ -70,6 +42,7 @@
         <ShareVideo
           :key="shareInfo.token"
           :deviceId="shareInfo.device_id"
+          :deviceName="shareInfo.device_name || shareInfo.device_id"
           :shareToken="shareInfo.token"
           :sharePassword="password"
           :accessMode="shareInfo.access_mode"
@@ -113,21 +86,6 @@ const password = ref('')
 const needPassword = ref(false)
 const pwdError = ref('')
 let timer = null
-
-function reloadPage() {
-  window.location.reload()
-}
-
-function formatCountdown(sec) {
-  if (sec < 0) return '♾️ 永久有效'
-  if (sec === 0) return '00:00:00 (已到期)'
-  const d = Math.floor(sec / 86400)
-  const h = Math.floor((sec % 86400) / 3600).toString().padStart(2, '0')
-  const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0')
-  const s = Math.floor(sec % 60).toString().padStart(2, '0')
-  // 超过一天时前置天数，避免小时数堆叠（如 49:00:00）
-  return d > 0 ? `${d} 天 ${h}:${m}:${s}` : `${h}:${m}:${s}`
-}
 
 function startCountdown(seconds) {
   if (timer) clearInterval(timer)
@@ -226,151 +184,27 @@ onUnmounted(() => {
 
 <style scoped>
 .share-page-container {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   width: 100vw;
-  height: 100vh;
-  background: #0b0f19;
+  height: 100%;
+  height: 100dvh;
+  background: #000;
   display: flex;
   flex-direction: column;
   color: #f8fafc;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
-}
-
-.share-header {
-  height: 56px;
-  background: #111827;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 100;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pulse-dot {
-  width: 10px;
-  height: 10px;
-  background: #10b981;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #10b981;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
-.title-text {
-  font-weight: 700;
-  font-size: 1.05rem;
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.device-info-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #1e293b;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-}
-
-.card-tag {
-  background: rgba(56, 189, 248, 0.2);
-  color: #38bdf8;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-weight: bold;
-}
-
-.header-center {
-  display: flex;
-  align-items: center;
-}
-
-.countdown-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 0.88rem;
-}
-
-.countdown-badge.warning {
-  border-color: #f43f5e;
-  background: rgba(244, 63, 94, 0.1);
-  color: #f43f5e;
-}
-
-.time-value {
-  font-family: monospace;
-  font-weight: bold;
-  color: #38bdf8;
-  font-size: 1rem;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mode-tag {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.mode-tag.full {
-  background: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
-}
-
-.mode-tag.view_only {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-}
-
-.btn-refresh {
-  background: #334155;
-  border: none;
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.82rem;
-  transition: background 0.2s;
-}
-
-.btn-refresh:hover {
-  background: #0284c7;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .share-main {
-  flex: 1;
-  position: relative;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -475,9 +309,11 @@ onUnmounted(() => {
 }
 
 .console-wrapper {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  position: relative;
+  overflow: hidden;
 }
 
 .view-only-overlay {
@@ -501,72 +337,5 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-}
-
-/* 移动端顶部栏：三段式布局在空间不足时允许换行并压缩文案 */
-@media (max-width: 768px) {
-  .share-header {
-    height: auto;
-    min-height: 48px;
-    padding: 6px 10px;
-    flex-wrap: wrap;
-    row-gap: 6px;
-    column-gap: 8px;
-  }
-
-  .header-left {
-    gap: 8px;
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  .title-text {
-    display: none;
-  }
-
-  .device-info-pill {
-    font-size: 0.75rem;
-    padding: 3px 8px;
-    max-width: 45vw;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .header-center {
-    order: 3;
-    flex-basis: 100%;
-    display: flex;
-    justify-content: flex-start;
-  }
-
-  .countdown-badge {
-    font-size: 0.75rem;
-    padding: 4px 8px;
-    gap: 4px;
-  }
-
-  .countdown-badge .label {
-    display: none;
-  }
-
-  .time-value {
-    font-size: 0.82rem;
-  }
-
-  .header-right {
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .mode-tag {
-    font-size: 0.72rem;
-    padding: 3px 6px;
-  }
-
-  .btn-refresh {
-    padding: 4px 8px;
-    font-size: 0.75rem;
-  }
 }
 </style>

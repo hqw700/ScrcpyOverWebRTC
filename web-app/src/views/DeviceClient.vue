@@ -139,7 +139,7 @@
 
 
         <!-- 视频流状态面板 (常规模式左上角) -->
-        <div v-if="videoStats && localSettings.showStats !== false && !isCameraMode" class="stats-badge">
+        <div v-if="videoStats && !!localSettings.showStats && !isCameraMode" class="stats-badge">
           <span v-if="isWebSocketMode" class="stat-conn-type ws-pill" :title="$t('deviceClient.wsTcpStream')">{{ $t('deviceClient.wsStreamBadge') }}</span>
           <span class="stat-fps" :title="videoStats.fpsLabel ? $t('deviceClient.fpsLabelHint') : $t('deviceClient.realtimeFps')">{{ videoStats.fpsLabel || (videoStats.fps + 'fps') }}</span>
           <span class="stat-delimiter">|</span>

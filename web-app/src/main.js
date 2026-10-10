@@ -15,6 +15,8 @@ const isLocalRequest = (url) => {
   }
 }
 
+let isRedirectingToLogin = false
+
 const originalFetch = window.fetch
 window.fetch = async (input, init = {}) => {
   const url = typeof input === 'string' ? input : (input && input.url ? input.url : '')
@@ -47,14 +49,27 @@ window.fetch = async (input, init = {}) => {
       try {
         const { useAuthStore } = await import('./stores/auth')
         const auth = useAuthStore()
-        // 只有非免密模式且接口为当前用户核心 API 时才注销 token
+        // 只有非免密模式且接口为当前用户核心 API 时才注销 token 并重定向
         if (!auth.noAuthMode) {
-          localStorage.removeItem('auth_token')
-          localStorage.removeItem('auth_user')
-          auth.token = ''
-          auth.username = ''
+          auth.handleSessionExpired()
+
+          if (!isRedirectingToLogin) {
+            isRedirectingToLogin = true
+            const currentRoute = router.currentRoute.value
+            // 若当前页面不是免密公共页（/login、/share），立即平滑跳转登录页并携带重定向目标
+            if (!currentRoute?.meta?.public && currentRoute?.path !== '/login') {
+              const redirect = currentRoute?.fullPath || '/'
+              router.push({ path: '/login', query: { redirect } }).finally(() => {
+                setTimeout(() => { isRedirectingToLogin = false }, 1000)
+              })
+            } else {
+              setTimeout(() => { isRedirectingToLogin = false }, 1000)
+            }
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Session expired handler error:', e)
+      }
     }
   }
   return response

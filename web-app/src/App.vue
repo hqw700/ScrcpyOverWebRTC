@@ -820,6 +820,13 @@
         </svg>
         <span class="mobile-nav-text">{{ $t('nav.users') }}</span>
       </router-link>
+      <router-link to="/admin/shares" class="mobile-nav-item" exact-active-class="active" v-if="authStore.isAdmin">
+        <svg class="mobile-nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+        </svg>
+        <span class="mobile-nav-text">{{ $t('nav.shares') }}</span>
+      </router-link>
     </nav>
     
     <!-- 5. 移动端终端半屏弹出深色半透明遮罩层 (点击遮罩收起终端) -->
@@ -1331,6 +1338,13 @@ watch(() => authStore.isLoggedIn, async (newVal) => {
     }
     initApp()
     fetchVersion()
+  } else {
+    // 登录态失效（Token 过期或退出登录）时：清理信令长连接与轮询，并自动切回登录页
+    deviceStore.cleanupSignaling?.()
+    if (!isBarePage.value && route.path !== '/login') {
+      const redirect = route.fullPath || '/'
+      await router.push({ path: '/login', query: { redirect } })
+    }
   }
 })
 onUnmounted(() => {

@@ -2,6 +2,14 @@ import { ref, onUnmounted } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
 import { debugInfo, debugLog, debugWarn } from '@/utils/debug'
 import { WebCodecsRenderer } from '@/utils/webcodecsRenderer'
+import i18n from '@/locales'
+
+const t = (key, params) => {
+  if (i18n && i18n.global && typeof i18n.global.t === 'function') {
+    return i18n.global.t(key, params || {})
+  }
+  return key
+}
 
 export function useWebRTC(deviceId, options = {}) {
   const status = ref('disconnected')
@@ -123,9 +131,11 @@ export function useWebRTC(deviceId, options = {}) {
     }
 
     ws.onerror = (e) => {
-      error.value = 'WebSocket error'
+      if (!error.value) {
+        error.value = t('share.signalingError')
+      }
       status.value = 'error'
-      console.error('WebSocket error:', e)
+      console.error('[Signaling] WebSocket error:', e)
     }
 
     ws.onclose = () => {
@@ -169,7 +179,11 @@ export function useWebRTC(deviceId, options = {}) {
         handleScreenshot(msg.data)
         break
       case 'error':
-        error.value = msg.error || 'Server error'
+        if (msg.code === 'SHARE_IN_USE' || (msg.error && (msg.error.includes('当前分享已被其他访客占用') || msg.error.toLowerCase().includes('already in use')))) {
+          error.value = t('share.shareInUse')
+        } else {
+          error.value = msg.error || 'Server error'
+        }
         status.value = 'error'
         break
     }

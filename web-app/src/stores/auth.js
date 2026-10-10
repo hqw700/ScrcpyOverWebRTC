@@ -74,6 +74,24 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function clearSession() {
+    token.value = ''
+    username.value = ''
+    role.value = ''
+    assignedDevices.value = []
+    noAuthMode.value = false
+    userPolicy.value = null
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth_user')
+    localStorage.removeItem('auth_role')
+    localStorage.removeItem('auth_devices')
+  }
+
+  function handleSessionExpired() {
+    if (noAuthMode.value) return
+    clearSession()
+  }
+
   async function logout() {
     try {
       if (token.value) {
@@ -85,16 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
-      token.value = ''
-      username.value = ''
-      role.value = ''
-      assignedDevices.value = []
-      noAuthMode.value = false
-      userPolicy.value = null
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('auth_user')
-      localStorage.removeItem('auth_role')
-      localStorage.removeItem('auth_devices')
+      clearSession()
       window.location.href = '/login'
     }
   }
@@ -155,6 +164,8 @@ export const useAuthStore = defineStore('auth', () => {
           expires_at: data.expires_at || null,
           leases: Array.isArray(data.leases) ? data.leases : []
         }
+      } else if (res.status === 401) {
+        handleSessionExpired()
       }
     } catch (e) {
       console.error('Fetch me error:', e)
@@ -194,6 +205,8 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
+    clearSession,
+    handleSessionExpired,
     checkNoAuthStatus,
     fetchMe,
     saveAIConfig

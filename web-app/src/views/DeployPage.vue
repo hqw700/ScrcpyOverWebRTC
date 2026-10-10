@@ -136,6 +136,32 @@
             </div>
           </div>
 
+          <!-- 官网 Android App 客户端推荐横幅 -->
+          <div class="app-official-banner">
+            <div class="app-banner-main">
+              <div class="app-banner-icon-box">🤖</div>
+              <div class="app-banner-info">
+                <div class="app-banner-title-line">
+                  <span class="app-banner-title">{{ $t('deploy.manual.appBannerTitle') }}</span>
+                  <span class="app-banner-pill">{{ $t('deploy.manual.appBannerBadge') }}</span>
+                </div>
+                <div class="app-banner-desc">
+                  {{ $t('deploy.manual.appBannerDesc') }}
+                </div>
+              </div>
+            </div>
+            <a 
+              href="https://webrtc-phone.com/#download" 
+              target="_blank" 
+              rel="noopener" 
+              class="app-banner-action-btn"
+            >
+              <span class="btn-icon">🌐</span>
+              <span class="btn-text">{{ $t('deploy.manual.appDownloadBtn') }}</span>
+              <span class="external-icon">↗</span>
+            </a>
+          </div>
+
           <!-- 途径一：电脑 ADB 一键部署 -->
           <div v-if="manualMode === 'adb'" class="manual-mode-block">
             <!-- 部署前准备 -->
@@ -1005,6 +1031,113 @@ onMounted(async () => {
   opacity: 0.8;
 }
 
+/* 官网 Android App 客户端专属横幅 */
+.app-official-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(35, 134, 54, 0.08) 0%, rgba(35, 134, 54, 0.02) 100%);
+  border: 1px solid rgba(35, 134, 54, 0.3);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  transition: all 0.2s ease;
+}
+
+.app-official-banner:hover {
+  border-color: rgba(63, 185, 80, 0.55);
+  box-shadow: 0 4px 16px rgba(35, 134, 54, 0.15);
+}
+
+.app-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.app-banner-icon-box {
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(35, 134, 54, 0.15);
+  border: 1px solid rgba(35, 134, 54, 0.28);
+  flex-shrink: 0;
+}
+
+.app-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-banner-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3fb950;
+}
+
+.app-banner-pill {
+  padding: 2px 7px;
+  background: rgba(35, 134, 54, 0.18);
+  color: #3fb950;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app-banner-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.app-banner-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: #238636;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 6px rgba(35, 134, 54, 0.3);
+  flex-shrink: 0;
+}
+
+.app-banner-action-btn:hover {
+  background: #2ea043;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4);
+}
+
+.app-banner-action-btn .external-icon {
+  font-size: 11px;
+  margin-left: 2px;
+}
+
 .deploy-mode-tabs {
   display: flex;
   gap: 8px;
@@ -1656,8 +1789,9 @@ onMounted(async () => {
     flex-direction: column;
   }
 
-  .banner-download-btn {
+  .app-banner-action-btn {
     width: 100%;
+    justify-content: center;
   }
 
   .command-grid,

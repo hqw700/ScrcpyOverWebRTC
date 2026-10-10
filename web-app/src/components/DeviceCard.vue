@@ -33,6 +33,11 @@
         <span class="in-use-pulse"></span>
         <span class="in-use-text">{{ primaryClientText }}</span>
       </div>
+      <!-- 息屏待机状态浮层 -->
+      <div v-else-if="device.screenState === 'off' && !isPreviewActive && device.status === 'online'" class="screen-off-banner" @click.stop>
+        <span class="screen-off-icon">🌙</span>
+        <span class="screen-off-text">{{ $t('deviceCard.screenOff') }}</span>
+      </div>
 
       <!-- 顶部右侧快捷操作区：群控勾选 + 三点菜单 -->
       <div class="card-header-right" @click.stop>
@@ -112,6 +117,7 @@
           <span class="device-name" :title="device.id">{{ device.id }}</span>
           <span v-if="isCameraMode" class="camera-mode-badge" :title="$t('deviceCard.cameraModeTitle')">{{ $t('deviceCard.cameraMonitoring') }}</span>
           <span v-else-if="isWebSocketMode" class="ws-mode-badge" :title="$t('deviceCard.wsModeTitle')">{{ $t('deviceCard.wsStreaming') }}</span>
+          <span v-if="device.screenState === 'off' && device.status === 'online'" class="screen-off-pill">🌙 {{ $t('deviceCard.screenOff') }}</span>
           <span v-if="device.status !== 'online' && lastSeenText" class="offline-last-seen" :title="lastSeenText">{{ lastSeenText }}</span>
           <span v-if="myLeaseText" class="my-lease-badge" :class="{ urgent: myLeaseUrgent }" :title="$t('deviceCard.myLeaseTitle')">{{ myLeaseText }}</span>
           <span v-if="adminLeaseText" class="my-lease-badge admin-lease" :class="{ urgent: adminLeaseUrgent }" :title="$t('deviceCard.adminLeaseTitle')">{{ adminLeaseText }}</span>
@@ -1359,6 +1365,44 @@ const sendKey = (keycode) => {
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   border-bottom: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+/* 顶部息屏待机状态提示条 */
+.screen-off-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 10px;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.screen-off-icon {
+  font-size: 11px;
+}
+
+.screen-off-pill {
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .in-use-pulse {

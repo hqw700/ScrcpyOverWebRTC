@@ -95,6 +95,7 @@
               <button class="mh-panel-item" @click="openTagManager('full'); closeMobileMenus()">{{ $t('deviceList.tagManager') }}</button>
               <button class="mh-panel-item" @click="openGlobalSettings(); closeMobileMenus()">{{ $t('deviceList.globalSettings') }}</button>
               <button class="mh-panel-item" @click="showLicensePanel = true; closeMobileMenus()">{{ $t('deviceList.licenseManager') }}</button>
+              <button class="mh-panel-item" @click="router.push('/admin/shares'); closeMobileMenus()">{{ $t('share.adminPageTitle') }}</button>
             </template>
           </div>
         </div>

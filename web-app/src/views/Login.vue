@@ -106,7 +106,7 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '@/locales'
 import { useAuthStore } from '../stores/auth'
@@ -114,6 +114,7 @@ import CardConnectModal from '@/components/CardConnectModal.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const showCardModal = ref(false)
 
@@ -153,7 +154,12 @@ async function handleSubmit() {
 
   try {
     await authStore.login(username, password)
-    router.push('/')
+    const redirect = route.query.redirect
+    if (redirect && typeof redirect === 'string' && redirect.startsWith('/') && redirect !== '/login') {
+      router.push(redirect)
+    } else {
+      router.push('/')
+    }
   } catch (err) {
     errorMsg.value = err.message || (locale.value === 'zh-CN' ? '登录失败，请检查账号密码' : 'Login failed, please check username and password')
   } finally {

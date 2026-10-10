@@ -79,6 +79,7 @@ const ACTION_KEYS = [
   'user_update_note',
   'assign_devices',
   'share_create',
+  'share_connect',
   'share_revoke',
   'share_extend',
   'share_update',

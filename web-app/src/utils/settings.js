@@ -16,7 +16,7 @@ export const defaultSettings = {
   powerOff: false,
   connectionPath: 'auto',
   ipPreference: 'auto',
-  showStats: true,
+  showStats: false,
   videoCodecOptions: '',
   camera: false,
   previewFps: 10,

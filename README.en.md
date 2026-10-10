@@ -20,6 +20,10 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
+- **Guest Share Fullscreen Redesign**: (v0.4.1) Removed redundant top bar on guest share page, adapted to mobile safe areas and immersive viewport; added flexible lease duration and friendly busy-state prompt.
+- **Preview Traffic & Screen-off Backoff**: (v0.4.1) Added screen-off detection with intelligent standby backoff; completely suppresses frame updates when unchanged to cut bandwidth and host CPU overhead.
+- **Dedicated TURN Dynamic Routing**: (v0.4.1) Controlled agents can dynamically assign nearby TURN servers, inherited automatically by direct control and guest shares for resilient multi-cloud NAT traversal.
+- **Cloud Phone Stability & Kitsune Mask**: (v0.4.1) Fixed access crashes caused by screenshot failures on headless/virtual cloud phones; Magisk module fully adapted to Kitsune Mask.
 - **Full-Site Deep i18n & Bilingual Support**: (v0.4.0) Dashboard, device direct control, surveillance console, WebADB terminal, file manager, and system settings now feature 100% seamless English / Chinese switching with local preference persistence; bilingual dictionaries are strictly verified.
 - **Smart Update Alert & User Feedback**: (v0.4.0) Added intelligent version update awareness dialog, supporting one-click submission of feedback, suggestions, and diagnostic logs right from the web console.
 - **Android App Keepalive & Full English Localization**: (v0.4.0) Introduced specialUse foreground service with watchdog auto-respawn, eliminating status bar icon flashing and boosting keepalive resilience; full UI English localization across XML, Compose, and dialogs; optimized Root and Shizuku boot auto-start and headless untethered hosting.

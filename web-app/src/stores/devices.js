@@ -177,6 +177,7 @@ export const useDeviceStore = defineStore('devices', () => {
       return {
         ...d,
         info: activeDev?.info || d.info,
+        screenState: activeDev?.screen_state || d.screenState || 'on',
         firstSeen: activeDev?.firstSeen || d.firstSeen,
         clientCount: activeDev?.clientCount ?? d.clientCount ?? 0,
         clients: activeDev?.clients ?? d.clients ?? [],
@@ -199,6 +200,7 @@ export const useDeviceStore = defineStore('devices', () => {
             ...resurrected,
             info: devData.info,
             status: 'online',
+            screenState: devData.screen_state || 'on',
             firstSeen: devData.firstSeen || resurrected.firstSeen,
             lastSeen: new Date().toISOString(),
             clientCount: devData.clientCount ?? resurrected.clientCount ?? 0,
@@ -212,6 +214,7 @@ export const useDeviceStore = defineStore('devices', () => {
             id,
             info: devData.info,
             status: 'online',
+            screenState: devData.screen_state || 'on',
             snapshot: null,
             firstSeen: devData.firstSeen || null,
             lastSeen: new Date().toISOString(),
@@ -738,6 +741,10 @@ export const useDeviceStore = defineStore('devices', () => {
   // 与 WS 推送互补，/snapshots/ 服务端有 hasDeviceAccess 校验，普通用户只能拉到自己设备的图。
   let snapshotPollTimer = null
   function refreshSnapshotsViaHTTP() {
+    // 若全局 WS 处于正常连通状态，快照更新由 WS 精准推送驱动，跳过轮询以极大节省流量
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+      return
+    }
     const token = localStorage.getItem('auth_token') || ''
     const now = Date.now()
     let changed = false
@@ -807,8 +814,10 @@ export const useDeviceStore = defineStore('devices', () => {
         if (msg.message_type === 'snapshot_update') {
           updateSnapshot(msg.device_id, msg.data)
         } else if (msg.message_type === 'snapshot_updated') {
-          // HTTP 模式下的更新通知
-          handleSnapshotUpdated(msg.device_id, msg.url)
+          // HTTP 模式下的更新通知（携带 hash）
+          handleSnapshotUpdated(msg.device_id, msg.url, msg.hash)
+        } else if (msg.message_type === 'device_screen_state') {
+          updateDeviceScreenState(msg.device_id, msg.screen_state)
         } else if (msg.message_type === 'global_settings_updated') {
           localStorage.setItem('cloudphone_settings', JSON.stringify(msg.settings))
           window.dispatchEvent(new CustomEvent('cloudphone-settings-updated', { detail: { deviceId: '' } }))
@@ -866,6 +875,31 @@ export const useDeviceStore = defineStore('devices', () => {
       }
     }
   }
+
+  // 清理全局信令连接与所有后台轮询定时器（退出登录或会话过期时调用）
+  function cleanupSignaling() {
+    if (globalWsHeartbeatTimer) {
+      clearInterval(globalWsHeartbeatTimer)
+      globalWsHeartbeatTimer = null
+    }
+    if (licensePollTimer) {
+      clearInterval(licensePollTimer)
+      licensePollTimer = null
+    }
+    if (snapshotPollTimer) {
+      clearInterval(snapshotPollTimer)
+      snapshotPollTimer = null
+    }
+    if (globalWs) {
+      try {
+        globalWs.onclose = null
+        globalWs.onerror = null
+        globalWs.close()
+      } catch (e) {}
+      globalWs = null
+    }
+  }
+
 
   // 将授权状态（/api/license_status 响应或 license_update 推送）统一填充到 store。
   // 普通用户的响应只含最小信息（如 {licensed}），缺失字段一律保留现有值，不用默认值覆盖。
@@ -957,14 +991,35 @@ export const useDeviceStore = defineStore('devices', () => {
     removeDevice(deviceId)
   }
 
-  function handleSnapshotUpdated(deviceId, url) {
+  const lastSnapshotHash = new Map()
+
+  function handleSnapshotUpdated(deviceId, url, hash) {
+    if (hash && lastSnapshotHash.get(deviceId) === hash) {
+      // 画面内容 hash 相同，无变化，不需要更新图片 URL 触发浏览器重新请求
+      return
+    }
+    if (hash) {
+      lastSnapshotHash.set(deviceId, hash)
+    }
     const index = devices.value.findIndex(d => d.id === deviceId)
     if (index > -1) {
       const token = localStorage.getItem('auth_token') || ''
-      // 增加时间戳防止浏览器缓存不刷新，并附加 token 进行鉴权
-      devices.value[index].snapshot = url + '?t=' + Date.now() + '&token=' + encodeURIComponent(token)
+      const versionParam = hash ? `v=${encodeURIComponent(hash)}` : `t=${Date.now()}`
+      devices.value[index].snapshot = `${url}?${versionParam}&token=${encodeURIComponent(token)}`
+      if (devices.value[index].screenState === 'off') {
+        devices.value[index].screenState = 'on'
+      }
       devices.value = [...devices.value]
       debugLog(`[Store] Snapshot URL updated for ${deviceId}`)
+    }
+  }
+
+  function updateDeviceScreenState(deviceId, screenState) {
+    const index = devices.value.findIndex(d => d.id === deviceId)
+    if (index > -1) {
+      devices.value[index].screenState = screenState
+      devices.value = [...devices.value]
+      debugLog(`[Store] Device ${deviceId} screen state: ${screenState}`)
     }
   }
 
@@ -1255,6 +1310,7 @@ export const useDeviceStore = defineStore('devices', () => {
     updateSnapshot,
     updateMetrics,
     initSignaling, // 导出
+    cleanupSignaling,
     quitAgent,
     deleteOfflineDevice,
     setActiveDevice,

@@ -58,6 +58,18 @@
       <button class="btn-reconnect" @click="reconnect">{{ $t('console.reconnect') }}</button>
     </div>
 
+    <!-- 沉浸全屏引导胶囊（连接成功后展示几秒，点击即可进入全屏，触摸画面也会自动触发） -->
+    <transition name="fade">
+      <div
+        v-if="isConnected && showFullscreenHint && !isFullscreen && nativeFullscreenSupported"
+        class="fullscreen-hint-pill"
+        @click.stop="onToggleFullscreen"
+      >
+        <svg class="hint-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        <span>{{ $t('deviceClient.enterFullscreen') }} (点击沉浸)</span>
+      </div>
+    </transition>
+
     <!-- 悬浮菜单展开时的全屏点击遮罩（与主控台 fab 一致） -->
     <div v-if="showFabMenu" class="fab-overlay" @mousedown.stop.prevent="showFabMenu = false" @touchstart.stop.prevent="showFabMenu = false"></div>
 
@@ -71,6 +83,24 @@
       </button>
 
       <div class="fab-menu" :class="{ 'show': showFabMenu, 'align-left': isFabOnLeft, 'align-top': isFabOnTop }">
+        <!-- 顶部信息区：倒计时与状态 -->
+        <div class="fab-status-card" :class="{ 'warning': remainingSeconds >= 0 && remainingSeconds < 300 }">
+          <div class="status-row countdown-row">
+            <span class="status-icon">⏱️</span>
+            <span class="countdown-label">{{ $t('share.remainingTime') }}</span>
+            <span class="countdown-val">{{ formattedCountdown }}</span>
+          </div>
+          <div v-if="deviceName || cardCode" class="status-row meta-row">
+            <span v-if="deviceName" class="meta-device" :title="deviceName">📱 {{ deviceName }}</span>
+            <span v-if="cardCode" class="meta-card">🔑 {{ cardCode }}</span>
+            <span :class="['meta-mode', accessMode]">
+              {{ accessMode === 'full' ? $t('share.modeFull') : $t('share.modeViewOnly') }}
+            </span>
+          </div>
+        </div>
+
+        <div class="fab-divider"></div>
+
         <template v-if="!isViewOnly">
           <button class="fab-item" @click="quickKey(26)">
             <svg class="icon" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg> {{ $t('deviceClient.power') }}
@@ -93,6 +123,12 @@
           <div class="fab-divider"></div>
         </template>
 
+        <!-- 重连按钮 -->
+        <button class="fab-item" @click="reconnect">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          {{ $t('share.reconnectBtn') }}
+        </button>
+
         <button class="fab-item" @click="togglePageMute">
           <svg v-if="!localSettings.audio || !soundOn" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
           <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
@@ -106,10 +142,6 @@
         <button class="fab-item" @click="onToggleFullscreen">
           <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
           {{ isFullscreen ? $t('deviceClient.exitFullscreen') : $t('deviceClient.enterFullscreen') }}
-        </button>
-        <button v-if="!isMobile" class="fab-item" @click="onToggleWebFullscreen">
-          <svg class="icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-          {{ isWebFullscreen ? $t('deviceClient.exitWebFullscreen') : $t('deviceClient.enterWebFullscreen') }}
         </button>
         <button v-if="!isMobile && pictureInPictureSupported" class="fab-item" @click="onTogglePictureInPicture">
           <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
@@ -146,6 +178,7 @@ const { t } = useI18n()
 
 const props = defineProps({
   deviceId: { type: String, required: true },
+  deviceName: { type: String, default: '' },
   shareToken: { type: String, default: '' },
   sharePassword: { type: String, default: '' },
   accessMode: { type: String, default: 'full' },
@@ -318,6 +351,7 @@ function enableSound() {
 function onVideoAreaClick() {
   // 首次点击画面区域时顺便开声音（此时已有用户手势，autoplay 限制解除）
   if (!soundOn.value) enableSound()
+  tryEnterFullscreenOnFirstGesture()
 }
 
 function togglePageMute() {
@@ -343,7 +377,24 @@ const statusText = computed(() => {
     default: return t('share.connectingDevice')
   }
 })
-const errorText = computed(() => error.value || t('share.connectionLost'))
+const errorText = computed(() => {
+  if (!error.value) return t('share.connectionLost')
+  const str = String(error.value)
+  if (
+    str === 'SHARE_IN_USE' ||
+    str.includes('当前分享已被其他访客占用') ||
+    str.toLowerCase().includes('already in use')
+  ) {
+    return t('share.shareInUse')
+  }
+  if (
+    str === 'SIGNALING_ERROR' ||
+    str.includes('信令连接异常')
+  ) {
+    return t('share.signalingError')
+  }
+  return error.value
+})
 
 // 蒙板上方：当前访客（卡密）+ 分享剩余时间
 const connMetaText = computed(() => {
@@ -366,9 +417,27 @@ const connMetaText = computed(() => {
   return text
 })
 
+// 悬浮菜单展开时展示的倒计时
+const formattedCountdown = computed(() => {
+  const sec = props.remainingSeconds
+  if (sec < 0) return t('share.neverExpire') || '♾️ 永久有效'
+  if (sec === 0) return '00:00:00 (已到期)'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600).toString().padStart(2, '0')
+  const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0')
+  const s = Math.floor(sec % 60).toString().padStart(2, '0')
+  return d > 0 ? `${d}d ${h}:${m}:${s}` : `${h}:${m}:${s}`
+})
+
 // --- 悬浮 FAB（拖动 + 点击展开，与主控台 mobile-fab 同一交互） ---
+const isMobile = ref(window.innerWidth <= 1024)
 const showFabMenu = ref(false)
-const fabStyle = ref({ right: '24px', bottom: '24px' })
+// 移动端默认抬升悬浮球位置（避开屏幕底栏与手势条），PC端保持合适边距
+const fabStyle = ref(
+  isMobile.value
+    ? { right: '18px', bottom: '64px' }
+    : { right: '24px', bottom: '24px' }
+)
 const isFabOnLeft = ref(false)
 const isFabOnTop = ref(false)
 let isDragging = false
@@ -400,7 +469,8 @@ function onFabMove(e) {
     if (left < 0) left = 0
     if (top < 0) top = 0
     if (left > window.innerWidth - 56) left = window.innerWidth - 56
-    if (top > window.innerHeight - 56) top = window.innerHeight - 56
+    const maxTop = window.innerHeight - (isMobile.value ? 76 : 56)
+    if (top > maxTop) top = maxTop
     isFabOnLeft.value = left < window.innerWidth / 2
     isFabOnTop.value = top < window.innerHeight / 2
     fabStyle.value = { left: left + 'px', top: top + 'px' }
@@ -436,50 +506,35 @@ function quickKey(keycode) {
   webrtc.value.sendInjectKeycode(1, keycode)
 }
 
-// --- 全屏 / 页面全屏 / 画中画（移植自主控台 DeviceClient） ---
+// --- 全屏 / 画中画（免密页面默认铺满视口显示） ---
 const containerRef = ref(null)
 const isFullscreen = ref(false)
-const isWebFullscreen = ref(false)
-const isMobile = ref(window.innerWidth <= 1024)
+const showFullscreenHint = ref(true)
+let hasAutoFullscreenTriggered = false
 
 function updateMedia() {
   isMobile.value = window.innerWidth <= 1024
 }
 
-// iOS Safari（及所有 iOS 浏览器内核）不支持任意元素的 Fullscreen API，
-// 仅能 <video> webkitEnterFullscreen；此时"全屏"按钮自动退化为 CSS 页面全屏
 const nativeFullscreenSupported = ref(!!document.fullscreenEnabled)
 
-function onToggleFullscreen() {
-  showFabMenu.value = false
-  if (!nativeFullscreenSupported.value) {
-    onToggleWebFullscreen()
-    return
-  }
-  if (!document.fullscreenElement) {
-    // 若处于页面全屏，先退出，避免样式污染系统全屏元素
-    if (isWebFullscreen.value) {
-      document.body.classList.remove('web-fullscreen')
-      isWebFullscreen.value = false
-    }
-    containerRef.value?.requestFullscreen()
-  } else {
-    document.exitFullscreen()
+function tryEnterFullscreenOnFirstGesture() {
+  showFullscreenHint.value = false
+  if (hasAutoFullscreenTriggered) return
+  hasAutoFullscreenTriggered = true
+  if (nativeFullscreenSupported.value && !document.fullscreenElement) {
+    containerRef.value?.requestFullscreen().catch(() => {})
   }
 }
 
-function onToggleWebFullscreen() {
+function onToggleFullscreen() {
   showFabMenu.value = false
-  if (!isWebFullscreen.value) {
-    // 若处于系统全屏，先退出
-    if (document.fullscreenElement) {
-      document.exitFullscreen()
-    }
-    document.body.classList.add('web-fullscreen')
-    isWebFullscreen.value = true
+  showFullscreenHint.value = false
+  if (!nativeFullscreenSupported.value) return
+  if (!document.fullscreenElement) {
+    containerRef.value?.requestFullscreen().catch(() => {})
   } else {
-    document.body.classList.remove('web-fullscreen')
-    isWebFullscreen.value = false
+    document.exitFullscreen().catch(() => {})
   }
 }
 
@@ -577,6 +632,7 @@ function onFullscreenChange() {
 let mouseDown = false
 
 function onMouseDown(e) {
+  tryEnterFullscreenOnFirstGesture()
   if (isViewOnly.value || !webrtc.value) return
   if (e.button === 1) { // 中键 -> HOME
     webrtc.value.sendInjectKeycode(0, 3)
@@ -622,6 +678,7 @@ function onMouseLeave(e) {
 }
 
 function onTouchStart(e) {
+  tryEnterFullscreenOnFirstGesture()
   if (isViewOnly.value || !webrtc.value) return
   for (const t of e.changedTouches) {
     webrtc.value.sendTouch(0, t.clientX, t.clientY, t.identifier)
@@ -660,15 +717,15 @@ onMounted(() => {
   createConnection()
   document.addEventListener('fullscreenchange', onFullscreenChange)
   window.addEventListener('resize', updateMedia)
+  setTimeout(() => {
+    showFullscreenHint.value = false
+  }, 4000)
 })
 
 onUnmounted(() => {
   destroyConnection()
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.removeEventListener('resize', updateMedia)
-  if (isWebFullscreen.value) {
-    document.body.classList.remove('web-fullscreen')
-  }
   if (pipWindow) {
     pipWindow.close()
     pipWindow = null
@@ -678,7 +735,8 @@ onUnmounted(() => {
 
 <style scoped>
 .share-video-container {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: #000;
@@ -686,22 +744,20 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* 页面全屏：占满整个视口（与主控台 web-fullscreen 同思路） */
-.web-fullscreen .share-video-container {
-  position: fixed;
-  inset: 0;
-  z-index: 2500;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .share-video {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  display: block;
 }
 
 .state-overlay {
@@ -809,15 +865,111 @@ onUnmounted(() => {
   position: absolute;
   bottom: 58px;
   right: 0;
-  min-width: 132px;
-  padding: 6px;
-  background: rgba(15, 23, 42, 0.92);
+  min-width: 170px;
+  max-width: 260px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 12px;
-  backdrop-filter: blur(6px);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
   display: none;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.fab-status-card {
+  padding: 8px 10px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: none;
+}
+
+.fab-status-card.warning {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.45);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+}
+
+.countdown-row {
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.status-icon {
+  font-size: 0.95rem;
+}
+
+.countdown-label {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.countdown-val {
+  font-family: monospace;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-left: auto;
+  font-size: 0.92rem;
+}
+
+.fab-status-card.warning .countdown-val {
+  color: #f43f5e;
+}
+
+.meta-row {
+  gap: 6px;
+  font-size: 0.74rem;
+  color: #cbd5e1;
+  flex-wrap: wrap;
+  padding-top: 3px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.meta-device {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e2e8f0;
+}
+
+.meta-card {
+  font-family: monospace;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.meta-mode {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.meta-mode.full {
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+}
+
+.meta-mode.view_only {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 
 .fab-menu.show {
@@ -870,5 +1022,63 @@ onUnmounted(() => {
   height: 1px;
   background: rgba(148, 163, 184, 0.2);
   margin: 4px 6px;
+}
+
+.fullscreen-hint-pill {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  z-index: 40;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.fullscreen-hint-pill .hint-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fullscreen-hint-pill:active {
+  transform: translateX(-50%) scale(0.96);
+  background: rgba(2, 132, 199, 0.4);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 768px) {
+  .fab-container {
+    bottom: max(56px, calc(36px + env(safe-area-inset-bottom, 0px)));
+  }
+  .fab-main {
+    width: 46px;
+    height: 46px;
+  }
 }
 </style>

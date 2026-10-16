@@ -96,7 +96,7 @@
 
             <!-- 第 1 行左：控制模式分段控制器 -->
             <div class="form-group">
-              <label class="form-label"><span>🎮 {{ $t('share.permissionsLabel') }}</span></label>
+              <label class="form-label"><span>{{ $t('share.permissionsLabel') }}</span></label>
               <div class="seg-control">
                 <button 
                   type="button" 
@@ -104,7 +104,7 @@
                   @click.stop.prevent="accessMode = 'full'"
                   :title="$t('share.modeFullDesc')"
                 >
-                  ⚡ {{ $t('share.modeFull') }}
+                  {{ $t('share.modeFull') }}
                 </button>
                 <button 
                   type="button" 
@@ -112,14 +112,14 @@
                   @click.stop.prevent="accessMode = 'view_only'"
                   :title="$t('share.modeViewOnlyDesc')"
                 >
-                  👁️ {{ $t('share.modeViewOnly') }}
+                  {{ $t('share.modeViewOnly') }}
                 </button>
               </div>
             </div>
 
             <!-- 第 1 行右：有效期设置 -->
             <div class="form-group">
-              <label class="form-label"><span>⏱️ {{ $t('share.durationLabel') }}</span></label>
+              <label class="form-label"><span>{{ $t('share.durationLabel') }}</span></label>
               <div class="duration-row">
                 <select v-model="expireOption" class="custom-select compact">
                   <option :value="1800">{{ $t('share.duration30m') }}</option>
@@ -145,7 +145,7 @@
             <!-- 第 2 行左：细粒度权限 -->
             <div class="form-group">
               <label class="form-label" :title="$t('share.permLockedHint')">
-                <span>🎚️ {{ $t('share.guestEditableSettings') }}</span>
+                <span>{{ $t('share.guestEditableSettings') }}</span>
               </label>
               <div class="perm-checks-compact">
                 <label class="perm-check-item">
@@ -169,7 +169,7 @@
 
             <!-- 第 2 行右：可选访问密码 (PIN 码) -->
             <div class="form-group">
-              <label class="form-label"><span>🔒 {{ $t('share.passwordLabel') }}</span></label>
+              <label class="form-label"><span>{{ $t('share.passwordLabel') }}</span></label>
               <input 
                 v-model="password" 
                 type="password" 
@@ -182,7 +182,7 @@
             <!-- 第 3 行左：分享链接地址 -->
             <div class="form-group">
               <label class="form-label" :title="$t('share.serverUrlHint')">
-                <span>🌐 {{ $t('share.serverUrlLabel') }}</span>
+                <span>{{ $t('share.serverUrlLabel') }}</span>
               </label>
               <select v-model="selectedAddress" class="custom-select compact">
                 <option v-for="addr in serverAddresses" :key="addr" :value="addr">{{ addr }}</option>
@@ -191,7 +191,7 @@
 
             <!-- 第 3 行右：分享备注 -->
             <div class="form-group">
-              <label class="form-label"><span>📝 {{ $t('share.noteLabel') }}</span></label>
+              <label class="form-label"><span>{{ $t('share.noteLabel') }}</span></label>
               <input 
                 v-model="description" 
                 type="text" 
@@ -431,8 +431,9 @@ function copyText(text, type) {
 }
 
 function copyAndFinish() {
-  if (createdResult.value && createdResult.value.card_code) {
-    navigator.clipboard.writeText(createdResult.value.card_code).then(() => {
+  if (createdResult.value && createdResult.value.token) {
+    const url = fullShareUrl(createdResult.value.token)
+    navigator.clipboard.writeText(url).then(() => {
       close()
     }).catch(() => {
       close()
@@ -504,12 +505,12 @@ watch(() => props.visible, async (val) => {
 }
 
 .modal-container {
-  width: 660px;
-  max-width: 94vw;
-  max-height: 88vh;
+  width: 780px;
+  max-width: 95vw;
+  max-height: 90vh;
   background: #141824;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.15);
   display: flex;
   flex-direction: column;
@@ -518,9 +519,9 @@ watch(() => props.visible, async (val) => {
   overflow: hidden;
 }
 
-/* 紧凑 Header */
+/* 头部 Header */
 .modal-header {
-  padding: 12px 18px;
+  padding: 16px 24px;
   background: #1a2030;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -535,12 +536,12 @@ watch(() => props.visible, async (val) => {
 }
 
 .header-icon {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
 }
 
 .header-title h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 600;
   background: linear-gradient(135deg, #38bdf8, #818cf8);
   -webkit-background-clip: text;
@@ -559,12 +560,12 @@ watch(() => props.visible, async (val) => {
   gap: 5px;
   background: rgba(56, 189, 248, 0.12);
   border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-family: monospace;
   color: #38bdf8;
-  max-width: 220px;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -579,7 +580,7 @@ watch(() => props.visible, async (val) => {
   background: none;
   border: none;
   color: #94a3b8;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -590,27 +591,27 @@ watch(() => props.visible, async (val) => {
   color: #f43f5e;
 }
 
-/* 紧凑 Tab 栏 */
+/* Tab 栏 */
 .tab-header-compact {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: rgba(15, 23, 42, 0.7);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0 16px;
+  padding: 0 20px;
 }
 
 .tab-buttons {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .tab-btn-compact {
   background: none;
   border: none;
   color: #94a3b8;
-  padding: 8px 12px;
-  font-size: 0.86rem;
+  padding: 10px 16px;
+  font-size: 0.92rem;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   display: flex;
@@ -632,15 +633,15 @@ watch(() => props.visible, async (val) => {
 .tab-count-pill {
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 10px;
   border: 1px solid rgba(245, 158, 11, 0.4);
 }
 
 .modal-body {
-  padding: 14px 18px;
+  padding: 22px 26px;
   overflow-y: auto;
 }
 
@@ -648,7 +649,7 @@ watch(() => props.visible, async (val) => {
 .form-grid-compact {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px 14px;
+  gap: 16px 22px;
 }
 
 .span-2 {
@@ -664,9 +665,9 @@ watch(() => props.visible, async (val) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.8rem;
-  color: #cbd5e1;
-  margin-bottom: 4px;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  margin-bottom: 7px;
   font-weight: 500;
 }
 
@@ -674,21 +675,22 @@ watch(() => props.visible, async (val) => {
 .custom-select.compact,
 .custom-input.compact {
   width: 100%;
-  height: 32px;
-  padding: 0 10px;
+  height: 38px;
+  padding: 0 12px;
   background: #0f172a;
   border: 1px solid #334155;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #f8fafc;
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .custom-select.compact:focus,
 .custom-input.compact:focus {
   border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
 }
 
 /* 分段开关 (Segmented Control) */
@@ -696,20 +698,20 @@ watch(() => props.visible, async (val) => {
   display: flex;
   background: #0f172a;
   border: 1px solid #334155;
-  border-radius: 6px;
-  height: 32px;
-  padding: 2px;
+  border-radius: 8px;
+  height: 38px;
+  padding: 3px;
   box-sizing: border-box;
-  gap: 2px;
+  gap: 3px;
 }
 
 .seg-btn {
   flex: 1;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   color: #94a3b8;
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -733,47 +735,55 @@ watch(() => props.visible, async (val) => {
 /* 有效期灵活行 */
 .duration-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .custom-days-wrap {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .days-input {
-  width: 60px !important;
+  width: 65px !important;
   text-align: center;
 }
 
 .days-unit {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: #94a3b8;
 }
 
-/* 紧凑 4 权限复选框 */
+/* 细粒度权限复选框 */
 .perm-checks-compact {
   display: flex;
-  height: 32px;
+  height: 38px;
   align-items: center;
   justify-content: space-between;
   background: #0f172a;
   border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 0 8px;
+  border-radius: 8px;
+  padding: 0 12px;
   box-sizing: border-box;
 }
 
 .perm-check-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.76rem;
+  gap: 6px;
+  font-size: 0.82rem;
   color: #cbd5e1;
   cursor: pointer;
   user-select: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.perm-check-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
 }
 
 .perm-check-item input {
@@ -784,29 +794,30 @@ watch(() => props.visible, async (val) => {
 
 /* 操作栏 */
 .action-bar-compact {
-  margin-top: 6px;
+  margin-top: 10px;
 }
 
 .btn-primary.compact-btn {
   width: 100%;
-  height: 36px;
+  height: 44px;
   padding: 0;
   background: linear-gradient(135deg, #0284c7, #6366f1);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #fff;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.96rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
 }
 
 .btn-primary.compact-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+  box-shadow: 0 4px 18px rgba(2, 132, 199, 0.45);
 }
 
 .btn-primary.compact-btn:disabled {
@@ -814,58 +825,58 @@ watch(() => props.visible, async (val) => {
   cursor: not-allowed;
 }
 
-/* 生成结果卡片 (紧凑内联展示) */
+/* 生成结果卡片 (内联展示) */
 .result-panel-compact {
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid rgba(16, 185, 129, 0.35);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .result-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: #10b981;
 }
 
 .check-icon {
   font-weight: bold;
   background: rgba(16, 185, 129, 0.2);
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  font-size: 0.88rem;
 }
 
 .result-header h4 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .result-box-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .result-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .res-label {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   color: #94a3b8;
-  width: 90px;
+  width: 100px;
   flex-shrink: 0;
 }
 
@@ -873,7 +884,7 @@ watch(() => props.visible, async (val) => {
 .url-copy-group {
   flex: 1;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -881,34 +892,34 @@ watch(() => props.visible, async (val) => {
   background: #0f172a;
   border: 1px solid #38bdf8;
   color: #38bdf8;
-  padding: 4px 12px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
   font-family: monospace;
   font-weight: bold;
-  font-size: 1.05rem;
-  letter-spacing: 1px;
+  font-size: 1.1rem;
+  letter-spacing: 1.5px;
 }
 
 .url-input-compact {
   flex: 1;
-  height: 30px;
+  height: 36px;
   background: #0f172a;
   border: 1px solid #334155;
   color: #f1f5f9;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 0.8rem;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 0.86rem;
   box-sizing: border-box;
 }
 
 .copy-btn-compact {
-  height: 30px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 14px;
   background: #334155;
   border: none;
   color: #f8fafc;
-  border-radius: 6px;
-  font-size: 0.78rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
@@ -928,33 +939,35 @@ watch(() => props.visible, async (val) => {
 .result-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 2px;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 .btn-res-primary {
-  padding: 6px 14px;
+  padding: 8px 18px;
   background: #10b981;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #fff;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
 }
 
 .btn-res-primary:hover {
   background: #059669;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .btn-res-secondary {
-  padding: 6px 14px;
+  padding: 8px 18px;
   background: #21262d;
   border: 1px solid #30363d;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #c9d1d9;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   cursor: pointer;
   transition: all 0.2s;
 }

@@ -991,7 +991,11 @@ async function checkOnlineUpdateFallback(currentVer) {
   }
 }
 
+let lastFetchVersionTime = 0
 const fetchVersion = () => {
+  const now = Date.now()
+  if (now - lastFetchVersionTime < 30000) return
+  lastFetchVersionTime = now
   fetch('/api/version')
     .then(res => res.json())
     .then(data => {

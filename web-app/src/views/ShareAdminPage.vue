@@ -618,7 +618,7 @@ onUnmounted(() => {
 }
 
 .mobile-only-view {
-  display: none;
+  display: none !important;
 }
 
 .table-wrapper {
@@ -795,9 +795,9 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 2. 移动端卡片视图样式 */
+/* 2. 移动端卡片视图样式 (桌面端默认隐藏) */
 .mobile-cards-wrapper {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 12px;
 }
@@ -1012,11 +1012,12 @@ onUnmounted(() => {
   }
 
   .desktop-only-view {
-    display: none;
+    display: none !important;
   }
 
-  .mobile-only-view {
-    display: flex;
+  .mobile-only-view,
+  .mobile-cards-wrapper {
+    display: flex !important;
   }
 
   .page-header {

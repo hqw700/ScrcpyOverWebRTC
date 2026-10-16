@@ -58,7 +58,7 @@
       <button class="btn-reconnect" @click="reconnect">{{ $t('console.reconnect') }}</button>
     </div>
 
-    <!-- 沉浸全屏引导胶囊（连接成功后展示几秒，点击即可进入全屏，触摸画面也会自动触发） -->
+    <!-- 沉浸全屏引导胶囊（连接成功后展示几秒，按任意键或点击即可进入全屏） -->
     <transition name="fade">
       <div
         v-if="isConnected && showFullscreenHint && !isFullscreen && nativeFullscreenSupported"
@@ -66,7 +66,7 @@
         @click.stop="onToggleFullscreen"
       >
         <svg class="hint-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-        <span>{{ $t('deviceClient.enterFullscreen') }} (点击沉浸)</span>
+        <span>{{ $t('share.enterFullscreenHint') }}</span>
       </div>
     </transition>
 
@@ -523,7 +523,27 @@ function tryEnterFullscreenOnFirstGesture() {
   if (hasAutoFullscreenTriggered) return
   hasAutoFullscreenTriggered = true
   if (nativeFullscreenSupported.value && !document.fullscreenElement) {
-    containerRef.value?.requestFullscreen().catch(() => {})
+    const el = containerRef.value || document.documentElement
+    if (el?.requestFullscreen) {
+      el.requestFullscreen().catch(() => {})
+    } else if (el?.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen()
+    }
+  }
+}
+
+function onGlobalAnyKeyOrGesture(e) {
+  if (document.fullscreenElement) {
+    showFullscreenHint.value = false
+    return
+  }
+  // 忽略功能键（如 F5、F12、Ctrl/Cmd 组合键）
+  if (e.type === 'keydown' && (e.key === 'F5' || e.key === 'F12' || e.ctrlKey || e.metaKey)) {
+    return
+  }
+  tryEnterFullscreenOnFirstGesture()
+  if (!soundOn.value) {
+    enableSound()
   }
 }
 
@@ -717,15 +737,19 @@ onMounted(() => {
   createConnection()
   document.addEventListener('fullscreenchange', onFullscreenChange)
   window.addEventListener('resize', updateMedia)
+  window.addEventListener('keydown', onGlobalAnyKeyOrGesture)
+  window.addEventListener('pointerdown', onGlobalAnyKeyOrGesture, { passive: true })
   setTimeout(() => {
     showFullscreenHint.value = false
-  }, 4000)
+  }, 6000)
 })
 
 onUnmounted(() => {
   destroyConnection()
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.removeEventListener('resize', updateMedia)
+  window.removeEventListener('keydown', onGlobalAnyKeyOrGesture)
+  window.removeEventListener('pointerdown', onGlobalAnyKeyOrGesture)
   if (pipWindow) {
     pipWindow.close()
     pipWindow = null

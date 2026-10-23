@@ -8,7 +8,8 @@
 
 [中文](README.md) | English
 
-📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)
+📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
+📱 **Official Native Android Client App**: 👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) (Mobile controller for cloud phones, P2P file relay, remote terminal & multi-device leases)
 
 A high-performance, low-latency cloud phone/cloud desktop solution based on WebRTC and Scrcpy. No client required; you can connect directly through a web browser.
 It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hardware-level PTS Passthrough** technology, to achieve a silky-smooth experience comparable to native Scrcpy.

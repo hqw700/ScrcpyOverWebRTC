@@ -12,6 +12,7 @@ const t = (key, params) => {
 }
 
 export function useWebRTC(deviceId, options = {}) {
+  const deviceStore = useDeviceStore()
   const status = ref('disconnected')
   const error = ref(null)
   const audioMuted = ref(false)
@@ -1276,8 +1277,21 @@ function handleDeviceMessage(payload) {
   }
 
   let clipboardCallback = null
+  let unwatchWsClipboard = null
+
   function onClipboard(callback) {
     clipboardCallback = callback
+    if (!unwatchWsClipboard && deviceStore && typeof deviceStore.onDeviceClipboard === 'function') {
+      unwatchWsClipboard = deviceStore.onDeviceClipboard((devId, evt) => {
+        if (devId === deviceId && clipboardCallback) {
+          clipboardCallback({
+            text: evt.text || '',
+            source: evt.source || 'device',
+            originClientId: evt.origin_client_id ?? null
+          })
+        }
+      })
+    }
   }
 
   function setClipboard(text, options = false) {
@@ -1293,7 +1307,20 @@ function handleDeviceMessage(payload) {
       }))
       return true
     }
-    return false
+    // 降级兜底：若直连通道尚未就绪（握手建连期），通过 WS 信令下发，确保用户操作绝不丢失
+    try {
+      deviceStore.sendGroupControlEvent([deviceId], {
+        type: 'set_clipboard',
+        text,
+        paste: Boolean(normalized.paste),
+        source: normalized.source || 'local',
+        suppress_broadcast: Boolean(normalized.suppressBroadcast)
+      })
+      return true
+    } catch (e) {
+      console.warn('[useWebRTC] setClipboard fallback via WS failed:', e)
+      return false
+    }
   }
 
   function getClipboard() {
@@ -1304,7 +1331,16 @@ function handleDeviceMessage(payload) {
       }))
       return true
     }
-    return false
+    // 降级兜底：若直连通道尚未就绪，通过 WS 信令下发
+    try {
+      deviceStore.sendGroupControlEvent([deviceId], {
+        type: 'get_clipboard'
+      })
+      return true
+    } catch (e) {
+      console.warn('[useWebRTC] getClipboard fallback via WS failed:', e)
+      return false
+    }
   }
 
   let screenshotCallback = null
@@ -1598,6 +1634,10 @@ function handleDeviceMessage(payload) {
     if (aiCommandChannel) {
       try { aiCommandChannel.close() } catch(e) {}
       aiCommandChannel = null
+    }
+    if (unwatchWsClipboard) {
+      unwatchWsClipboard()
+      unwatchWsClipboard = null
     }
     aiCommandPromises.clear()
     status.value = 'disconnected'

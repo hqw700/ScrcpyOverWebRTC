@@ -598,15 +598,25 @@ export function useWebSocketStream(deviceId, options = {}) {
   }
 
   function setClipboard(text, opts = {}) {
-    if (text) {
-      sendText(text)
-      return true
+    if (!text) return false
+    const normalized = typeof opts === 'boolean' ? { paste: opts } : (opts || {})
+    const payload = {
+      type: 'set_clipboard',
+      text,
+      paste: Boolean(normalized.paste),
+      source: normalized.source || 'local',
+      suppress_broadcast: Boolean(normalized.suppressBroadcast)
     }
-    return false
+    deviceStore.sendGroupControlEvent([deviceId], payload)
+    return true
   }
 
   function getClipboard() {
-    return false
+    const payload = {
+      type: 'get_clipboard'
+    }
+    deviceStore.sendGroupControlEvent([deviceId], payload)
+    return true
   }
 
   // --- 指标统计定时器 ---
@@ -728,6 +738,11 @@ export function useWebSocketStream(deviceId, options = {}) {
       h264Decoder = null
     }
 
+    if (unwatchClipboard) {
+      unwatchClipboard()
+      unwatchClipboard = null
+    }
+
     isFirstFrameRendered.value = false
     hasReceivedKeyFrame = false
   }
@@ -753,8 +768,20 @@ export function useWebSocketStream(deviceId, options = {}) {
     screenshotCallback = cb
   }
 
+  let unwatchClipboard = null
   function onClipboard(cb) {
     clipboardCallback = cb
+    if (!unwatchClipboard && deviceStore.onDeviceClipboard) {
+      unwatchClipboard = deviceStore.onDeviceClipboard((devId, evt) => {
+        if (devId === deviceId && clipboardCallback) {
+          clipboardCallback({
+            text: evt.text || '',
+            source: evt.source || 'device',
+            originClientId: evt.origin_client_id ?? null
+          })
+        }
+      })
+    }
   }
 
   const audioMuted = ref(true)

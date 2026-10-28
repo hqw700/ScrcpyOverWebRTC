@@ -16,7 +16,7 @@
       <div v-if="currentSnapshot" class="ambient-glow-bg" :style="ambientBgStyle"></div>
 
       <!-- 展示快照或占位图 -->
-      <img v-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" />
+      <img v-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" @error="onImageError" />
       <div v-else-if="!currentSnapshot && !isPreviewActive" class="snapshot-placeholder">
         <span class="vm-icon">💻</span>
       </div>
@@ -71,7 +71,7 @@
       </div>
 
       <!-- 隐藏的预加载图片 -->
-      <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" />
+      <img v-if="nextSnapshotUrl" :src="nextSnapshotUrl" style="display: none;" @load="onNextSnapshotLoaded" @error="onNextSnapshotError" />
 
       <!-- Hover 点击进入控制提示 -->
       <div class="hover-action-overlay" v-if="!isInteractiveActive && device.status === 'online'">
@@ -375,6 +375,14 @@ function onNextSnapshotLoaded() {
     updateSnapshotDimensions(nextSnapshotUrl.value)
     nextSnapshotUrl.value = ''
   }
+}
+
+function onNextSnapshotError() {
+  nextSnapshotUrl.value = ''
+}
+
+function onImageError() {
+  currentSnapshot.value = ''
 }
 
 function onImageLoad(event) {

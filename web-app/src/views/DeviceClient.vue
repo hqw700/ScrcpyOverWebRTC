@@ -518,6 +518,56 @@
           <button class="popover-close-btn" @click="showQuickTextDropdown = false" :title="$t('common.close')">✕</button>
         </div>
       </div>
+
+      <!-- 自定义即时输入发送区 -->
+      <div class="popover-input-section">
+        <div class="popover-input-wrapper">
+          <textarea
+            ref="quickTextInputRef"
+            v-model="quickTextCustomInput"
+            class="popover-textarea custom-scrollbar"
+            :placeholder="$t('deviceClient.customTextPlaceholder')"
+            rows="2"
+            @keydown.enter.exact.prevent="onQuickTextInputEnter"
+            @keydown.esc="showQuickTextDropdown = false"
+            @compositionstart="isComposingQuickText = true"
+            @compositionend="isComposingQuickText = false"
+          ></textarea>
+        </div>
+        <div class="popover-input-actions">
+          <label class="popover-auto-enter-label" :title="$t('deviceClient.autoEnterHint')">
+            <input type="checkbox" v-model="quickTextAutoEnter" />
+            <span>{{ $t('deviceClient.enterAfterSend') }}</span>
+          </label>
+          <div class="popover-action-btns">
+            <button 
+              v-if="quickTextCustomInput.trim()" 
+              class="popover-save-btn" 
+              @click="saveCustomTextAsPhrase" 
+              :title="$t('deviceClient.saveAsPhrase')"
+            >
+              {{ $t('deviceClient.saveAsPhraseBtn') }}
+            </button>
+            <button 
+              class="popover-send-btn" 
+              :disabled="!quickTextCustomInput.trim()" 
+              @click="sendCustomQuickText" 
+              :title="$t('deviceClient.sendToDeviceHint')"
+            >
+              <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+              <span>{{ $t('deviceClient.send') }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="popover-section-divider">
+        <span>{{ $t('deviceClient.savedPhrases') }}</span>
+      </div>
+
       <div class="popover-items-list custom-scrollbar">
         <div 
           v-for="qt in quickTextStore.quickTexts" 
@@ -744,6 +794,43 @@
           <button class="close-btn" @click="showMobileQuickTextModal = false">✕</button>
         </div>
         <div class="modal-body custom-scrollbar">
+          <!-- 移动端即时输入发送区 -->
+          <div class="mobile-qt-input-section">
+            <textarea
+              ref="mobileQuickTextInputRef"
+              v-model="quickTextCustomInput"
+              class="mobile-qt-textarea custom-scrollbar"
+              :placeholder="$t('deviceClient.customTextPlaceholder')"
+              rows="2"
+            ></textarea>
+            <div class="mobile-qt-input-actions">
+              <label class="popover-auto-enter-label">
+                <input type="checkbox" v-model="quickTextAutoEnter" />
+                <span>{{ $t('deviceClient.enterAfterSend') }}</span>
+              </label>
+              <div class="popover-action-btns">
+                <button 
+                  v-if="quickTextCustomInput.trim()" 
+                  class="popover-save-btn" 
+                  @click="saveCustomTextAsPhrase"
+                >
+                  {{ $t('deviceClient.saveAsPhraseBtn') }}
+                </button>
+                <button 
+                  class="popover-send-btn" 
+                  :disabled="!quickTextCustomInput.trim()" 
+                  @click="sendCustomQuickText(); showMobileQuickTextModal = false"
+                >
+                  <span>{{ $t('deviceClient.send') }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="popover-section-divider">
+            <span>{{ $t('deviceClient.savedPhrases') }}</span>
+          </div>
+
           <div class="mobile-quick-text-list">
             <div 
               v-for="qt in quickTextStore.quickTexts" 
@@ -776,7 +863,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { debugLog, debugWarn } from '@/utils/debug'
 import { useDeviceStore } from '@/stores/devices'
@@ -821,9 +908,14 @@ const currentId = computed(() => props.deviceId)
 const groupControlStore = useGroupControlStore()
 const quickTextStore = useQuickTextStore()
 
-// --- 快捷文本下拉与 Toast 状态 ---
+// --- 快捷文本下拉、即时输入与 Toast 状态 ---
 const showQuickTextDropdown = ref(false)
 const showMobileQuickTextModal = ref(false)
+const quickTextCustomInput = ref('')
+const quickTextAutoEnter = ref(false)
+const isComposingQuickText = ref(false)
+const quickTextInputRef = ref(null)
+const mobileQuickTextInputRef = ref(null)
 const quickTextToastMessage = ref('')
 let quickTextToastTimer = null
 
@@ -837,6 +929,68 @@ function triggerQuickTextToast(msg) {
 
 function toggleQuickTextDropdown() {
   showQuickTextDropdown.value = !showQuickTextDropdown.value
+}
+
+watch(showQuickTextDropdown, (val) => {
+  if (val) {
+    nextTick(() => {
+      quickTextInputRef.value?.focus()
+    })
+  }
+})
+
+watch(showMobileQuickTextModal, (val) => {
+  if (val) {
+    nextTick(() => {
+      mobileQuickTextInputRef.value?.focus()
+    })
+  }
+})
+
+function onQuickTextInputEnter(e) {
+  if (isComposingQuickText.value || e?.isComposing) {
+    return
+  }
+  sendCustomQuickText()
+}
+
+function sendCustomQuickText() {
+  const text = quickTextCustomInput.value
+  if (!text || !text.trim() || !currentId.value) return
+
+  const autoEnter = quickTextAutoEnter.value
+
+  let injected = false
+  if (typeof webrtc.sendInjectText === 'function') {
+    injected = webrtc.sendInjectText(text)
+  }
+
+  if (!injected) {
+    quickTextStore.injectToDevice(currentId.value, text, autoEnter)
+  } else if (autoEnter) {
+    setTimeout(() => {
+      if (typeof webrtc.sendInjectKeycode === 'function') {
+        webrtc.sendInjectKeycode(0, 66)
+        setTimeout(() => webrtc.sendInjectKeycode(1, 66), 30)
+      }
+    }, 80)
+  }
+
+  triggerQuickTextToast(t('deviceClient.textSentToast'))
+  quickTextCustomInput.value = ''
+}
+
+function saveCustomTextAsPhrase() {
+  const text = quickTextCustomInput.value.trim()
+  if (!text) return
+  const firstLine = text.split('\n')[0].trim()
+  const title = firstLine.length > 15 ? firstLine.slice(0, 15) + '...' : firstLine
+  quickTextStore.addQuickText({
+    title: title || t('quickTexts.untitledPhrase'),
+    content: text,
+    autoEnter: quickTextAutoEnter.value
+  })
+  triggerQuickTextToast(t('deviceClient.phraseSavedToast'))
 }
 
 function injectQuickTextToCurrent(qt) {
@@ -860,7 +1014,7 @@ function injectQuickTextToCurrent(qt) {
     }, 80)
   }
 
-  triggerQuickTextToast(t('deviceClient.injectedToast', { title: qt.title }))
+  triggerQuickTextToast(t('deviceClient.injectedToast', { title: getQuickTextTitle(qt) }))
   showQuickTextDropdown.value = false
 }
 
@@ -879,7 +1033,8 @@ function onGlobalClick(e) {
 const effectiveFocused = computed(() => 
   props.isFocused || 
   deviceStore.focusedDeviceId === currentId.value || 
-  deviceStore.activeDeviceIds.length <= 1
+  deviceStore.activeDeviceIds.length <= 1 ||
+  Boolean(!props.deviceId)
 )
 const effectiveAudioMuted = computed(() => {
   if (props.audioMuted) return true
@@ -1054,7 +1209,7 @@ const scrcpyOptions = computed(() => {
     camera_fps: localSettings.value.cameraFps,
     camera_high_speed: localSettings.value.cameraHighSpeed,
     camera_ar: localSettings.value.cameraAr,
-    camera_zoom: localSettings.value.cameraZoomRatio || 1.0,
+    camera_zoom: Number(localSettings.value.cameraZoomRatio) > 0 ? Number(localSettings.value.cameraZoomRatio) : 1.0,
     camera_orientation: localSettings.value.cameraOrientation || 'auto',
     camera_low_power: Boolean(localSettings.value.cameraLowPower)
   }
@@ -1145,14 +1300,13 @@ function selectLens(lens) {
   localSettings.value.cameraFacing = lens.facing
   localSettings.value.cameraId = lens.id || ''
   cameraMirrored.value = (lens.facing === 'front')
-  if (lens.zoom) {
-    localSettings.value.cameraZoomRatio = lens.zoom
-    cameraZoom.value = 1.0
-  }
+  const targetZoom = Number(lens.zoom) > 0 ? Number(lens.zoom) : 1.0
+  localSettings.value.cameraZoomRatio = targetZoom
+  cameraZoom.value = 1.0
   saveCameraPreferences(currentId.value, {
     cameraFacing: lens.facing,
     cameraId: lens.id || '',
-    cameraZoomRatio: lens.zoom || 1.0
+    cameraZoomRatio: targetZoom
   })
   reconnectStream(`正在切换至 [${lens.shortName || lens.name}]...`)
 }
@@ -1188,13 +1342,16 @@ function toggleCameraLowPower() {
 }
 
 function reconnectStream(msg = '正在切换参数并重新建连...') {
+  if (msg) {
+    triggerQuickTextToast(msg)
+  }
   if (isCameraMode.value) {
     saveCameraPreferences(currentId.value, {
       cameraFacing: localSettings.value.cameraFacing,
       cameraId: localSettings.value.cameraId,
       cameraSize: localSettings.value.cameraSize,
       cameraFps: localSettings.value.cameraFps,
-      cameraZoomRatio: localSettings.value.cameraZoomRatio || 1.0,
+      cameraZoomRatio: Number(localSettings.value.cameraZoomRatio) > 0 ? Number(localSettings.value.cameraZoomRatio) : 1.0,
       cameraOrientation: localSettings.value.cameraOrientation || 'auto',
       cameraLowPower: Boolean(localSettings.value.cameraLowPower),
       audioSource: localSettings.value.audioSource
@@ -1916,40 +2073,53 @@ function setupWebRTC() {
 
   // 命令结果在共用组件 DeviceConsole 内处理，此处无需配置
 
-  // 设置剪切板回调
+let manualGetClipboardRequested = false
+let manualGetClipboardTimer = null
+
+// 设置剪切板回调
   webrtc.onClipboard((event) => {
     // 多机直连隔离：非焦点设备剪切板变动不冲刷覆盖宿主机本地剪切板
     if (!effectiveFocused.value) return
 
-    const text = event?.text || ''
+    const text = typeof event === 'string' ? event : (event?.text || '')
     if (!text) {
       return
     }
-    const source = event.source || CLIPBOARD_SOURCE_DEVICE
+    const isManual = manualGetClipboardRequested
+    manualGetClipboardRequested = false
+
+    const source = event?.source || CLIPBOARD_SOURCE_DEVICE
     const echo = consumeClipboardWrite(text)
-    if (source === CLIPBOARD_SOURCE_KEYBOARD || echo?.suppressBroadcast) {
-      debugLog('[Clipboard] Ignored keyboard/temporary clipboard echo')
-      return
+    if (!isManual) {
+      if (source === CLIPBOARD_SOURCE_KEYBOARD || echo?.suppressBroadcast) {
+        debugLog('[Clipboard] Ignored keyboard/temporary clipboard echo')
+        return
+      }
+      if (echo) {
+        lastDeviceClipboardText = text
+        debugLog('[Clipboard] Ignored local clipboard echo from device')
+        return
+      }
+      if (text === lastDeviceClipboardText && text === lastLocalClipboardText) {
+        return
+      }
     }
-    if (echo) {
-      lastDeviceClipboardText = text
-      debugLog('[Clipboard] Ignored local clipboard echo from device')
-      return
-    }
-    if (text === lastDeviceClipboardText) {
-      return
-    }
+
     lastDeviceClipboardText = text
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        lastLocalClipboardText = text
-        debugLog('[Clipboard] Auto synced from device')
-      }).catch(err => {
-        debugWarn('[Clipboard] Failed to auto sync to local:', err)
-      })
-    } else {
-      debugWarn('[Clipboard] Browser writeText API is unavailable')
-    }
+    copyTextToLocal(text).then(ok => {
+      lastLocalClipboardText = text
+      debugLog('[Clipboard] Auto synced from device, ok:', ok)
+      if (ok) {
+        triggerQuickTextToast(t('deviceClient.clipboardSyncedToast'))
+      } else if (isManual) {
+        prompt(t('deviceClient.copyManualPrompt'), text)
+      }
+    }).catch(err => {
+      debugWarn('[Clipboard] Failed to auto sync to local:', err)
+      if (isManual) {
+        prompt(t('deviceClient.copyManualPrompt'), text)
+      }
+    })
   })
 
   // 启动视频流统计轮询
@@ -2108,33 +2278,75 @@ onUnmounted(() => {
   window.removeEventListener('focus', onWindowFocus)
 })
 
+async function copyTextToLocal(text) {
+  if (!text) return false
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch (e) {
+      // 降级使用 textarea + execCommand
+    }
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const success = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return success
+  } catch (err) {
+    debugWarn('[Clipboard] copyTextToLocal fallback failed:', err)
+    return false
+  }
+}
+
 function sendClipboardToDevice() {
   if (navigator.clipboard && navigator.clipboard.readText) {
     navigator.clipboard.readText().then(text => {
       if (text) {
         const ok = setDeviceClipboard(text, { paste: true, source: CLIPBOARD_SOURCE_LOCAL })
-        if (ok) debugLog('[Clipboard] Sent to device')
+        if (ok) {
+          debugLog('[Clipboard] Sent to device')
+          triggerQuickTextToast(t('deviceClient.clipboardSentToast'))
+        }
       } else {
         alert(t('deviceClient.clipboardEmpty'))
       }
     }).catch(err => {
       const text = prompt(t('deviceClient.enterClipboardText'), lastLocalClipboardText)
       if (text) {
-        setDeviceClipboard(text, { paste: true, source: CLIPBOARD_SOURCE_LOCAL })
+        const ok = setDeviceClipboard(text, { paste: true, source: CLIPBOARD_SOURCE_LOCAL })
+        if (ok) {
+          triggerQuickTextToast(t('deviceClient.clipboardSentToast'))
+        }
       }
     })
   } else {
     const text = prompt(t('deviceClient.enterClipboardText'), lastLocalClipboardText)
     if (text) {
-      setDeviceClipboard(text, { paste: true, source: CLIPBOARD_SOURCE_LOCAL })
+      const ok = setDeviceClipboard(text, { paste: true, source: CLIPBOARD_SOURCE_LOCAL })
+      if (ok) {
+        triggerQuickTextToast(t('deviceClient.clipboardSentToast'))
+      }
     }
   }
 }
 
 function getClipboardFromDevice() {
+  manualGetClipboardRequested = true
+  if (manualGetClipboardTimer) clearTimeout(manualGetClipboardTimer)
+  manualGetClipboardTimer = setTimeout(() => {
+    manualGetClipboardRequested = false
+  }, 3000)
+
   const ok = webrtc.getClipboard()
   if (ok) {
     debugLog('[Clipboard] Requested clipboard from device')
+    triggerQuickTextToast(t('deviceClient.clipboardRequestedToast'))
   } else {
     debugWarn('[Clipboard] Failed to request clipboard from device')
   }
@@ -3675,9 +3887,9 @@ function onTouchEnd(e) {
   position: absolute;
   right: 74px;
   top: 140px;
-  width: 250px;
+  width: 300px;
   max-width: calc(100% - 80px);
-  max-height: 420px;
+  max-height: 520px;
   background: rgba(18, 18, 30, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -3752,12 +3964,145 @@ function onTouchEnd(e) {
   background: rgba(88, 166, 255, 0.15);
 }
 
+/* 即时输入发送区 */
+.popover-input-section {
+  padding: 10px 12px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.popover-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f0f6fc;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.popover-textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.popover-textarea::placeholder {
+  color: #6e7681;
+  font-size: 11px;
+}
+
+.popover-input-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popover-auto-enter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #8b949e;
+  cursor: pointer;
+  user-select: none;
+}
+
+.popover-auto-enter-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  accent-color: #38bdf8;
+}
+
+.popover-auto-enter-label:hover {
+  color: #c9d1d9;
+}
+
+.popover-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popover-save-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #8b949e;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.popover-save-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f0f6fc;
+}
+
+.popover-send-btn {
+  background: #1f6feb;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.12s ease;
+}
+
+.popover-send-btn:hover:not(:disabled) {
+  background: #388bfd;
+  box-shadow: 0 2px 8px rgba(31, 111, 235, 0.4);
+}
+
+.popover-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #21262d;
+  color: #8b949e;
+}
+
+.send-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.popover-section-divider {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px 2px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6e7681;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .popover-items-list {
   display: flex;
   flex-direction: column;
   padding: 4px;
   overflow-y: auto;
-  max-height: 260px;
+  max-height: 220px;
 }
 
 .popover-item {
@@ -3841,6 +4186,43 @@ function onTouchEnd(e) {
 .mobile-quick-text-card {
   max-width: 360px;
   width: 90%;
+}
+
+.mobile-qt-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.mobile-qt-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #f0f6fc;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.mobile-qt-textarea:focus {
+  border-color: #38bdf8;
+}
+
+.mobile-qt-input-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .mobile-quick-text-list {

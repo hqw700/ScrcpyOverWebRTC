@@ -172,12 +172,18 @@ export const useDeviceStore = defineStore('devices', () => {
     })
 
     // 2. 过滤在线列表，只保留当前活跃的设备，并更新 info
+    const token = localStorage.getItem('auth_token') || ''
     const newOnlineList = devices.value.filter(d => activeIds.includes(d.id)).map(d => {
       const activeDev = activeDevices.find(ad => ad.id === d.id)
+      let snap = d.snapshot
+      if (activeDev?.snapshot_hash && (!d.snapshot || activeDev.snapshot_hash !== lastSnapshotHash.get(d.id))) {
+        snap = `/snapshots/${encodeURIComponent(d.id)}.jpg?v=${encodeURIComponent(activeDev.snapshot_hash)}&token=${encodeURIComponent(token)}`
+      }
       return {
         ...d,
         info: activeDev?.info || d.info,
         screenState: activeDev?.screen_state || d.screenState || 'on',
+        snapshot: snap,
         firstSeen: activeDev?.firstSeen || d.firstSeen,
         clientCount: activeDev?.clientCount ?? d.clientCount ?? 0,
         clients: activeDev?.clients ?? d.clients ?? [],
@@ -192,6 +198,10 @@ export const useDeviceStore = defineStore('devices', () => {
       const id = devData.id
       const existingOnline = newOnlineList.find(d => d.id === id)
       if (!existingOnline) {
+        let initialSnapshot = null
+        if (devData.snapshot_hash) {
+          initialSnapshot = `/snapshots/${encodeURIComponent(id)}.jpg?v=${encodeURIComponent(devData.snapshot_hash)}&token=${encodeURIComponent(token)}`
+        }
         const existingOfflineIdx = offlineDevices.value.findIndex(d => d.id === id)
         if (existingOfflineIdx > -1) {
           // 从离线列表移除并移回在线列表
@@ -201,6 +211,7 @@ export const useDeviceStore = defineStore('devices', () => {
             info: devData.info,
             status: 'online',
             screenState: devData.screen_state || 'on',
+            snapshot: initialSnapshot || resurrected.snapshot || null,
             firstSeen: devData.firstSeen || resurrected.firstSeen,
             lastSeen: new Date().toISOString(),
             clientCount: devData.clientCount ?? resurrected.clientCount ?? 0,
@@ -215,7 +226,7 @@ export const useDeviceStore = defineStore('devices', () => {
             info: devData.info,
             status: 'online',
             screenState: devData.screen_state || 'on',
-            snapshot: null,
+            snapshot: initialSnapshot,
             firstSeen: devData.firstSeen || null,
             lastSeen: new Date().toISOString(),
             clientCount: devData.clientCount ?? 0,
@@ -281,6 +292,8 @@ export const useDeviceStore = defineStore('devices', () => {
             id: item.device_id,
             info: item.device_info,
             online: item.online !== false,
+            screen_state: item.screen_state || 'on',
+            snapshot_hash: item.snapshot_hash || null,
             firstSeen: item.first_seen || null,
             lastSeen: item.last_seen || null,
             clientCount: item.client_count || 0,
@@ -335,6 +348,8 @@ export const useDeviceStore = defineStore('devices', () => {
         id: item.device_id,
         info: item.device_info || null,
         online: item.online !== false,
+        screen_state: item.screen_state || 'on',
+        snapshot_hash: item.snapshot_hash || null,
         firstSeen: item.first_seen || null,
         lastSeen: item.last_seen || null,
         clientCount: item.client_count || 0,
@@ -837,6 +852,8 @@ export const useDeviceStore = defineStore('devices', () => {
               stopTrackingTask()
             }
           }
+        } else if (msg.message_type === 'device_clipboard') {
+          notifyDeviceClipboard(msg.device_id, msg)
         } else if (msg.message_type === 'device_msg' && msg.payload?.type === 'command_result') {
           commandResultListeners.forEach(cb => {
             try {
@@ -1249,6 +1266,25 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  const deviceClipboardListeners = new Set()
+
+  function onDeviceClipboard(callback) {
+    deviceClipboardListeners.add(callback)
+    return () => {
+      deviceClipboardListeners.delete(callback)
+    }
+  }
+
+  function notifyDeviceClipboard(deviceId, event) {
+    deviceClipboardListeners.forEach(cb => {
+      try {
+        cb(deviceId, event)
+      } catch (e) {
+        console.error('[Store] onDeviceClipboard listener error:', e)
+      }
+    })
+  }
+
   function sendCommand(deviceId, command) {
     const requestId = Math.random().toString(36).substring(7)
     if (globalWs && globalWs.readyState === WebSocket.OPEN) {
@@ -1373,6 +1409,7 @@ export const useDeviceStore = defineStore('devices', () => {
     licenseBadgeTitle,
     licenseBadgeClass,
     sendCommand,
-    onCommandResult
+    onCommandResult,
+    onDeviceClipboard
   }
 })

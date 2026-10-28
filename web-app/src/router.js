@@ -30,6 +30,12 @@ const routes = [
     meta: { adminOnly: true, title: '云端自动化部署' }
   },
   {
+    path: '/pve',
+    name: 'PveOrchestrator',
+    component: () => import('@/views/PveOrchestratorPage.vue'),
+    meta: { adminOnly: true, title: 'PVE 云机编排' }
+  },
+  {
     path: '/monitor',
     name: 'Monitor',
     component: () => import('@/views/Dashboard.vue'),

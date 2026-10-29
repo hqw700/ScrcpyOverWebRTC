@@ -218,3 +218,13 @@ docker run -d \
 * **使用规范与免责声明**：
   1. 官方提供的二进制核心组件（包括二进制服务端、Agent 部署包及 APK 运行环境）仅供**个人学习交流、技术研究与非商业测试**使用。
   2. 请勿将本项目及其衍生版本用于任何非法用途、未经授权的自动化黑产风控规避或商业化转售服务。开发者不对使用者的任何违规行为承担法律责任。
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=hqw700%2Fscrcpyoverwebrtc&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&legend=top-left" />
+ </picture>
+</a>

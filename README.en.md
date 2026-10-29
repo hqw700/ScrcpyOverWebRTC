@@ -277,3 +277,13 @@ The frontend source code is fully open-source and located in the `web-app` direc
 * **Terms of Use & Disclaimer**:
   1. Official pre-compiled binary components (including binary server, Agent deployment packages, and APK runtime) are provided strictly for **personal learning, technical research, and non-commercial testing** purposes.
   2. Do NOT use this project or its derived versions for illegal activities, unauthorized automated risk-control evasion, or commercial resale services. The developers hold no legal liability for any non-compliant actions by users.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=hqw700%2Fscrcpyoverwebrtc&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hqw700/scrcpyoverwebrtc&type=date&legend=top-left" />
+ </picture>
+</a>

@@ -500,7 +500,7 @@
                 <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
                 <line x1="12" y1="18" x2="12.01" y2="18"></line>
               </svg>
-              <span class="btn-text">{{ $t('topBar.controlling', { name: activeDevice?.info?.model || deviceStore.activeDeviceId }) }}</span>
+              <span class="btn-text">{{ $t('topBar.controlling', { name: activeDevice?.displayName || activeDevice?.info?.model || deviceStore.activeDeviceId }) }}</span>
             </button>
 
             <!-- 群控模式开关按钮 (管理员 或 拥有2台以上设备的用户) -->
@@ -725,7 +725,7 @@
           <header class="panel-top-bar" @mousedown="startDragging" v-if="!isMobile">
             <div class="vm-info">
               <span class="status-dot" :class="{ online: activeDevice?.status === 'online', offline: activeDevice?.status !== 'online' }"></span>
-              <span class="vm-id">{{ activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
+              <span class="vm-id">{{ activeDevice?.displayName || activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
             </div>
             <div class="panel-tools" @mousedown.stop>
               <!-- 快捷切为多机模式 -->

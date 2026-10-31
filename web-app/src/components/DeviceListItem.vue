@@ -33,7 +33,7 @@
         <div v-if="showPopover && device.snapshot" class="thumb-popover" @click.stop>
           <img :src="device.snapshot" class="popover-img" />
           <div class="popover-info">
-            <span class="popover-id">{{ device.id }}</span>
+            <span class="popover-id" :title="device.id">{{ device.displayName || device.id }}</span>
             <span class="popover-status" :class="statusClass">{{ statusText }}</span>
           </div>
         </div>
@@ -43,7 +43,7 @@
     <!-- 列 3：设备标识与型号 -->
     <div class="cell col-device">
       <div class="device-primary">
-        <span class="device-id-text" :title="device.id">{{ device.id }}</span>
+        <span class="device-id-text" :title="`${device.displayName || device.id} · ${device.id}`">{{ device.displayName || device.id }}</span>
         <span v-if="isCameraMode" class="item-camera-mode-badge" :title="$t('deviceCard.cameraModeTitle')">{{ $t('deviceCard.cameraMonitoring') }}</span>
         <span v-else-if="isWebSocketMode" class="item-ws-mode-badge" :title="$t('deviceCard.wsModeTitle')">{{ $t('deviceCard.wsStreaming') }}</span>
       </div>

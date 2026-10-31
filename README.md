@@ -9,7 +9,8 @@
 中文 | [English](README.en.md)
 
 📖 **官方技术文档与保姆级部署指南**：👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
-📱 **官方原生 Android 控制端 App**：👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)（支持手机端直接控制多台云手机、P2P文件分发、终端运维与设备开租）
+📱 **官方原生 Android 控制端 App**：👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)（基于 Kotlin + Compose + WebRTC 全新重构开源，支持多机直控、P2P文件分发与终端运维）  
+☁️ **PVE 原生云手机运行镜像**：👉 [redroid-pve](https://github.com/hqw700/redroid-pve)（支持 Proxmox VE 8.x 原生非特权 LXC 容器、秒级 Thin-Clone 开通与 GPU 硬件满血直通）
 
 基于 WebRTC 和 Scrcpy 的高性能、低延迟云手机解决方案，无需客户端，可以通过网页直接连接。
 采用 **Fat Agent (直连模式)** 架构，结合 **硬件级 PTS 透传** 技术，实现媲美原生 Scrcpy 的丝滑体验。
@@ -23,13 +24,16 @@
 
 - **极致流畅与超低延迟**: 零拷贝裸流解析 + 硬件级 PTS 时间戳透传，提供 WebCodecs 锁相显存直通硬件渲染（延迟对标原生 Scrcpy）与标准 HTML5 视频双引擎。
 - **免客户端浏览器直连**: 无需在控制端安装任何 App、驱动或投屏软件，任何现代浏览器（PC / Mac / iOS / Android）即开即控。
+- **全新重构的 Android 原生 App (v0.4.2)**: 官方手机客户端基于 Kotlin + Jetpack Compose + WebRTC 全面重构并独立开源（[WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)），提供原生交互、极低延迟音视频直控与 Root/Shizuku 脱机自启保活。
+- **PVE 原生 LXC 云手机调度编排 (v0.4.2)**: 深度集成 Proxmox VE 8.x，结合开源 [redroid-pve](https://github.com/hqw700/redroid-pve) 原生容器镜像，实现非特权模式 (`unprivileged: 1`) 满血运行、Thin-Clone 差异指针秒级开通、Intel/AMD GPU 硬件满血直通、2 秒出厂快照瞬时回滚与 Web 交互终端直连。
+- **快捷文本即时输入与短语库 (v0.4.2)**: 侧边栏浮层新增即时文本输入框，输入文字直接落屏发送至手机，支持 Enter 发送与自动追加回车；支持一键「+ 存为短语」同步至常用话术库。
 - **公网 P2P 打洞与多通道穿透**: 原生支持 IPv6 直连穿透 CGNAT、WebRTC P2P 智能打洞与 TURN 自动中继；同时提供 100% 穿透企业防火墙的 WebSocket TCP 投屏直控模式。
 - **高频大盘与批量群控矩阵**: 支持数十台设备高帧率同屏监控与多机并发直控（平铺/标签/浮窗布局）；支持按标签一键同步触控手势、批量按键宏与文本广播。
-- **全能交互与输入系统**: 支持多指触控、物理按键模拟、按键映射 (Keymapping 键盘/摇杆绑定)、静默双向剪贴板同步、IME 汉字输入 100% 落屏与 WebADB 网页终端。
-- **息屏推流与安防监控**: 支持手机息屏状态下硬件级摄像头直推与环境音监听；专属监控控制台支持物理多摄换挡、PTZ 数字变焦、无损抓拍与即时录像。
+- **全能交互与输入系统**: 支持多指触控、物理按键模拟、按键映射 (Keymapping 键盘/摇杆绑定)、静默双向剪贴板同步（Android 12+ 动态安全降权防系统拦截）、IME 汉字输入 100% 落屏与 WebADB 网页终端。
+- **息屏推流与安防监控**: 支持手机息屏状态下硬件级摄像头直推与环境音监听；专属监控控制台支持物理多摄焦段热换挡、PTZ 数字变焦、无损抓拍与即时录像。
 - **免密分享与多租户权限**: 支持多账号与租户隔离、设备独占租约（Lease）精准管控；支持一键生成移动端深度适配的沉浸式免密分享链接。
 - **免驱动一键部署与开机自启**: 支持网页端 WebUSB / WebADB 免驱一键初始化部署；提供 Magisk 极速模块开机自启；支持 Android 客户端 Root 与 Shizuku (免 Root ADB) 双引擎脱机自启保活。
-- **全生态设备兼容**: 广泛兼容 Android 物理真机 (Root / 免 Root)、Redroid 云手机虚拟化容器、安卓模拟器及各类商业云机。
+- **全生态设备兼容**: 广泛兼容 Android 物理真机 (Root / 免 Root)、PVE 原生 LXC 云手机容器、Redroid Docker 虚拟化、安卓模拟器及各类商业云机。
 - **全站深度国际化 (i18n)**: 管理大盘、设备直控、安防监控、文件中心与终端工具 100% 支持中英文（English / 简体中文）无缝切换与本地记忆。
 
 ## 2. 快速开始
@@ -128,15 +132,22 @@ docker run -d \
     *   `-debug`：输出详细调试日志
 *   **数据持久化**: 所有用户数据保存在解压目录的 `./data` 下，升级时替换二进制与 `assets` 即可，请勿覆盖 `data` 目录。
 
+### 2.4 PVE 原生 LXC 云手机编排调度 (高密度集群首选)
+针对企业高密度与算力服务器场景，系统深度支持 **Proxmox VE (PVE 8.x)** 原生 LXC 容器调度编排：
+*   **非特权容器满血运行 (`unprivileged: 1`)**：彻底消除 Docker-in-LXC 嵌套带来的文件系统层叠与特权逃逸风险，兼顾安全隔离与物理裸机级 I/O 图形性能。
+*   **开源官方运行环境与镜像**：配套开源 [redroid-pve](https://github.com/hqw700/redroid-pve) 基础运行环境与 Android 13 模板，支持 Intel / AMD GPU 满血硬件直通与 BinderFS 自动化预检。
+*   **0.8s 瞬时交付与 2 秒无痕恢复**：利用 LVM-Thin / ZFS 差异指针实现极速开通；容器首次创建自动建立 `snap_init` 出厂基线快照，支持 **2 秒秒级出厂回滚**与交互式 Web 终端直连。
+
 ---
 
 ## 3. 添加手机：部署 Android Agent (入网)
 
-服务端拉起后，访问网页管理后台进入 **“部署新设备”** 页面，页面会根据当前服务地址动态生成接入指令与资源包下载（Docker 用户也可以通过 `docker logs cp-aio` 查看接入说明）。支持以下三种部署方式：
+服务端拉起后，访问网页管理后台进入 **“部署新设备”** 页面，页面会根据当前服务地址动态生成接入指令与资源包下载（Docker 用户也可以通过 `docker logs cp-aio` 查看接入说明）。支持以下几种部署方式：
 
+*   **PVE 集群一键纳管**：通过管理台 PVE 编排抽屉秒级开通原生云手机，自动挂载 Agent
 *   **电脑 ADB 一键部署**：无需 Root，适合快速体验与临时调试
 *   **Magisk / KSU 刷机模块**：需要 Root，作为系统服务开机自启，适合长期运行
-*   **App 内运行 Agent**：无需电脑，支持 Root 与 Shizuku (ADB) 两种权限模式
+*   **全新 Android App 客户端**：无需电脑，支持 Root 与 Shizuku (ADB) 两种权限模式
 
 ### 3.1 电脑 ADB 一键部署 (无需 Root)
 1. 访问网页管理后台，进入 **“部署新设备”** 页面。
@@ -164,10 +175,10 @@ docker run -d \
    * **方式 C (编辑配置文件)**：编辑 `/data/adb/modules/cloudphone-agent/config.conf`，保存后在 Magisk 模块界面 **连续点击 2 次 Action 按钮** 热重载生效。
 5. **验证状态**：`adb shell "su -c cpctl status"`，或查看运行日志 `/data/local/tmp/cloudphone-agent.log`。
 
-### 3.3 App 内运行 Agent (Root / Shizuku 双模式)
-不想依赖电脑时，可以直接在手机上安装 CloudPhone App，通过 App 内置的 **“被控端模式”** 拉起 Agent。App 已内置对应架构的 Agent 二进制与投屏服务，无需向手机推送任何文件。
+### 3.3 全新重构的 Android App 客户端 (Root / Shizuku 双模式)
+不想依赖电脑时，可以直接在手机上安装全新官方原生客户端 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)，通过内置的 **“被控端模式”** 拉起 Agent。App 已内置对应架构的 Agent 二进制与投屏服务，无需向手机推送任何文件。
 
-1. 从 [Releases](https://github.com/hqw700/ScrcpyOverWebRTC/releases) 页面下载并安装 CloudPhone App (APK)。
+1. 前往 [WebrtcPhone-Android Releases](https://github.com/hqw700/WebrtcPhone-Android/releases) 页面下载并安装最新版 APK。
 2. 打开 App，在登录页或设备列表页点击 **“进入被控端模式”**。
 3. **选择运行引擎**（二选一）：
    * **Root 模式**：已 Root 设备直接通过 `su` 提权运行（支持 Magisk / KernelSU / APatch）。

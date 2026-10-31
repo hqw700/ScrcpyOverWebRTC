@@ -3,7 +3,7 @@ export function authHeaders(extra = {}) {
   const token = localStorage.getItem('auth_token') || ''
   return {
     ...extra,
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 }
 
@@ -15,9 +15,14 @@ export async function readError(res, fallback) {
       try {
         const data = JSON.parse(text)
         if (data && data.error) return data.error
-      } catch (e) { /* 非 JSON，按纯文本返回 */ }
+        if (data && data.message) return data.message
+      } catch (e) {
+        /* 非 JSON，按纯文本返回 */
+      }
       return text
     }
-  } catch (e) { /* ignore */ }
-  return fallback || ('HTTP ' + res.status)
+  } catch (e) {
+    /* ignore */
+  }
+  return fallback || 'HTTP ' + res.status
 }

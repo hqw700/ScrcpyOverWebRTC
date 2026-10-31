@@ -47,7 +47,7 @@
         <div class="window-titlebar" @mousedown="startDrag(id, $event)">
           <div class="titlebar-left">
             <span class="dot-status" :class="{ online: getDeviceStatus(id) === 'online', offline: getDeviceStatus(id) !== 'online' }"></span>
-            <span class="window-title" :title="id">{{ id }}</span>
+            <span class="window-title" :title="id">{{ deviceStore.getDeviceDisplayName(id) }}</span>
             <span v-if="getDeviceModel(id)" class="device-model-badge" :title="getDeviceModel(id)">{{ getDeviceModel(id) }}</span>
           </div>
           <div class="titlebar-actions" @mousedown.stop @click.stop>
@@ -95,7 +95,7 @@
         class="dock-item"
         @click="toggleMinimize(id)"
       >
-        📱 {{ id }}
+        📱 {{ deviceStore.getDeviceDisplayName(id) }}
       </div>
     </div>
   </div>

@@ -24,7 +24,7 @@
             :title="id"
           >
             <span class="pill-dot"></span>
-            <span class="pill-name">{{ id }}</span>
+            <span class="pill-name">{{ deviceStore.getDeviceDisplayName(id) }}</span>
             <span class="pill-close" @click.stop="deviceStore.closeDevice(id)" :title="$t('common.close')">×</span>
           </button>
 
@@ -44,7 +44,7 @@
                   @click="addDeviceToMulti(dev.id)"
                 >
                   <span class="dev-dot online"></span>
-                  <span class="dev-name">{{ dev.id }}</span>
+                  <span class="dev-name">{{ dev.displayName || dev.id }}</span>
                   <span class="dev-model" v-if="dev.info?.model">({{ dev.info.model }})</span>
                 </div>
                 <div v-if="availableDevices.length === 0" class="menu-empty">

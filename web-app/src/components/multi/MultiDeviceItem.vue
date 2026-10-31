@@ -13,7 +13,7 @@
     <header class="item-header" v-if="showHeader" @mousedown="onFocusThis">
       <div class="header-left">
         <span class="status-dot" :class="{ online: isOnline, offline: !isOnline }"></span>
-        <span class="device-id-title" :title="deviceId">{{ deviceId }}</span>
+        <span class="device-id-title" :title="deviceId">{{ currentDevice?.displayName || deviceId }}</span>
         <span v-if="deviceModel" class="device-model-badge" :title="deviceModel">{{ deviceModel }}</span>
       </div>
 

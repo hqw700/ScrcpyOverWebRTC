@@ -8,7 +8,7 @@
         <div v-if="isCameraMode" class="camera-osd-bar">
           <div class="osd-left">
             <span class="osd-badge live-dot">{{ $t('deviceClient.liveSurveillance') }}</span>
-            <span class="osd-item osd-title" :title="currentId">{{ currentId }}</span>
+            <span class="osd-item osd-title" :title="currentId">{{ currentDevice?.displayName || currentId }}</span>
             <span class="osd-divider">|</span>
             <span class="osd-item osd-lens">📷 {{ currentLensName }}</span>
             <span class="osd-divider">|</span>

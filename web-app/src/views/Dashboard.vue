@@ -84,7 +84,7 @@
           @click="toggleDeviceSelection(dev.id)"
         >
           <div class="tile-header">
-            <span class="tile-id" :title="dev.id">{{ dev.id }}</span>
+            <span class="tile-id" :title="dev.id">{{ dev.displayName || dev.id }}</span>
             <span class="tile-checkbox" v-if="selectedDeviceIds.has(dev.id)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -105,7 +105,7 @@
           @click="showOfflineDetail(dev)"
         >
           <div class="tile-header">
-            <span class="tile-id" :title="dev.id">{{ dev.id }}</span>
+            <span class="tile-id" :title="dev.id">{{ dev.displayName || dev.id }}</span>
             <span class="tile-offline-badge">{{ $t('common.offline') || $t('console.offline') }}</span>
           </div>
           <div class="tile-body">

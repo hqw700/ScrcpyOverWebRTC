@@ -1077,6 +1077,7 @@ const filteredDevices = computed(() => {
 
     const searchable = [
       device.id,
+      device.displayName,
       device.info?.model,
       ...deviceTags.map(tag => tag.name)
     ].filter(Boolean).join(' ').toLowerCase()
@@ -1105,6 +1106,7 @@ const filteredOfflineDevices = computed(() => {
 
     const searchable = [
       device.id,
+      device.displayName,
       device.info?.model,
       ...deviceTags.map(tag => tag.name)
     ].filter(Boolean).join(' ').toLowerCase()

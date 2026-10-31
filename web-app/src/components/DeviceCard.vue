@@ -114,7 +114,7 @@
       <div class="card-bottom-bar" @click.stop>
         <div class="bottom-left-info">
           <span class="status-dot" :class="statusClass"></span>
-          <span class="device-name" :title="device.id">{{ device.id }}</span>
+          <span class="device-name" :title="`${device.displayName || device.id} · ${device.id}`">{{ device.displayName || device.id }}</span>
           <span v-if="isCameraMode" class="camera-mode-badge" :title="$t('deviceCard.cameraModeTitle')">{{ $t('deviceCard.cameraMonitoring') }}</span>
           <span v-else-if="isWebSocketMode" class="ws-mode-badge" :title="$t('deviceCard.wsModeTitle')">{{ $t('deviceCard.wsStreaming') }}</span>
           <span v-if="device.screenState === 'off' && device.status === 'online'" class="screen-off-pill">🌙 {{ $t('deviceCard.screenOff') }}</span>

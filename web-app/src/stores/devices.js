@@ -123,6 +123,7 @@ export const useDeviceStore = defineStore('devices', () => {
         const offlineDev = {
           ...d,
           info: serverRec?.info || d.info,
+          displayName: serverRec ? (serverRec.displayName || '') : (d.displayName || ''),
           status: 'offline',
           firstSeen: serverRec?.firstSeen || d.firstSeen,
           lastSeen: serverRec?.lastSeen || d.lastSeen,
@@ -150,6 +151,7 @@ export const useDeviceStore = defineStore('devices', () => {
         offlineDevices.value[idx] = {
           ...old,
           info: sd.info || old.info,
+          displayName: sd.displayName || '',
           firstSeen: sd.firstSeen || old.firstSeen,
           lastSeen: sd.lastSeen || old.lastSeen,
           // sd 来自服务端列表，lease 显式为 null 时也要生效（清除旧租约）
@@ -159,6 +161,7 @@ export const useDeviceStore = defineStore('devices', () => {
       } else {
         offlineDevices.value.push({
           id: sd.id,
+          displayName: sd.displayName || '',
           info: sd.info || null,
           status: 'offline',
           snapshot: null,
@@ -182,6 +185,7 @@ export const useDeviceStore = defineStore('devices', () => {
       return {
         ...d,
         info: activeDev?.info || d.info,
+        displayName: activeDev?.displayName || '',
         screenState: activeDev?.screen_state || d.screenState || 'on',
         snapshot: snap,
         firstSeen: activeDev?.firstSeen || d.firstSeen,
@@ -209,6 +213,7 @@ export const useDeviceStore = defineStore('devices', () => {
           newOnlineList.push({
             ...resurrected,
             info: devData.info,
+            displayName: devData.displayName || '',
             status: 'online',
             screenState: devData.screen_state || 'on',
             snapshot: initialSnapshot || resurrected.snapshot || null,
@@ -224,6 +229,7 @@ export const useDeviceStore = defineStore('devices', () => {
           newOnlineList.push({
             id,
             info: devData.info,
+            displayName: devData.displayName || '',
             status: 'online',
             screenState: devData.screen_state || 'on',
             snapshot: initialSnapshot,
@@ -286,10 +292,11 @@ export const useDeviceStore = defineStore('devices', () => {
       if (Array.isArray(data)) {
         const deviceList = data.map(item => {
           if (typeof item === 'string') {
-            return { id: item, info: null }
+            return { id: item, displayName: '', info: null }
           }
           return {
             id: item.device_id,
+            displayName: item.display_name || '',
             info: item.device_info,
             online: item.online !== false,
             screen_state: item.screen_state || 'on',
@@ -342,10 +349,11 @@ export const useDeviceStore = defineStore('devices', () => {
     if (!Array.isArray(idList)) return
     const deviceList = idList.map(item => {
       if (typeof item === 'string') {
-        return { id: item, info: null }
+        return { id: item, displayName: '', info: null }
       }
       return {
         id: item.device_id,
+        displayName: item.display_name || '',
         info: item.device_info || null,
         online: item.online !== false,
         screen_state: item.screen_state || 'on',
@@ -507,6 +515,11 @@ export const useDeviceStore = defineStore('devices', () => {
   function setDeviceMode(deviceId, mode = 'display') {
     if (!deviceId) return
     deviceConnectionModes.value[deviceId] = mode
+  }
+
+  function getDeviceDisplayName(deviceId) {
+    const device = devices.value.find(d => d.id === deviceId) || offlineDevices.value.find(d => d.id === deviceId)
+    return device?.displayName || deviceId
   }
 
   function getDeviceMode(deviceId) {
@@ -1354,6 +1367,7 @@ export const useDeviceStore = defineStore('devices', () => {
     openDeviceAsWebSocket,
     setDeviceMode,
     getDeviceMode,
+    getDeviceDisplayName,
     setActiveWebRTC,
     clearActiveDevice,
     openGlobalConsole,

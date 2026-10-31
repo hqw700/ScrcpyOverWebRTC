@@ -9,7 +9,8 @@
 [中文](README.md) | English
 
 📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
-📱 **Official Native Android Client App**: 👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) (Mobile controller for cloud phones, P2P file relay, remote terminal & multi-device leases)
+📱 **Official Native Android Client App**: 👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) (Fully refactored with Kotlin + Compose + WebRTC; direct multi-device control, P2P file relay & remote terminal)  
+☁️ **PVE Native Cloud Phone Image & Runtime**: 👉 [redroid-pve](https://github.com/hqw700/redroid-pve) (Proxmox VE 8.x native unprivileged LXC container, sub-second Thin-Clone & GPU hardware passthrough)
 
 A high-performance, low-latency cloud phone/cloud desktop solution based on WebRTC and Scrcpy. No client required; you can connect directly through a web browser.
 It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hardware-level PTS Passthrough** technology, to achieve a silky-smooth experience comparable to native Scrcpy.
@@ -23,13 +24,16 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 - **Ultra-Low Latency & High Performance**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring WebCodecs phase-locked hardware rendering (matching native Scrcpy latency) and standard HTML5 video engines.
 - **Clientless Browser-Native Access**: No client apps, drivers, or plugins required on the control side; access and control instantly through any modern web browser (PC / Mac / iOS / Android).
+- **Brand-New Refactored Native Android Client (v0.4.2)**: Official mobile app rewritten with Kotlin + Jetpack Compose + WebRTC, independently open-sourced ([WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)), featuring low-latency direct streaming and Root/Shizuku autonomous background keep-alive.
+- **Proxmox VE (PVE) Native LXC Orchestration (v0.4.2)**: Deep integration with PVE 8.x utilizing the open-source [redroid-pve](https://github.com/hqw700/redroid-pve) runtime image. Runs in pure unprivileged mode (`unprivileged: 1`) with sub-second Thin-Clone provisioning, Intel/AMD GPU hardware acceleration, 2-second snapshot factory rollback, and integrated interactive Web terminals.
+- **Quick Text Live Input & Phrase Library (v0.4.2)**: Direct on-screen text typing and injection from the sidebar popover with Enter-to-send and optional trailing Enter injection; supports one-click phrase saving to a custom phrase library.
 - **Public P2P NAT Traversal & Multi-Channel Streaming**: Native IPv6 direct connection bypassing CGNAT, intelligent WebRTC P2P hole punching with TURN relay fallback; plus WebSocket direct control for 100% TCP firewall penetration.
 - **High-Frequency Matrix & Group Fleet Control**: Smooth 60fps live monitoring across dozens of devices simultaneously (Grid, Tabs, and Floating layouts); supports batch touch gestures, keystroke macros, and text broadcast.
-- **Comprehensive Interaction & Input Tools**: Multi-touch, physical key simulation, visual keymapping (keyboard & joystick), silent bidirectional clipboard sync, 100% IME Chinese input passthrough, and web-based WebADB console.
-- **Screen-Off Camera & Surveillance Mode**: Hardware-level screen-off camera streaming with microphone monitoring; dedicated surveillance console featuring multi-lens switching, PTZ digital zoom, lossless snapshots, and instant recording.
+- **Comprehensive Interaction & Input Tools**: Multi-touch, physical key simulation, visual keymapping (keyboard & joystick), silent bidirectional clipboard sync (with Android 12+ dynamic de-escalation against permission blocks), 100% IME Chinese input passthrough, and web-based WebADB console.
+- **Screen-Off Camera & Surveillance Mode**: Hardware-level screen-off camera streaming with microphone monitoring; dedicated surveillance console featuring multi-lens hot-switching, PTZ digital zoom, lossless snapshots, and instant recording.
 - **Guest Share Links & Multi-Tenant Management**: Multi-user tenant isolation with granular exclusive lease controls; one-click generation of mobile-adapted, immersive guest sharing links.
 - **Driverless One-Click Deployment & Auto-Start**: Browser-based WebUSB / WebADB driverless initialization; Magisk module for kernel-level boot auto-start; and Android client supporting Root & Shizuku (root-free ADB) dual engines.
-- **Broad Ecosystem Compatibility**: Fully compatible with physical Android phones (Root / Non-Root), Redroid cloud virtualization containers, emulators, and commercial cloud phones.
+- **Broad Ecosystem Compatibility**: Fully compatible with physical Android phones (Root / Non-Root), PVE native LXC cloud containers, Redroid Docker virtualization, emulators, and commercial cloud phones.
 - **Full-Site Deep i18n & Bilingual Support**: 100% seamless English and Simplified Chinese switching with local persistence across dashboard, direct control, surveillance console, file manager, and terminal tools.
 
 ## 2. Quick Start
@@ -187,15 +191,22 @@ Both Host mode and NAT/Bridge mode accept the following environment variables vi
       buutuu/scrcpy-over-webrtc:latest
     ```
 
+### 2.5 Proxmox VE (PVE) Native LXC Orchestration (Preferred for High-Density Fleets)
+For enterprise high-density clusters and server virtualization, ScrcpyOverWebRTC deeply supports native **Proxmox VE 8.x** LXC orchestration:
+*   **Pure Unprivileged Container (`unprivileged: 1`)**: Completely avoids Docker-in-LXC nesting filesystem stacking and privilege escalation risks, combining strict multi-tenant isolation with bare-metal compute and I/O performance.
+*   **Official Open-Source Runtime Image**: Paired with the open-source [redroid-pve](https://github.com/hqw700/redroid-pve) runtime environment and Android 13 template, providing Intel & AMD GPU hardware acceleration and automatic BinderFS pre-checks.
+*   **Sub-Second Provisioning & 2s Factory Rollback**: Utilizes LVM-Thin / ZFS copy-on-write pointers for **0.8 ~ 1.5s instant provisioning**; automatically generates a `snap_init` baseline snapshot on creation for **2-second clean factory rollbacks** and integrated interactive Web terminals.
+
 ---
 
 ## 3. Deploy Android Agent (Onboarding)
 
-Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). Three deployment methods are supported:
+Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). The following deployment methods are supported:
 
+*   **PVE Cluster Orchestration**: Provision and auto-attach Agents to native cloud phones directly from the web drawer
 *   **One-click ADB deployment from a computer**: no root required; best for quick evaluation and temporary debugging
 *   **Magisk / KSU flashable module**: requires root; runs as a system service with auto-start on boot — best for long-term operation
-*   **Run the Agent inside the App**: no computer required; supports both Root and Shizuku (ADB) privilege modes
+*   **Brand-New Android App Client**: no computer required; supports both Root and Shizuku (ADB) privilege modes
 
 ### 3.1 One-Click ADB Deployment from a Computer (No Root)
 1. Access the web dashboard and enter the **"Deploy New Device"** page.
@@ -223,10 +234,10 @@ Ideal for devices that need to stay enrolled long-term and rejoin automatically 
    * **Method C (edit the config file)**: edit `/data/adb/modules/cloudphone-agent/config.conf`, save it, then **tap the Action button twice in a row** in the Magisk module page to hot-reload.
 5. **Verify**: `adb shell "su -c cpctl status"`, or check the runtime log at `/data/local/tmp/cloudphone-agent.log`.
 
-### 3.3 Run the Agent Inside the App (Root / Shizuku Dual Mode)
-If you'd rather not rely on a computer, install the CloudPhone App on the phone and launch the Agent from its built-in **"Controlled Mode"**. The App bundles the Agent binary and the streaming service for your architecture — no files need to be pushed to the phone.
+### 3.3 Brand-New Refactored Native Android App Client (Root / Shizuku Dual Mode)
+If you'd rather not rely on a computer, install the newly refactored official native client [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) on the phone and launch the Agent from its built-in **"Controlled Mode"**. The App bundles the Agent binary and the streaming service for your architecture — no files need to be pushed to the phone.
 
-1. Download and install the CloudPhone App (APK) from the [Releases](https://github.com/hqw700/ScrcpyOverWebRTC/releases) page.
+1. Download and install the latest APK from the [WebrtcPhone-Android Releases](https://github.com/hqw700/WebrtcPhone-Android/releases) page.
 2. Open the App and tap **"Enter Controlled Mode"** on the login page or the device list page.
 3. **Choose an execution engine** (either one):
    * **Root mode**: on rooted devices, the Agent runs via `su` (supports Magisk / KernelSU / APatch).

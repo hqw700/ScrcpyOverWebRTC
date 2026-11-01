@@ -8,6 +8,9 @@
 
 中文 | [English](README.en.md)
 
+> [!IMPORTANT]
+> **v0.4.3 紧急修复**：已移除早期测试版本遗留的 Agent 默认到期限制。请更新并重新部署设备端 Agent；仅更新服务端无效。[下载修复包](https://webrtc-phone.com/#download) · [旧版本恢复指南](https://webrtc-phone.com/docs/agent-expiration-fix.html)
+
 📖 **官方技术文档与保姆级部署指南**：👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
 📱 **官方原生 Android 控制端 App**：👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)（基于 Kotlin + Compose + WebRTC 全新重构开源，支持多机直控、P2P文件分发与终端运维）  
 ☁️ **PVE 原生云手机运行镜像**：👉 [redroid-pve](https://github.com/hqw700/redroid-pve)（支持 Proxmox VE 8.x 原生非特权 LXC 容器、秒级 Thin-Clone 开通与 GPU 硬件满血直通）
@@ -22,6 +25,7 @@
 
 ## 1. 核心特性
 
+- **Agent 到期紧急修复 (v0.4.3)**：移除默认测试到期日期，修复到期后无法启动或自动退出的问题；请同步更新设备端 Agent。
 - **极致流畅与超低延迟**: 零拷贝裸流解析 + 硬件级 PTS 时间戳透传，提供 WebCodecs 锁相显存直通硬件渲染（延迟对标原生 Scrcpy）与标准 HTML5 视频双引擎。
 - **免客户端浏览器直连**: 无需在控制端安装任何 App、驱动或投屏软件，任何现代浏览器（PC / Mac / iOS / Android）即开即控。
 - **全新重构的 Android 原生 App (v0.4.2)**: 官方手机客户端基于 Kotlin + Jetpack Compose + WebRTC 全面重构并独立开源（[WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)），提供原生交互、极低延迟音视频直控与 Root/Shizuku 脱机自启保活。
@@ -143,18 +147,15 @@ docker run -d \
 ## 3. 添加手机：部署 Android Agent (入网)
 
 > [!IMPORTANT]
-> **关于历史版本 Agent 到期提示与解除说明**：  
-> 由于早先版本的配置设置疏漏，导致历史发布包中的 `cloudphone-agent` 内置了测试到期时间。若您的设备端在启动或运行中打印如下日志并退出：
-> ```text
-> 2026/11/01 00:35:10 [License] 当前版本已于 2026-11-01 到期，请到 https://github.com/buutuubot/cloud-phone 升级
-> ```
-> **当前最新版本已完全去掉 Agent 到期时间限制**。解决方法：
-> 1. **推荐（彻底解决）**：重新获取或升级至最新版本的 Agent 部署包（`agent-deploy.zip` / Magisk 模块 / App 客户端），新版本已永久解除到期限制；
-> 2. **历史版本临时跳过（重要）**：
->    旧版本 Agent 必须传入具体非空日期（传空值 `""` 会被 `run.sh` 脚本或旧版环境变量检测机制过滤忽略）。请将到期时间推迟至未来年份（如 `2099-01-01`）即可正常运行：
->    * **环境变量注入（推荐）**：启动前执行 `export CP_AGENT_EXPIRES_AT="2099-01-01"`
->    * **直接启动命令**：直接运行二进制时追加 `-expires-at "2099-01-01"`
->    * **Magisk 模块**：在 `/data/adb/modules/cloudphone-agent/config.conf` 中追加 `CP_AGENT_EXPIRES_AT="2099-01-01"` 并重启或重载模块
+> **v0.4.3 Agent 到期紧急修复**：由于早期测试版本的疏漏，内置测试到期日期（2026-11-01）未及时移除，导致旧 Agent 无法启动或自动退出。v0.4.3 已移除默认到期限制，对造成的不便深表歉意。
+>
+> **推荐**：更新至 v0.4.3 并重新部署设备端 Agent；Magisk / KernelSU 用户请更新模块并重启设备。仅更新服务端无法解决。
+>
+> **暂时无法升级**：
+> - **旧版 run.sh / run.bat**：将实际启动命令中的 `env GODEBUG=asyncpreemptoff=1` 改为 `env GODEBUG=asyncpreemptoff=1 CP_AGENT_EXPIRES_AT=2099-01-01`，再运行脚本。仅追加 `-expires-at` 参数不会生效。
+> - **Magisk / KernelSU**：在 `/data/adb/modules/cloudphone-agent/config.conf` 中追加 `export CP_AGENT_EXPIRES_AT="2099-01-01"`（必须保留 `export`），执行 `cpctl restart` 或重启设备。
+>
+> [下载 v0.4.3](https://webrtc-phone.com/#download) · [完整恢复指南](https://webrtc-phone.com/docs/agent-expiration-fix.html)
 
 服务端拉起后，访问网页管理后台进入 **“部署新设备”** 页面，页面会根据当前服务地址动态生成接入指令与资源包下载（Docker 用户也可以通过 `docker logs cp-aio` 查看接入说明）。支持以下几种部署方式：
 

@@ -8,6 +8,9 @@
 
 [中文](README.md) | English
 
+> [!IMPORTANT]
+> **v0.4.3 Emergency Hotfix:** Removed the default Agent expiration left in early test versions. Update and redeploy device-side Agents; updating the server alone does not resolve the issue. [Download](https://webrtc-phone.com/#download) · [Recovery guide](https://webrtc-phone.com/docs/en/agent-expiration-fix.html)
+
 📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
 📱 **Official Native Android Client App**: 👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) (Fully refactored with Kotlin + Compose + WebRTC; direct multi-device control, P2P file relay & remote terminal)  
 ☁️ **PVE Native Cloud Phone Image & Runtime**: 👉 [redroid-pve](https://github.com/hqw700/redroid-pve) (Proxmox VE 8.x native unprivileged LXC container, sub-second Thin-Clone & GPU hardware passthrough)
@@ -22,6 +25,7 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
+- **Agent Expiration Hotfix (v0.4.3)**: Removed the default test expiration date, fixing startup failures and automatic exits after expiration. Update device-side Agents as well.
 - **Ultra-Low Latency & High Performance**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring WebCodecs phase-locked hardware rendering (matching native Scrcpy latency) and standard HTML5 video engines.
 - **Clientless Browser-Native Access**: No client apps, drivers, or plugins required on the control side; access and control instantly through any modern web browser (PC / Mac / iOS / Android).
 - **Brand-New Refactored Native Android Client (v0.4.2)**: Official mobile app rewritten with Kotlin + Jetpack Compose + WebRTC, independently open-sourced ([WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)), featuring low-latency direct streaming and Root/Shizuku autonomous background keep-alive.
@@ -202,18 +206,15 @@ For enterprise high-density clusters and server virtualization, ScrcpyOverWebRTC
 ## 3. Deploy Android Agent (Onboarding)
 
 > [!IMPORTANT]
-> **Notice Regarding Historical Agent Expiration & Permanent Removal**:  
-> Due to a previous configuration oversight, certain historical releases of `cloudphone-agent` included a test expiration date. If your device agent outputs the following log and exits:
-> ```text
-> 2026/11/01 00:35:10 [License] 当前版本已于 2026-11-01 到期，请到 https://github.com/buutuubot/cloud-phone 升级
-> ```
-> **The Agent expiration date has now been completely removed**. Resolution options:
-> 1. **Recommended (Permanent Fix)**: Upgrade to the latest Agent deployment package (`agent-deploy.zip`, Magisk module, or App client), where expiration checks are permanently disabled.
-> 2. **Workaround for historical versions (Important)**:
->    Historical Agent builds require a concrete non-empty future date (empty values `""` are stripped by `run.sh` or ignored by legacy environment loaders). Postpone the date to a distant future year (e.g., `2099-01-01`):
->    * **Environment variable injection (Recommended)**: Run `export CP_AGENT_EXPIRES_AT="2099-01-01"` before starting.
->    * **Direct command line**: Append `-expires-at "2099-01-01"` when invoking the binary directly.
->    * **Magisk Module**: Add `CP_AGENT_EXPIRES_AT="2099-01-01"` to `/data/adb/modules/cloudphone-agent/config.conf` and reboot/reload.
+> **v0.4.3 Agent Expiration Hotfix:** Due to an oversight in an early test version, the November 1, 2026 test expiration date was left in place, preventing older Agents from starting or causing automatic exits. v0.4.3 removes the default expiration. We apologize for the disruption.
+>
+> **Recommended:** Update to v0.4.3 and redeploy device-side Agents. Magisk / KernelSU users should update the module and reboot. Updating the server alone does not resolve the issue.
+>
+> **If you cannot upgrade immediately:**
+> - **Older run.sh / run.bat:** Replace `env GODEBUG=asyncpreemptoff=1` with `env GODEBUG=asyncpreemptoff=1 CP_AGENT_EXPIRES_AT=2099-01-01` in the actual launch command, then rerun the script. Simply appending `-expires-at` does not work.
+> - **Magisk / KernelSU:** Append `export CP_AGENT_EXPIRES_AT="2099-01-01"` to `/data/adb/modules/cloudphone-agent/config.conf` (keep `export`), then run `cpctl restart` or reboot.
+>
+> [Download v0.4.3](https://webrtc-phone.com/#download) · [Full recovery guide](https://webrtc-phone.com/docs/en/agent-expiration-fix.html)
 
 Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). The following deployment methods are supported:
 

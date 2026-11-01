@@ -149,8 +149,12 @@ docker run -d \
 > 2026/11/01 00:35:10 [License] 当前版本已于 2026-11-01 到期，请到 https://github.com/buutuubot/cloud-phone 升级
 > ```
 > **当前最新版本已完全去掉 Agent 到期时间限制**。解决方法：
-> 1. **推荐**：重新获取或升级至最新版本的 Agent 部署包（`agent-deploy.zip` / Magisk 模块 / App 客户端），新版本已永久解除到期限制；
-> 2. **历史版本临时跳过**：若暂不方便替换文件，可在启动参数中追加 `-expires-at ""`，或在启动前设置环境变量 `export CP_AGENT_EXPIRES_AT=""` 即可跳过校验正常运行。
+> 1. **推荐（彻底解决）**：重新获取或升级至最新版本的 Agent 部署包（`agent-deploy.zip` / Magisk 模块 / App 客户端），新版本已永久解除到期限制；
+> 2. **历史版本临时跳过（重要）**：
+>    旧版本 Agent 必须传入具体非空日期（传空值 `""` 会被 `run.sh` 脚本或旧版环境变量检测机制过滤忽略）。请将到期时间推迟至未来年份（如 `2099-01-01`）即可正常运行：
+>    * **环境变量注入（推荐）**：启动前执行 `export CP_AGENT_EXPIRES_AT="2099-01-01"`
+>    * **直接启动命令**：直接运行二进制时追加 `-expires-at "2099-01-01"`
+>    * **Magisk 模块**：在 `/data/adb/modules/cloudphone-agent/config.conf` 中追加 `CP_AGENT_EXPIRES_AT="2099-01-01"` 并重启或重载模块
 
 服务端拉起后，访问网页管理后台进入 **“部署新设备”** 页面，页面会根据当前服务地址动态生成接入指令与资源包下载（Docker 用户也可以通过 `docker logs cp-aio` 查看接入说明）。支持以下几种部署方式：
 

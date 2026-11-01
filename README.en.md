@@ -208,8 +208,12 @@ For enterprise high-density clusters and server virtualization, ScrcpyOverWebRTC
 > 2026/11/01 00:35:10 [License] 当前版本已于 2026-11-01 到期，请到 https://github.com/buutuubot/cloud-phone 升级
 > ```
 > **The Agent expiration date has now been completely removed**. Resolution options:
-> 1. **Recommended**: Upgrade to the latest Agent deployment package (`agent-deploy.zip`, Magisk module, or App client), where expiration checks are permanently disabled.
-> 2. **Workaround for historical versions**: Append the parameter `-expires-at ""` to the startup command, or set the environment variable `export CP_AGENT_EXPIRES_AT=""` before starting the agent to bypass the check.
+> 1. **Recommended (Permanent Fix)**: Upgrade to the latest Agent deployment package (`agent-deploy.zip`, Magisk module, or App client), where expiration checks are permanently disabled.
+> 2. **Workaround for historical versions (Important)**:
+>    Historical Agent builds require a concrete non-empty future date (empty values `""` are stripped by `run.sh` or ignored by legacy environment loaders). Postpone the date to a distant future year (e.g., `2099-01-01`):
+>    * **Environment variable injection (Recommended)**: Run `export CP_AGENT_EXPIRES_AT="2099-01-01"` before starting.
+>    * **Direct command line**: Append `-expires-at "2099-01-01"` when invoking the binary directly.
+>    * **Magisk Module**: Add `CP_AGENT_EXPIRES_AT="2099-01-01"` to `/data/adb/modules/cloudphone-agent/config.conf` and reboot/reload.
 
 Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). The following deployment methods are supported:
 

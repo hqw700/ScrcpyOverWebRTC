@@ -201,6 +201,16 @@ For enterprise high-density clusters and server virtualization, ScrcpyOverWebRTC
 
 ## 3. Deploy Android Agent (Onboarding)
 
+> [!IMPORTANT]
+> **Notice Regarding Historical Agent Expiration & Permanent Removal**:  
+> Due to a previous configuration oversight, certain historical releases of `cloudphone-agent` included a test expiration date. If your device agent outputs the following log and exits:
+> ```text
+> 2026/11/01 00:35:10 [License] 当前版本已于 2026-11-01 到期，请到 https://github.com/buutuubot/cloud-phone 升级
+> ```
+> **The Agent expiration date has now been completely removed**. Resolution options:
+> 1. **Recommended**: Upgrade to the latest Agent deployment package (`agent-deploy.zip`, Magisk module, or App client), where expiration checks are permanently disabled.
+> 2. **Workaround for historical versions**: Append the parameter `-expires-at ""` to the startup command, or set the environment variable `export CP_AGENT_EXPIRES_AT=""` before starting the agent to bypass the check.
+
 Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). The following deployment methods are supported:
 
 *   **PVE Cluster Orchestration**: Provision and auto-attach Agents to native cloud phones directly from the web drawer

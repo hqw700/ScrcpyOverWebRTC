@@ -1423,6 +1423,8 @@ const createForm = ref({
   storage: '',
   outlet_id: 'direct',
   network_mode: 'dhcp',
+  secondary_outlet_id: '',
+  secondary_custom_ip: '',
   spec: {
     cores: 4,
     memory_mb: 8192,
@@ -1775,6 +1777,8 @@ function openCreateModal() {
     createForm.value.custom_ip = ''
     createForm.value.template_id = ''
     createForm.value.network_mode = 'dhcp'
+    createForm.value.secondary_outlet_id = ''
+    createForm.value.secondary_custom_ip = ''
   }
   editingInstance.value = null
   if (clusters.value.length > 0) {
@@ -1814,9 +1818,11 @@ function openEditInstance(inst) {
     cluster_id: inst.cluster_id,
     template_id: inst.template_id,
     outlet_id: inst.outlet_id,
+    secondary_outlet_id: inst.secondary_outlet_id || '',
     storage: inst.storage || '',
     network_mode: inst.network_mode || 'static',
     custom_ip: inst.network_mode === 'dhcp' ? '' : inst.ip,
+    secondary_custom_ip: inst.secondary_ip || '',
     unprivileged: inst.unprivileged,
     spec: { ...inst.spec },
     display: { ...inst.display },

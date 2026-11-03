@@ -124,6 +124,11 @@
                     : 'orchestrator.network.staticBadge',
                 )
               }}</span
+            ><span
+              v-if="inst.secondary_ip"
+              class="secondary truncate mono"
+              :title="`rmnet0: ${inst.secondary_ip} (${inst.secondary_outlet_name || inst.secondary_outlet_id})`"
+              >rmnet0: {{ inst.secondary_ip }}</span
             >
           </td>
           <td>

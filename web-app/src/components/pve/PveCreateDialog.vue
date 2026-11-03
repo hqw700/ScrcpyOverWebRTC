@@ -401,6 +401,56 @@
                     />
                   </div>
                 </div>
+                <div class="config-row">
+                  <label for="pve-secondary-outlet">{{
+                    t('orchestrator.labelSecondaryOutlet')
+                  }}</label>
+                  <div class="field-content">
+                    <select
+                      id="pve-secondary-outlet"
+                      :disabled="editing || loadingPlacement"
+                      v-model="form.secondary_outlet_id"
+                    >
+                      <option value="">
+                        {{ t('orchestrator.noSecondaryOutlet') }}
+                      </option>
+                      <option
+                        v-for="outlet in outlets"
+                        :key="outlet.id"
+                        :value="outlet.id"
+                      >
+                        {{ outlet.name }} · {{ outlet.bridge }}
+                      </option>
+                    </select>
+                    <span
+                      class="hint"
+                      v-if="selectedSecondaryOutlet"
+                      >{{ selectedSecondaryOutlet.subnet }} ·
+                      {{ selectedSecondaryOutlet.gateway }} ({{
+                        t('orchestrator.secondaryOutletHint')
+                      }})</span
+                    >
+                    <span class="hint" v-else>{{
+                      t('orchestrator.secondaryOutletDescription')
+                    }}</span>
+                  </div>
+                </div>
+                <div class="config-row" v-if="form.secondary_outlet_id">
+                  <label for="pve-secondary-ip">{{
+                    t('orchestrator.labelSecondaryCustomIp')
+                  }}</label>
+                  <div class="field-content">
+                    <input
+                      id="pve-secondary-ip"
+                      :disabled="editing"
+                      v-model="form.secondary_custom_ip"
+                      :placeholder="
+                        t('orchestrator.placeholderSecondaryCustomIp')
+                      "
+                      class="mono"
+                    />
+                  </div>
+                </div>
                 <p class="hint connection-hint">
                   {{ t('orchestrator.signalingHint') }}
                 </p>
@@ -667,6 +717,9 @@ const selectedTemplate = computed(() =>
 const selectedOutlet = computed(() =>
   props.outlets.find((outlet) => outlet.id === form.value.outlet_id),
 )
+const selectedSecondaryOutlet = computed(() =>
+  props.outlets.find((outlet) => outlet.id === form.value.secondary_outlet_id),
+)
 const summaryItems = computed(() => [
   ['labelInstanceName', form.value.name || t('orchestrator.automaticName')],
   [
@@ -696,6 +749,14 @@ const summaryItems = computed(() => [
       : form.value.custom_ip || t('orchestrator.automaticIp'),
   ],
   ['cardOutlet', selectedOutlet.value?.name || '—'],
+  ...(selectedSecondaryOutlet.value
+    ? [
+        [
+          'cardSecondaryOutlet',
+          `${selectedSecondaryOutlet.value.name} · ${form.value.secondary_custom_ip || t('orchestrator.automaticIp')}`,
+        ],
+      ]
+    : []),
   ['labelSignaling', form.value.signalingServer || '—'],
   [
     'labelIsolation',

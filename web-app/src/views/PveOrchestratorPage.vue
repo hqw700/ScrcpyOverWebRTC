@@ -76,106 +76,286 @@
     </header>
 
     <div class="overview-strip">
-      <span class="overview-total"
-        >{{ $t('orchestrator.totalInstances') }}
+      <div
+        class="overview-item overview-total"
+        :class="{ 'is-active': statusFilter === 'all' }"
+        role="button"
+        tabindex="0"
+        @click="statusFilter = 'all'"
+        @keydown.enter="statusFilter = 'all'"
+        :title="$t('orchestrator.filterAll')"
+      >
+        <span>{{ $t('orchestrator.totalInstances') }}</span>
         <strong>{{
           instances.length - missingCount - foreignCount
-        }}</strong></span
+        }}</strong>
+      </div>
+      <div
+        class="overview-item overview-running"
+        :class="{ 'is-active': statusFilter === 'running' }"
+        role="button"
+        tabindex="0"
+        @click="toggleStatusFilter('running')"
+        @keydown.enter="toggleStatusFilter('running')"
+        :title="$t('orchestrator.filterRunning')"
       >
-      <span class="overview-running"
-        ><i class="status-dot running"></i
-        >{{ $t('orchestrator.runningInstances') }}
-        <strong>{{ runningCount }}</strong></span
+        <span
+          ><i class="status-dot running"></i
+          >{{ $t('orchestrator.runningInstances') }}</span
+        >
+        <strong>{{ runningCount }}</strong>
+      </div>
+      <div
+        class="overview-item overview-stopped"
+        :class="{ 'is-active': statusFilter === 'stopped' }"
+        role="button"
+        tabindex="0"
+        @click="toggleStatusFilter('stopped')"
+        @keydown.enter="toggleStatusFilter('stopped')"
+        :title="$t('orchestrator.filterStopped')"
       >
-      <span class="overview-stopped"
-        ><i class="status-dot stopped"></i
-        >{{ $t('orchestrator.stoppedInstances') }}
-        <strong>{{ stoppedCount }}</strong></span
-      >
-      <span class="overview-templates"
-        >{{ $t('orchestrator.templateCount') }}
-        <strong>{{ templates.length }}</strong></span
-      >
+        <span
+          ><i class="status-dot stopped"></i
+          >{{ $t('orchestrator.stoppedInstances') }}</span
+        >
+        <strong>{{ stoppedCount }}</strong>
+      </div>
+      <div class="overview-item overview-templates">
+        <span>{{ $t('orchestrator.templateCount') }}</span>
+        <strong>{{ templates.length }}</strong>
+      </div>
     </div>
 
     <details class="node-panel" open v-if="hosts.length">
-      <summary>
-        {{ $t('orchestrator.showHosts') }}
-        <span class="muted"
-          >{{ hosts.length }} {{ $t('orchestrator.unitNodes') }}</span
-        >
+      <summary class="node-panel-summary">
+        <div class="summary-left">
+          <span>{{ $t('orchestrator.showHosts') }}</span>
+          <span class="muted"
+            >{{ hosts.length }} {{ $t('orchestrator.unitNodes') }}</span
+          >
+        </div>
+        <div class="summary-right">
+          <button
+            type="button"
+            class="toggle-all-vpc-btn"
+            @click.stop.prevent="toggleAllVpcCollapse"
+            :title="
+              isAllVpcCollapsed
+                ? $t('vpc.expandAll')
+                : $t('vpc.collapseAll')
+            "
+          >
+            <span class="vpc-icon">🌐</span>
+            <span>{{
+              isAllVpcCollapsed
+                ? $t('vpc.expandAll')
+                : $t('vpc.collapseAll')
+            }}</span>
+            <span class="toggle-arrow">{{
+              isAllVpcCollapsed ? '▸' : '▾'
+            }}</span>
+          </button>
+        </div>
       </summary>
       <div class="node-list">
         <div
-          class="node-row"
+          class="node-card"
           v-for="h in hosts"
           :key="hostKey(h)"
           :class="{ 'node-offline': h.status !== 'online' }"
         >
-          <div class="node-identity">
-            <svg
-              class="node-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              aria-hidden="true"
-            >
-              <rect x="3" y="3" width="18" height="7" rx="2" />
-              <rect x="3" y="14" width="18" height="7" rx="2" />
-              <path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5" />
-            </svg>
-            <i
-              class="status-dot"
-              :class="h.status === 'online' ? 'running' : 'stopped'"
-            ></i
-            ><strong :title="h.cluster_name || h.node">{{
-              h.cluster_name || h.node
-            }}</strong
-            ><span class="muted">{{ h.node }}</span>
+          <div class="node-row">
+            <div class="node-identity">
+              <svg
+                class="node-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                aria-hidden="true"
+              >
+                <rect x="3" y="3" width="18" height="7" rx="2" />
+                <rect x="3" y="14" width="18" height="7" rx="2" />
+                <path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5" />
+              </svg>
+              <i
+                class="status-dot"
+                :class="h.status === 'online' ? 'running' : 'stopped'"
+              ></i
+              ><strong :title="h.cluster_name || h.node">{{
+                h.cluster_name || h.node
+              }}</strong
+              ><span class="muted">{{ h.node }}</span>
+            </div>
+            <template v-if="h.status === 'online'">
+              <span class="node-metric metric-cpu"
+                >CPU <b>{{ Math.round(h.cpu_usage * 100) }}%</b
+                ><meter :value="h.cpu_usage" min="0" max="1"></meter
+              ></span>
+              <span class="node-metric metric-memory"
+                >{{ $t('orchestrator.metricMem') }}
+                <b
+                  >{{ formatBytes(h.mem_used_bytes) }} /
+                  {{ formatBytes(h.mem_total_bytes) }}</b
+                ><meter
+                  :value="h.mem_used_bytes"
+                  min="0"
+                  :max="h.mem_total_bytes || 1"
+                ></meter
+              ></span>
+              <span class="node-metric metric-disk"
+                >{{ $t('orchestrator.hostMetricDisk') }}
+                <b>{{ getPercent(h.disk_used_bytes, h.disk_total_bytes) }}%</b
+                ><meter
+                  :value="h.disk_used_bytes"
+                  min="0"
+                  :max="h.disk_total_bytes || 1"
+                ></meter
+              ></span>
+            </template>
+            <span class="node-error" v-else>{{
+              h.error_msg || $t('orchestrator.hostErrorNotice')
+            }}</span>
+            <div class="node-actions">
+              <button
+                type="button"
+                class="node-vpc-toggle-btn"
+                :class="{
+                  'has-vpcs': getVpcsForHost(h).length > 0,
+                  collapsed: isNodeVpcCollapsed(hostKey(h)),
+                }"
+                @click="toggleNodeVpcCollapse(hostKey(h))"
+                :title="
+                  isNodeVpcCollapsed(hostKey(h))
+                    ? $t('vpc.expandVpc')
+                    : $t('vpc.collapseVpc')
+                "
+              >
+                <span class="vpc-icon">🌐</span>
+                <span>{{
+                  getVpcsForHost(h).length
+                    ? $t('vpc.vpcCountBadge', { count: getVpcsForHost(h).length })
+                    : $t('vpc.noVpcBadge')
+                }}</span>
+                <span class="toggle-arrow">{{
+                  isNodeVpcCollapsed(hostKey(h)) ? '▸' : '▾'
+                }}</span>
+              </button>
+              <button
+                class="table-link create-vpc-link"
+                @click="openCreateVpcForHost(h)"
+              >
+                + {{ $t('vpc.create') }}
+              </button>
+              <button class="table-link" @click="openClusterTerminal(h)">
+                {{ $t('orchestrator.btnHostTerminal') }}
+              </button>
+            </div>
           </div>
-          <template v-if="h.status === 'online'">
-            <span class="node-metric metric-cpu"
-              >CPU <b>{{ Math.round(h.cpu_usage * 100) }}%</b
-              ><meter :value="h.cpu_usage" min="0" max="1"></meter
-            ></span>
-            <span class="node-metric metric-memory"
-              >{{ $t('orchestrator.metricMem') }}
-              <b
-                >{{ formatBytes(h.mem_used_bytes) }} /
-                {{ formatBytes(h.mem_total_bytes) }}</b
-              ><meter
-                :value="h.mem_used_bytes"
-                min="0"
-                :max="h.mem_total_bytes || 1"
-              ></meter
-            ></span>
-            <span class="node-metric metric-disk"
-              >{{ $t('orchestrator.hostMetricDisk') }}
-              <b>{{ getPercent(h.disk_used_bytes, h.disk_total_bytes) }}%</b
-              ><meter
-                :value="h.disk_used_bytes"
-                min="0"
-                :max="h.disk_total_bytes || 1"
-              ></meter
-            ></span>
-          </template>
-          <span class="node-error" v-else>{{
-            h.error_msg || $t('orchestrator.hostErrorNotice')
-          }}</span>
-          <button class="table-link" @click="openClusterTerminal(h)">
-            {{ $t('orchestrator.btnHostTerminal') }}
-          </button>
+
+          <!-- 该节点下挂载的 VPC 隔离网关列表 -->
+          <div
+            v-show="!isNodeVpcCollapsed(hostKey(h))"
+            class="node-vpc-section"
+          >
+            <template v-if="getVpcsForHost(h).length">
+              <div
+                v-for="v in getVpcsForHost(h)"
+                :key="v.id"
+                class="node-vpc-item"
+              >
+                <div class="vpc-identity-group">
+                  <span class="vpc-tree-line" aria-hidden="true">└─</span>
+                  <span class="vpc-symbol">🌐</span>
+                  <strong class="vpc-name">{{ v.spec?.name || v.id }}</strong>
+                  <span class="vpc-badge-ct">CT {{ v.vmid || '—' }}</span>
+                  <span class="vpc-badge-mono">{{ v.bridge }}</span>
+                  <span class="vpc-badge-mono">{{ v.spec?.subnet }}</span>
+                  <span :class="['protocol-pill', v.spec?.proxy?.type]">
+                    {{ (v.spec?.proxy?.type || 'direct').toUpperCase() }}
+                  </span>
+                </div>
+
+                <div class="vpc-status-group">
+                  <span :class="['status-pill', v.status]">
+                    <i class="dot-indicator" :class="v.status"></i>
+                    {{ formatVpcStatus(v.status) }}
+                  </span>
+                  <span v-if="v.error" class="vpc-error-msg" :title="v.error">
+                    {{ v.error }}
+                  </span>
+                  <span v-else-if="v.health?.https" class="vpc-health-msg">
+                    {{ $t('vpc.health') }}
+                  </span>
+                </div>
+
+                <div class="vpc-action-group">
+                  <button
+                    class="table-link"
+                    :disabled="isVpcBusy(v)"
+                    @click="handleVpcAction(v, 'check')"
+                  >
+                    {{ $t('vpc.check') }}
+                  </button>
+                  <button
+                    class="table-link"
+                    :disabled="isVpcBusy(v)"
+                    @click="openEditVpc(v)"
+                  >
+                    {{ $t('vpc.edit') }}
+                  </button>
+                  <button
+                    v-if="v.status !== 'ready'"
+                    class="table-link"
+                    :disabled="isVpcBusy(v)"
+                    @click="handleVpcAction(v, 'retry')"
+                  >
+                    {{ $t('vpc.retry') }}
+                  </button>
+                  <button
+                    class="table-link danger-link"
+                    :disabled="isVpcBusy(v)"
+                    @click="handleVpcAction(v, 'delete')"
+                  >
+                    {{ $t('vpc.delete') }}
+                  </button>
+                </div>
+              </div>
+            </template>
+            <div v-else class="node-vpc-empty">
+              <span class="vpc-tree-line" aria-hidden="true">└─</span>
+              <span class="empty-hint-text">
+                🌐 {{ $t('vpc.nodeVpcEmpty') }}
+              </span>
+              <button
+                class="table-link configure-link"
+                @click="openCreateVpcForHost(h)"
+              >
+                + {{ $t('vpc.configureForNode') }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </details>
 
     <section class="instances-panel">
       <div class="list-heading">
-        <h2>{{ $t('orchestrator.instancesLabel') }}</h2>
-        <span class="muted">{{
-          $t('orchestrator.matchedCount', { count: filteredInstances.length })
-        }}</span>
+        <div class="heading-left">
+          <h2>{{ $t('orchestrator.instancesLabel') }}</h2>
+          <span class="muted">{{
+            $t('orchestrator.matchedCount', { count: filteredInstances.length })
+          }}</span>
+          <button
+            v-if="statusFilter !== 'all' || clusterFilter || searchQuery"
+            type="button"
+            class="clear-filter-btn"
+            @click="clearAllFilters"
+            :title="$t('orchestrator.filterClear')"
+          >
+            ✕ {{ $t('orchestrator.filterClear') }}
+          </button>
+        </div>
       </div>
       <div class="filter-toolbar">
         <input
@@ -185,6 +365,39 @@
           :aria-label="$t('orchestrator.searchPlaceholder')"
           class="search-input"
         />
+
+        <!-- 快捷状态分段筛选按钮组 (Quick Filter Pills) -->
+        <div class="filter-pills" role="tablist">
+          <button
+            type="button"
+            class="filter-pill"
+            :class="{ active: statusFilter === 'all' }"
+            @click="statusFilter = 'all'"
+          >
+            {{ $t('orchestrator.filterAll') }}
+          </button>
+          <button
+            type="button"
+            class="filter-pill pill-running"
+            :class="{ active: statusFilter === 'running' }"
+            @click="toggleStatusFilter('running')"
+          >
+            <i class="status-dot running"></i>
+            {{ $t('orchestrator.filterRunning') }}
+            <span class="pill-count">{{ runningCount }}</span>
+          </button>
+          <button
+            type="button"
+            class="filter-pill pill-stopped"
+            :class="{ active: statusFilter === 'stopped' }"
+            @click="toggleStatusFilter('stopped')"
+          >
+            <i class="status-dot stopped"></i>
+            {{ $t('orchestrator.filterStopped') }}
+            <span class="pill-count">{{ stoppedCount }}</span>
+          </button>
+        </div>
+
         <select
           class="form-select"
           v-model="statusFilter"
@@ -277,7 +490,7 @@
       :preparing-environment="preparingEnvironment"
       @repair-environment="prepareCreateEnvironment"
       @configure-placement="configureCreatePlacement"
-      @check-environment="checkCreateEnvironment(createForm.cluster_id, false)"
+      @check-environment="checkCreateEnvironment(createForm.cluster_id, false, true)"
       :spec-preset="specPreset"
       :display-preset="displayPreset"
       @spec="applySpecPreset"
@@ -869,10 +1082,14 @@
         </div>
       </div>
     </div>
+
+    <!-- VPC 侧边栏 Drawer (按需呼出) -->
+    <PveVpcPanel ref="vpcDrawerRef" :clusters="clusters" @changed="onVpcChanged" />
   </div>
 </template>
 
 <script setup>
+import PveVpcPanel from '@/components/pve/PveVpcPanel.vue'
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Terminal } from 'xterm'
@@ -908,6 +1125,55 @@ const searchQuery = ref('')
 const clusterFilter = ref('')
 const statusFilter = ref('all') // 'all' | 'running' | 'stopped'
 const actionPending = ref({})
+
+// 状态过滤交互与快捷切换
+function toggleStatusFilter(target) {
+  if (statusFilter.value === target) {
+    statusFilter.value = 'all'
+  } else {
+    statusFilter.value = target
+  }
+}
+
+function clearAllFilters() {
+  statusFilter.value = 'all'
+  clusterFilter.value = ''
+  searchQuery.value = ''
+}
+
+// VPC 折叠状态管理 (以 hostKey 为标识)
+const collapsedVpcNodes = ref(new Set())
+
+function toggleNodeVpcCollapse(key) {
+  const next = new Set(collapsedVpcNodes.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  collapsedVpcNodes.value = next
+}
+
+function isNodeVpcCollapsed(key) {
+  return collapsedVpcNodes.value.has(key)
+}
+
+const isAllVpcCollapsed = computed(() => {
+  if (!hosts.value.length) return false
+  return hosts.value.every((h) => collapsedVpcNodes.value.has(hostKey(h)))
+})
+
+function toggleAllVpcCollapse() {
+  if (isAllVpcCollapsed.value) {
+    collapsedVpcNodes.value = new Set()
+  } else {
+    collapsedVpcNodes.value = new Set(hosts.value.map((h) => hostKey(h)))
+  }
+}
+
+// VPC 隔离出口网关状态与交互
+const vpcList = ref([])
+const vpcDrawerRef = ref(null)
 
 // PVE 物理宿主机资源监控状态
 const hosts = ref([])
@@ -1048,6 +1314,64 @@ async function fetchClusters() {
   }
 }
 
+async function fetchVpcs() {
+  try {
+    const res = await fetch('/api/pve/vpcs', {
+      headers: authHeaders(),
+      signal: inventoryAbort.signal,
+    })
+    if (res.ok) {
+      const d = await res.json()
+      vpcList.value = asList(d)
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') console.error('Fetch PVE VPCs failed:', err)
+  }
+}
+
+function getVpcsForHost(h) {
+  if (!h || !vpcList.value.length) return []
+  return vpcList.value.filter((v) => {
+    if (v.spec?.cluster_id && h.cluster_id) {
+      if (v.spec.cluster_id !== h.cluster_id) return false
+      if (v.node && h.node && v.node !== h.node) return false
+      return true
+    }
+    if (v.node && h.node) {
+      return v.node === h.node
+    }
+    return false
+  })
+}
+
+function openCreateVpcForHost(h) {
+  vpcDrawerRef.value?.open(null, h.cluster_id)
+}
+
+function openEditVpc(v) {
+  vpcDrawerRef.value?.open(v)
+}
+
+async function handleVpcAction(v, action) {
+  if (!vpcDrawerRef.value) return
+  await vpcDrawerRef.value.action(v, action)
+}
+
+function formatVpcStatus(status) {
+  return t(`vpc.${status === 'error' ? 'failed' : status}`)
+}
+
+function isVpcBusy(v) {
+  return (
+    vpcDrawerRef.value?.busy ||
+    ['provisioning', 'checking', 'deleting'].includes(v.status)
+  )
+}
+
+async function onVpcChanged() {
+  await Promise.all([refreshAll(), fetchVpcs()])
+}
+
 // PVE 运维终端弹窗状态
 const showTerminalModal = ref(false)
 const activeTermInst = ref(null)
@@ -1168,7 +1492,11 @@ async function fetchData({ silent = false, catalog = true } = {}) {
 }
 
 async function refreshAll() {
-  await Promise.all([fetchData(), fetchHosts(), fetchClusters()])
+  const promises = [fetchData(), fetchHosts(), fetchClusters(), fetchVpcs()]
+  if (createForm.value?.cluster_id) {
+    promises.push(loadCreatePlacement(createForm.value.cluster_id))
+  }
+  await Promise.all(promises)
 }
 
 // 复制连接串
@@ -1423,6 +1751,8 @@ const createForm = ref({
   storage: '',
   outlet_id: 'direct',
   network_mode: 'dhcp',
+  primary_iface: 'eth0',
+  wifi_mode: false,
   secondary_outlet_id: '',
   secondary_custom_ip: '',
   spec: {
@@ -1522,7 +1852,7 @@ function queueEnvironmentCheck() {
     180,
   )
 }
-async function checkCreateEnvironment(clusterId, autoRepair = true) {
+async function checkCreateEnvironment(clusterId, autoRepair = true, force = false) {
   clearTimeout(environmentTimer)
   const request = ++environmentRequest
   const mode = createForm.value.network_mode || 'static'
@@ -1540,6 +1870,7 @@ async function checkCreateEnvironment(clusterId, autoRepair = true) {
           network_mode: mode,
           template_id: templateId,
           instance_id: editingInstance.value?.id || '',
+          force,
         }),
       },
     )
@@ -1766,7 +2097,7 @@ watch(
   },
 )
 
-function openCreateModal() {
+async function openCreateModal() {
   if (!clusters.value.length) {
     openConfigModal()
     openAddClusterForm()
@@ -1785,16 +2116,16 @@ function openCreateModal() {
     const def = clusters.value.find((c) => c.is_default) || clusters.value[0]
     createForm.value.cluster_id = def.id
     loadTemplatesForCluster(def.id)
-    loadCreatePlacement(def.id)
+    await loadCreatePlacement(def.id)
     checkCreateEnvironment(def.id)
   } else {
     loadTemplatesForCluster('')
   }
   if (
-    outlets.value.length > 0 &&
-    !outlets.value.some((o) => o.id === createForm.value.outlet_id)
+    createOutlets.value.length > 0 &&
+    !createOutlets.value.some((o) => o.id === createForm.value.outlet_id)
   ) {
-    createForm.value.outlet_id = outlets.value[0].id
+    createForm.value.outlet_id = createOutlets.value[0].id
   }
   createForm.value.unprivileged = false
   if (!createForm.value.display.gpu_mode) {
@@ -1821,6 +2152,8 @@ function openEditInstance(inst) {
     secondary_outlet_id: inst.secondary_outlet_id || '',
     storage: inst.storage || '',
     network_mode: inst.network_mode || 'static',
+    primary_iface: inst.primary_iface || 'eth0',
+    wifi_mode: inst.wifi_mode || (inst.primary_iface === 'wlan0'),
     custom_ip: inst.network_mode === 'dhcp' ? '' : inst.ip,
     secondary_custom_ip: inst.secondary_ip || '',
     unprivileged: inst.unprivileged,
@@ -2405,12 +2738,14 @@ onMounted(() => {
   fetchData()
   fetchHosts()
   fetchClusters()
+  fetchVpcs()
   // Background updates do not toggle the foreground loading UI.
   pollTimer = setInterval(() => {
     if (document.hidden) return
     if (showConfigModal.value && !showClusterEditForm.value) fetchClusters()
     fetchData({ silent: true, catalog: false })
     fetchHosts()
+    fetchVpcs()
   }, 8000)
 })
 
@@ -3121,7 +3456,7 @@ onUnmounted(() => {
   font-size: 12px;
   color: #94a3b8;
 }
-.overview-strip > span {
+.overview-strip > .overview-item {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -3129,6 +3464,31 @@ onUnmounted(() => {
   padding: 13px 18px;
   background: linear-gradient(105deg, #182a43, #142136);
   border-top: 2px solid #518ee2;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+.overview-strip > .overview-item:hover {
+  background: linear-gradient(105deg, #1e3352, #182740);
+}
+.overview-strip > .overview-item.is-active {
+  background: linear-gradient(105deg, #24416b, #1d3353);
+  border-top-width: 3px;
+  box-shadow: inset 0 0 16px rgba(56, 189, 248, 0.15);
+}
+.overview-strip > .overview-running.is-active {
+  border-top-color: #34d399;
+  box-shadow: inset 0 0 16px rgba(52, 211, 153, 0.2);
+}
+.overview-strip > .overview-stopped.is-active {
+  border-top-color: #94a3b8;
+  box-shadow: inset 0 0 16px rgba(148, 163, 184, 0.15);
+}
+.overview-strip > .overview-templates {
+  cursor: default;
+}
+.overview-strip > .overview-templates:hover {
+  background: linear-gradient(105deg, #182a43, #142136);
 }
 .overview-strip strong {
   color: #e2e8f0;
@@ -3166,9 +3526,87 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
 }
+.node-panel summary::-webkit-details-marker {
+  margin-right: 6px;
+}
+.node-panel-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+}
+.summary-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.summary-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.toggle-all-vpc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #93c5fd;
+  background: rgba(30, 58, 102, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.6;
+}
+.toggle-all-vpc-btn:hover {
+  background: rgba(30, 58, 102, 0.75);
+  color: #bfdbfe;
+  border-color: rgba(56, 189, 248, 0.6);
+}
+.node-vpc-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.6;
+}
+.node-vpc-toggle-btn:hover {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #7dd3fc;
+}
+.node-vpc-toggle-btn.collapsed {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+.node-vpc-toggle-btn .toggle-arrow {
+  font-size: 10px;
+  opacity: 0.8;
+}
 .node-panel summary .muted {
   margin-left: 10px;
   font-weight: 400;
+}
+.node-card {
+  border-top: 1px solid #263244;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+.node-card:first-child {
+  border-top: none;
 }
 .node-row {
   display: flex;
@@ -3176,8 +3614,210 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 12px 24px;
   padding: 10px 14px;
-  border-top: 1px solid #263244;
   font-size: 12px;
+}
+.node-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.create-vpc-link {
+  color: #38bdf8 !important;
+  font-weight: 500;
+}
+.create-vpc-link:hover {
+  color: #7dd3fc !important;
+  text-decoration: underline;
+}
+
+/* 节点下挂载的 VPC 隔离网关列表样式 */
+.node-vpc-section {
+  padding: 6px 14px 8px 30px;
+  background: rgba(10, 18, 30, 0.45);
+  border-top: 1px dashed rgba(45, 64, 89, 0.6);
+  font-size: 12px;
+}
+.node-vpc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 3px 0;
+}
+.vpc-identity-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vpc-tree-line {
+  color: #475569;
+  font-family: monospace;
+  user-select: none;
+}
+.vpc-symbol {
+  font-size: 12px;
+  line-height: 1;
+}
+.vpc-name {
+  color: #f1f5f9;
+  font-weight: 600;
+  font-size: 12px;
+}
+.vpc-badge-ct {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #94a3b8;
+  font-size: 11px;
+}
+.vpc-badge-mono {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  color: #cbd5e1;
+  font-family: monospace;
+  font-size: 11px;
+}
+.protocol-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.protocol-pill.socks {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+.protocol-pill.http {
+  background: rgba(6, 182, 212, 0.15);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+}
+.protocol-pill.trojan {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+.protocol-pill.vmess {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+}
+.protocol-pill.direct {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.vpc-status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+.status-pill.ready {
+  color: #22c55e;
+}
+.status-pill.error {
+  color: #f87171;
+}
+.status-pill.provisioning,
+.status-pill.checking {
+  color: #fbbf24;
+}
+.dot-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-indicator.ready {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.dot-indicator.error {
+  background: #f87171;
+}
+.dot-indicator.provisioning,
+.dot-indicator.checking {
+  background: #fbbf24;
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.vpc-error-msg {
+  color: #f87171;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vpc-health-msg {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.vpc-action-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.vpc-action-group .table-link {
+  font-size: 11px;
+  color: #60a5fa;
+}
+.vpc-action-group .table-link:hover:not(:disabled) {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+.vpc-action-group .danger-link {
+  color: #f87171;
+}
+.vpc-action-group .danger-link:hover:not(:disabled) {
+  color: #ef4444;
+}
+.vpc-action-group .table-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.node-vpc-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  color: #64748b;
+  font-size: 11px;
+}
+.node-vpc-empty .empty-hint-text {
+  color: #64748b;
+}
+.node-vpc-empty .configure-link {
+  font-size: 11px;
+  color: #38bdf8;
+}
+.node-vpc-empty .configure-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
 }
 .node-identity {
   display: flex;
@@ -3238,13 +3878,39 @@ onUnmounted(() => {
 .list-heading {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 16px 16px 0;
+}
+.heading-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
 }
 .list-heading h2 {
   font-size: 14px;
   margin: 0;
   font-weight: 600;
+}
+.clear-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.5;
+}
+.clear-filter-btn:hover {
+  color: #f1f5f9;
+  background: rgba(148, 163, 184, 0.25);
+  border-color: rgba(148, 163, 184, 0.45);
 }
 .filter-toolbar {
   display: flex;
@@ -3253,10 +3919,67 @@ onUnmounted(() => {
   gap: 10px;
   padding: 14px 16px;
 }
+.filter-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  background: #0f172a;
+  border: 1px solid #28374d;
+  border-radius: 5px;
+}
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.filter-pill:hover {
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.04);
+}
+.filter-pill.active {
+  color: #f8fafc;
+  background: #1e324d;
+  font-weight: 600;
+  border-color: #38bdf840;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.filter-pill.pill-running.active {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.filter-pill.pill-stopped.active {
+  color: #cbd5e1;
+  background: rgba(100, 116, 139, 0.22);
+  border-color: rgba(100, 116, 139, 0.4);
+}
+.filter-pill .pill-count {
+  display: inline-block;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: currentColor;
+  line-height: 1.4;
+}
 .search-input {
   box-sizing: border-box;
-  flex: 0 1 300px;
-  min-width: 180px;
+  flex: 0 1 240px;
+  min-width: 160px;
   height: 32px;
   padding: 0 10px;
   color: #e2e8f0;
@@ -3394,10 +4117,10 @@ button:disabled {
   background: linear-gradient(90deg, #1a2b43, #142035);
   color: #c7d9f0;
 }
-.node-row {
+.node-card {
   border-left: 2px solid #3d84c9;
 }
-.node-row.node-offline {
+.node-card.node-offline {
   border-left-color: #b88647;
 }
 .node-icon {
@@ -3440,7 +4163,7 @@ button:disabled {
     inset 0 1px #ffffff20;
 }
 @media (max-width: 760px) {
-  .overview-strip > span {
+  .overview-strip > .overview-item {
     flex-basis: calc(50% - 1px);
     padding: 10px 14px;
     min-width: 0;

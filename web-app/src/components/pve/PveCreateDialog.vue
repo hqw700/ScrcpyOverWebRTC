@@ -340,19 +340,36 @@
                           )
                         }}
                       </option>
-                      <option
-                        v-for="outlet in outlets"
-                        :key="outlet.id"
-                        :value="outlet.id"
-                      >
-                        {{ outlet.name }} · {{ outlet.bridge }}
-                      </option></select
-                    ><span
+                      <optgroup v-if="standardOutlets.length" :label="t('orchestrator.network.standardOutlets')">
+                        <option
+                          v-for="outlet in standardOutlets"
+                          :key="outlet.id"
+                          :value="outlet.id"
+                        >
+                          {{ outlet.name }} · {{ outlet.bridge }}
+                        </option>
+                      </optgroup>
+                      <optgroup v-if="vpcOutlets.length" :label="t('orchestrator.network.vpcOutlets')">
+                        <option
+                          v-for="outlet in vpcOutlets"
+                          :key="outlet.id"
+                          :value="outlet.id"
+                        >
+                          ⚡ [VPC] {{ outlet.name }} · {{ outlet.bridge }} ({{ outlet.subnet }})
+                        </option>
+                      </optgroup>
+                    </select>
+                    <span
                       class="hint"
                       v-if="selectedOutlet && form.network_mode !== 'dhcp'"
-                      >{{ selectedOutlet.subnet }} ·
-                      {{ selectedOutlet.gateway }}</span
                     >
+                      <template v-if="selectedOutlet.vpc_id">
+                        ⚡ {{ t('orchestrator.network.vpcActive') }} ({{ selectedOutlet.subnet }} · {{ selectedOutlet.gateway }})
+                      </template>
+                      <template v-else>
+                        {{ selectedOutlet.subnet }} · {{ selectedOutlet.gateway }}
+                      </template>
+                    </span>
                   </div>
                 </div>
                 <div class="config-row">
@@ -387,6 +404,26 @@
                     >
                   </div>
                 </div>
+                <div class="config-row">
+                  <label for="pve-primary-iface">{{
+                    t('orchestrator.labelPrimaryIface') || '网卡类型'
+                  }}</label>
+                  <div class="field-content">
+                    <select
+                      id="pve-primary-iface"
+                      v-model="form.primary_iface"
+                      :disabled="editing"
+                    >
+                      <option value="eth0">以太网 (eth0)</option>
+                      <option value="wlan0">无线局域网 Wi-Fi (wlan0)</option>
+                    </select>
+                    <span class="hint">{{
+                      form.primary_iface === 'wlan0'
+                        ? '无线 Wi-Fi 模式：系统识别为真实无线网络并自动连入 VirtWifi，适合手游及 Wi-Fi 检测环境'
+                        : '默认以太网模式：以传统有线方式接入'
+                    }}</span>
+                  </div>
+                </div>
                 <div class="config-row" v-if="form.network_mode !== 'dhcp'">
                   <label for="pve-ip">{{
                     t('orchestrator.labelCustomIp')
@@ -414,22 +451,36 @@
                       <option value="">
                         {{ t('orchestrator.noSecondaryOutlet') }}
                       </option>
-                      <option
-                        v-for="outlet in outlets"
-                        :key="outlet.id"
-                        :value="outlet.id"
-                      >
-                        {{ outlet.name }} · {{ outlet.bridge }}
-                      </option>
+                      <optgroup v-if="standardOutlets.length" :label="t('orchestrator.network.standardOutlets')">
+                        <option
+                          v-for="outlet in standardOutlets"
+                          :key="outlet.id"
+                          :value="outlet.id"
+                        >
+                          {{ outlet.name }} · {{ outlet.bridge }}
+                        </option>
+                      </optgroup>
+                      <optgroup v-if="vpcOutlets.length" :label="t('orchestrator.network.vpcOutlets')">
+                        <option
+                          v-for="outlet in vpcOutlets"
+                          :key="outlet.id"
+                          :value="outlet.id"
+                        >
+                          ⚡ [VPC] {{ outlet.name }} · {{ outlet.bridge }} ({{ outlet.subnet }})
+                        </option>
+                      </optgroup>
                     </select>
                     <span
                       class="hint"
                       v-if="selectedSecondaryOutlet"
-                      >{{ selectedSecondaryOutlet.subnet }} ·
-                      {{ selectedSecondaryOutlet.gateway }} ({{
-                        t('orchestrator.secondaryOutletHint')
-                      }})</span
                     >
+                      <template v-if="selectedSecondaryOutlet.vpc_id">
+                        ⚡ {{ t('orchestrator.network.vpcActive') }} ({{ selectedSecondaryOutlet.subnet }} · {{ selectedSecondaryOutlet.gateway }})
+                      </template>
+                      <template v-else>
+                        {{ selectedSecondaryOutlet.subnet }} · {{ selectedSecondaryOutlet.gateway }} ({{ t('orchestrator.secondaryOutletHint') }})
+                      </template>
+                    </span>
                     <span class="hint" v-else>{{
                       t('orchestrator.secondaryOutletDescription')
                     }}</span>
@@ -720,6 +771,12 @@ const selectedOutlet = computed(() =>
 const selectedSecondaryOutlet = computed(() =>
   props.outlets.find((outlet) => outlet.id === form.value.secondary_outlet_id),
 )
+const standardOutlets = computed(() =>
+  (props.outlets || []).filter((o) => !o.vpc_id),
+)
+const vpcOutlets = computed(() =>
+  (props.outlets || []).filter((o) => !!o.vpc_id),
+)
 const summaryItems = computed(() => [
   ['labelInstanceName', form.value.name || t('orchestrator.automaticName')],
   [
@@ -748,12 +805,17 @@ const summaryItems = computed(() => [
       ? t('orchestrator.network.dhcp')
       : form.value.custom_ip || t('orchestrator.automaticIp'),
   ],
-  ['cardOutlet', selectedOutlet.value?.name || '—'],
+  [
+    'cardOutlet',
+    selectedOutlet.value
+      ? (selectedOutlet.value.vpc_id ? `⚡ [VPC] ${selectedOutlet.value.name}` : selectedOutlet.value.name)
+      : '—',
+  ],
   ...(selectedSecondaryOutlet.value
     ? [
         [
           'cardSecondaryOutlet',
-          `${selectedSecondaryOutlet.value.name} · ${form.value.secondary_custom_ip || t('orchestrator.automaticIp')}`,
+          `${selectedSecondaryOutlet.value.vpc_id ? '⚡ [VPC] ' : ''}${selectedSecondaryOutlet.value.name} · ${form.value.secondary_custom_ip || t('orchestrator.automaticIp')}`,
         ],
       ]
     : []),

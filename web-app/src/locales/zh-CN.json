@@ -155,8 +155,8 @@
     "licenseFreeTitle": "免费版授权，点击查看授权管理"
   },
   "login": {
-    "title": "云手机管理系统",
-    "subtitle": "CloudPhone Management Platform",
+    "title": "穿云投屏",
+    "subtitle": "Scrcpy Over WebRTC",
     "secureLogin": "安全登录",
     "cardLogin": "🔑 卡密直连",
     "username": "用户名",

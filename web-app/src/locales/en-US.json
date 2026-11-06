@@ -155,8 +155,8 @@
     "licenseFreeTitle": "Free license, click to manage"
   },
   "login": {
-    "title": "CloudPhone Management",
-    "subtitle": "CloudPhone & Device Management Platform",
+    "title": "Scrcpy Over WebRTC",
+    "subtitle": "High-Performance Device Control Platform",
     "secureLogin": "Secure Login",
     "cardLogin": "🔑 Access Card Direct",
     "username": "Username",

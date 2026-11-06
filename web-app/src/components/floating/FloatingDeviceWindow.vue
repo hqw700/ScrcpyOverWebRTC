@@ -36,19 +36,6 @@
           <span v-if="deviceClientRef?.isPiP" class="active-dot"></span>
         </button>
 
-        <!-- 停靠到侧边栏 -->
-        <button 
-          class="win-btn dock-btn" 
-          @click="deviceStore.setSidebarDockedDevice(deviceId)" 
-          :title="$t('multi.pinToSide')"
-          :data-tooltip="$t('multi.pinToSide')"
-        >
-          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-            <line x1="15" y1="3" x2="15" y2="21"></line>
-          </svg>
-        </button>
-
         <!-- 网页全屏 / 窗口最大化 -->
         <button 
           class="win-btn max-btn" 
@@ -99,13 +86,13 @@
       </div>
     </header>
 
-    <!-- 窗口主体：内嵌核心 DeviceClient -->
+    <!-- 窗口主体：内嵌核心 DeviceClient (isMini=false 呈现每个窗口独立的侧边控制栏) -->
     <main class="window-body">
       <DeviceClient 
         ref="deviceClientRef"
         :deviceId="deviceId"
         :key="`${deviceId}_${deviceStore.getDeviceMode(deviceId)}`"
-        :is-mini="true"
+        :is-mini="false"
         :is-focused="isFocused"
         :audio-muted="!isFocused && audioFocusMode === 'exclusive'"
         @recommend-layout="onRecommendLayout"
@@ -204,17 +191,27 @@ function toggleMaximize() {
   emit('focus', props.deviceId)
 }
 
-// 子组件视频画面尺寸探测并建议布局
+// 子组件视频画面尺寸探测并建议布局 (侧边栏宽度 64px)
 function onRecommendLayout({ isLandscape, ratio }) {
   if (props.windowState.userResized || isMaximized.value) return
-  const currentW = props.windowState.w
-  let newH = Math.round(currentW / (ratio || (9 / 16)))
-  // 增加 36px 标题栏高度
-  newH += 36
-  newH = Math.min(newH, window.innerHeight - 80)
-  emit('update-state', props.deviceId, {
-    h: Math.max(newH, 380)
-  })
+  if (isLandscape) {
+    const targetH = Math.min(480, window.innerHeight - 120)
+    const videoH = targetH - 38
+    const videoW = Math.round(videoH * (ratio || (16 / 9)))
+    const targetW = videoW + 64
+    emit('update-state', props.deviceId, {
+      w: Math.min(targetW, window.innerWidth - 80),
+      h: targetH
+    })
+  } else {
+    const currentW = props.windowState.w
+    const videoW = Math.max(180, currentW - 64)
+    let newH = Math.round(videoW / (ratio || (9 / 16))) + 38
+    newH = Math.min(newH, window.innerHeight - 60)
+    emit('update-state', props.deviceId, {
+      h: Math.max(newH, 420)
+    })
+  }
 }
 
 // --- 窗口拖拽漫游逻辑 ---
@@ -265,12 +262,12 @@ function startResize(direction, e) {
     const updates = { userResized: true }
 
     if (direction.includes('right')) {
-      const maxW = Math.max(260, window.innerWidth - props.windowState.x)
-      updates.w = Math.min(maxW, Math.max(260, initW + deltaX))
+      const maxW = Math.max(320, window.innerWidth - props.windowState.x)
+      updates.w = Math.min(maxW, Math.max(320, initW + deltaX))
     }
     if (direction.includes('bottom')) {
-      const maxH = Math.max(380, window.innerHeight - props.windowState.y)
-      updates.h = Math.min(maxH, Math.max(380, initH + deltaY))
+      const maxH = Math.max(420, window.innerHeight - props.windowState.y)
+      updates.h = Math.min(maxH, Math.max(420, initH + deltaY))
     }
 
     emit('update-state', props.deviceId, updates)

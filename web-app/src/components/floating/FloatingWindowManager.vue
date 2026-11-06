@@ -97,15 +97,12 @@ const deviceStore = useDeviceStore()
 const activeDeviceIds = computed(() => deviceStore.activeDeviceIds)
 const focusedDeviceId = computed(() => deviceStore.focusedDeviceId)
 
-// 自由悬浮窗口展示列表 (单机模式由侧边栏承载；多机模式展示除侧边栏停靠设备之外的所有自由浮窗)
+// 自由悬浮窗口展示列表 (单机模式由右侧侧边栏承载；多机模式下所有打开的设备均作为独立自由悬浮窗展示)
 const displayFloatingDeviceIds = computed(() => {
   if (deviceStore.directControlMode === 'single') {
     return []
   }
-  if (!deviceStore.sidebarDockedDeviceId) {
-    return activeDeviceIds.value
-  }
-  return activeDeviceIds.value.filter(id => id !== deviceStore.sidebarDockedDeviceId)
+  return activeDeviceIds.value
 })
 
 // 窗口状态表 (响应式记录每台设备的坐标与尺寸)
@@ -122,8 +119,8 @@ const allMinimized = computed(() => {
 function getOrCreateWindowState(id) {
   if (!windowStates[id]) {
     const existingCount = Object.keys(windowStates).length
-    const defaultW = 380
-    const defaultH = Math.min(680, window.innerHeight - 100)
+    const defaultW = 430
+    const defaultH = Math.min(680, window.innerHeight - 80)
 
     // 智能阶梯级联定位：从右上方开始向下、向左适度级联
     const cascadeOffset = (existingCount % 6) * 36
@@ -229,8 +226,8 @@ function closeAllDevices() {
 function arrangeCascade() {
   minimizedIds.value = []
   const list = activeDeviceIds.value
-  const defaultW = 380
-  const defaultH = Math.min(660, window.innerHeight - 100)
+  const defaultW = 430
+  const defaultH = Math.min(680, window.innerHeight - 80)
 
   list.forEach((id, idx) => {
     const ws = getOrCreateWindowState(id)
@@ -253,9 +250,10 @@ function arrangeSideBySide() {
   if (count === 0) return
 
   const availableW = window.innerWidth - 60
-  const availableH = window.innerHeight - 120
-  const targetW = Math.max(280, Math.min(420, Math.floor(availableW / count) - 16))
-  const targetH = Math.min(availableH, Math.round(targetW / (9 / 16)) + 38)
+  const availableH = window.innerHeight - 100
+  const targetW = Math.max(340, Math.min(460, Math.floor(availableW / count) - 16))
+  const videoW = targetW - 64
+  const targetH = Math.min(availableH, Math.round(videoW / (9 / 16)) + 38)
 
   list.forEach((id, idx) => {
     const ws = getOrCreateWindowState(id)

@@ -685,11 +685,11 @@
       </section>
     </main>
 
-    <!-- 3. 右侧控制面板 (支持拉伸、单机模式与多机侧边栏) -->
+    <!-- 3. 右侧控制面板 (单机直控模式专属，支持拉伸、悬浮与画中画) -->
     <aside 
       class="control-panel-wrapper" 
       :class="{ 
-        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files') && (deviceStore.directControlMode === 'single' || !!deviceStore.sidebarDockedDeviceId),
+        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files') && (deviceStore.directControlMode === 'single' || isMobile),
         'is-floating': isFloating && !isMobile && deviceStore.directControlMode === 'single',
         'is-mobile': isMobile,
         'is-top-layer': deviceStore.activeTopLayer === 'connection'
@@ -699,7 +699,7 @@
       @touchstart.capture="!isMobile && deviceStore.setActiveTopLayer('connection')"
     >
       <!-- 调整大小的手柄 (PC固定模式) -->
-      <div class="side-resizer" v-if="(!isFloating || deviceStore.directControlMode === 'multi') && !isMobile" @mousedown="startResizing('left', $event)"></div>
+      <div class="side-resizer" v-if="!isFloating && !isMobile" @mousedown="startResizing('left', $event)"></div>
       
       <!-- 悬浮模式的缩放手柄 (仅限单机悬浮模式) -->
       <template v-if="isFloating && deviceStore.directControlMode === 'single' && !isMobile">
@@ -710,12 +710,9 @@
         <div class="resize-corner bottom-right" @mousedown="startResizing('bottom-right', $event)"></div>
       </template>
 
-      <!-- 面板内容区 -->
-      <div class="panel-inner" v-if="deviceStore.activeDeviceIds.length > 0">
-        <!-- 模式 A：单机直控模式 (或移动端) -->
-        <template v-if="deviceStore.directControlMode === 'single' || isMobile">
-          <!-- PC 单机顶部工具栏 (移动端不显示) -->
-          <header class="panel-top-bar" @mousedown="startDragging" v-if="!isMobile">
+      <!-- 面板内容区 (单机模式) -->
+      <div class="panel-inner" v-if="deviceStore.activeDeviceId">
+        <header class="panel-top-bar" @mousedown="startDragging" v-if="!isMobile">
             <div class="vm-info">
               <span class="status-dot" :class="{ online: activeDevice?.status === 'online', offline: activeDevice?.status !== 'online' }"></span>
               <span class="vm-id">{{ activeDevice?.displayName || activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
@@ -820,110 +817,6 @@
               @recommend-layout="handleRecommendLayout" 
             />
           </div>
-        </template>
-
-        <!-- 模式 B：多机直连侧边栏 (多机模式下也常驻展示侧边栏，支持设备快速切换与弹出悬浮) -->
-        <template v-else>
-          <header class="panel-top-bar multi-sidebar-header" v-if="!isMobile">
-            <!-- 多机设备药丸切换列表 -->
-            <div class="multi-sidebar-pills custom-scrollbar" @mousedown.stop>
-              <button 
-                v-for="id in deviceStore.activeDeviceIds" 
-                :key="id"
-                class="sidebar-pill-btn"
-                :class="{ active: currentSidebarDeviceId === id }"
-                @click="deviceStore.setSidebarDockedDevice(id)"
-                :title="id"
-              >
-                <span class="pill-dot"></span>
-                <span class="pill-name">{{ deviceStore.getDeviceDisplayName(id) }}</span>
-                <span class="pill-close" @click.stop="deviceStore.closeDevice(id)" :title="$t('common.close')">×</span>
-              </button>
-            </div>
-
-            <!-- 右侧工具栏 -->
-            <div class="panel-tools" @mousedown.stop>
-              <!-- 弹出为自由悬浮窗 -->
-              <button 
-                class="tool-btn"
-                @click="undockSidebarDevice"
-                :title="$t('multi.floatWindow')"
-                :data-tooltip="$t('multi.floatWindow')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                  <rect x="7" y="7" width="10" height="10"></rect>
-                </svg>
-              </button>
-              <!-- 画中画 -->
-              <button 
-                v-if="multiSidebarClientRef?.pictureInPictureSupported && !multiSidebarClientRef?.isCanvasRendering" 
-                class="tool-btn" 
-                :class="{ active: multiSidebarClientRef?.isPiP }"
-                @click="multiSidebarClientRef?.togglePictureInPicture()" 
-                :title="multiSidebarClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
-                :data-tooltip="multiSidebarClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
-                <span v-if="multiSidebarClientRef?.isPiP" class="active-dot"></span>
-              </button>
-              <!-- 全屏 -->
-              <button 
-                class="tool-btn" 
-                :class="{ active: multiSidebarClientRef?.isWebFullscreen }"
-                @click="multiSidebarClientRef?.toggleWebFullscreen()" 
-                :title="multiSidebarClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
-                :data-tooltip="multiSidebarClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <polyline points="9 21 3 21 3 15"></polyline>
-                  <line x1="21" y1="3" x2="14" y2="10"></line>
-                  <line x1="3" y1="21" x2="10" y2="14"></line>
-                </svg>
-                <span v-if="multiSidebarClientRef?.isWebFullscreen" class="active-dot"></span>
-              </button>
-              <!-- 切为单机模式 -->
-              <button 
-                class="tool-btn" 
-                @click="deviceStore.setDirectControlMode('single')" 
-                :title="$t('multi.singleModeTitle')"
-                :data-tooltip="$t('multi.singleModeTitle')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="5" y="2" width="14" height="20" rx="2"></rect>
-                  <line x1="12" y1="18" x2="12.01" y2="18"></line>
-                </svg>
-              </button>
-              <!-- 全部关闭 -->
-              <button 
-                class="tool-btn close" 
-                @click="deviceStore.closeAllDevices()" 
-                :title="$t('multi.closeWorkspaceTitle')"
-                :data-tooltip="$t('multi.closeWorkspaceTitle')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          </header>
-
-          <div class="panel-main">
-            <!-- 渲染多机模式下侧边栏当前设备 -->
-            <DeviceClient 
-              ref="multiSidebarClientRef"
-              v-if="currentSidebarDeviceId" 
-              :deviceId="currentSidebarDeviceId" 
-              :key="`${currentSidebarDeviceId}_${deviceStore.getDeviceMode(currentSidebarDeviceId)}`"
-              :is-mini="false"
-              :is-focused="deviceStore.focusedDeviceId === currentSidebarDeviceId"
-              :audio-muted="false"
-              @recommend-layout="handleRecommendLayout" 
-            />
-          </div>
-        </template>
       </div>
 
       <div class="panel-empty" v-else>
@@ -1088,14 +981,6 @@ const router = useRouter()
 const isBarePage = computed(() => !!route.meta.public)
 
 const singleDeviceClientRef = ref(null)
-const multiSidebarClientRef = ref(null)
-const currentSidebarDeviceId = computed(() => 
-  deviceStore.sidebarDockedDeviceId || deviceStore.focusedDeviceId || deviceStore.activeDeviceIds[0] || null
-)
-
-function undockSidebarDevice() {
-  deviceStore.setSidebarDockedDevice(null)
-}
 
 function handleLogout() {
   authStore.logout()
@@ -1285,15 +1170,15 @@ const sideWidth = ref(420)
 // 动态样式计算
 const panelStyle = computed(() => {
   if (isMobile.value) return {}
+  // 多机直连模式下，所有打开的设备均作为独立自由悬浮窗展示，右侧面板收起
+  if (deviceStore.directControlMode === 'multi') {
+    return { width: '0px', display: 'none' }
+  }
   // 面板关闭或者处于部署/大盘页面时不设置宽度并隐藏
-  if (deviceStore.activeDeviceIds.length === 0 || isPanelHiddenPage.value) {
+  if (!deviceStore.activeDeviceId || isPanelHiddenPage.value) {
     return { width: '0px', display: 'none' }
   }
-  // 多机模式下，如果用户主动清空了侧边栏停靠（全部作为自由悬浮窗），则侧边栏收起
-  if (deviceStore.directControlMode === 'multi' && !deviceStore.sidebarDockedDeviceId) {
-    return { width: '0px', display: 'none' }
-  }
-  if (isFloating.value && deviceStore.directControlMode === 'single') {
+  if (isFloating.value) {
     return {
       position: 'fixed',
       left: `${floatPos.value.x}px`,
@@ -2954,80 +2839,6 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
   position: relative;
   z-index: 100;
   overflow: visible;
-}
-
-/* 多机直连侧边栏顶部标签与工具栏 */
-.multi-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px;
-}
-.multi-sidebar-pills {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-  padding: 4px 0;
-}
-.sidebar-pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #8b949e;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.sidebar-pill-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #f1f5f9;
-}
-.sidebar-pill-btn.active {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-  font-weight: 500;
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.2);
-}
-.pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-  flex-shrink: 0;
-}
-.pill-name {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pill-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  font-size: 12px;
-  line-height: 1;
-  color: #8b949e;
-  transition: all 0.15s ease;
-  margin-left: 2px;
-}
-.pill-close:hover {
-  background: rgba(248, 81, 73, 0.25);
-  color: #f85149;
 }
 .vm-info { display: flex; align-items: center; gap: 8px; pointer-events: none; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }

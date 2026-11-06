@@ -17,15 +17,7 @@
     <div class="glass-card">
       <div class="brand">
         <div class="brand-logo">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM11 16H13V18H11V16ZM11 6H13V14H11V6Z" fill="url(#brandGrad)"/>
-            <defs>
-              <linearGradient id="brandGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#00f2fe" />
-                <stop offset="100%" stop-color="#4facfe" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <img src="/logo.svg" alt="Cloud Phone Logo" class="brand-logo-img" />
         </div>
         <h1>{{ $t('login.title') }}</h1>
         <p class="subtitle">{{ $t('login.subtitle') }}</p>
@@ -281,15 +273,20 @@ async function handleSubmit() {
 }
 
 .brand-logo {
-  width: 60px;
-  height: 60px;
+  width: 72px;
+  height: 72px;
   margin: 0 auto 15px;
-  filter: drop-shadow(0 4px 10px rgba(0, 242, 254, 0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 6px 16px rgba(22, 113, 255, 0.4));
 }
 
+.brand-logo-img,
 .brand-logo svg {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 .brand h1 {

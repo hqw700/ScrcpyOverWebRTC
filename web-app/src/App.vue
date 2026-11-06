@@ -58,9 +58,7 @@
     <!-- 1. 全局侧边导航 (仅PC显示) -->
     <nav class="side-nav" :class="{ expanded: isNavExpanded }" v-if="!isMobile">
       <button class="nav-brand" @click="isNavExpanded = !isNavExpanded" :title="isNavExpanded ? $t('nav.collapse') : $t('nav.expand')">
-        <svg class="nav-brand-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-        </svg>
+        <img src="/logo.svg" alt="Cloud Phone Logo" class="nav-brand-img" />
         <span class="nav-brand-text">{{ $t('nav.brand') }}</span>
         <span class="nav-brand-collapse-arrow">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1575,6 +1573,14 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 
 .nav-brand:hover {
   background: rgba(255,255,255,0.05);
+}
+
+.nav-brand-img {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(22, 113, 255, 0.4));
 }
 
 .nav-brand-icon-svg {

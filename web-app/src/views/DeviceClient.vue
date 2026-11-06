@@ -42,36 +42,18 @@
           ✕
         </button>
 
-        <!-- 悬浮全屏按钮 (移入视频容器内，保证全屏时可见，支持全屏下无触碰自动淡隐) -->
+        <!-- 全屏状态下的专属退出全屏悬浮按钮（平时在标题栏显示，仅在全屏/网页全屏时右上角呈现，支持自动淡隐） -->
         <button 
-          class="fullscreen-fab" 
-          :class="{ 'is-active': isFullscreen || isWebFullscreen, 'fs-ui-visible': fsUiVisible }"
+          v-if="isFullscreen || isWebFullscreen" 
+          class="fs-exit-fab" 
+          :class="{ 'fs-ui-visible': fsUiVisible }"
           @click="toggleFullscreen" 
-          :title="(isFullscreen || isWebFullscreen) ? $t('deviceClient.exitFullscreen') : $t('deviceClient.enterFullscreen')"
+          :title="$t('deviceClient.exitFullscreen')"
         >
-          <svg v-if="isFullscreen || isWebFullscreen" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4 14 10 14 10 20"></polyline>
-            <polyline points="20 10 14 10 14 4"></polyline>
-            <line x1="14" y1="10" x2="21" y2="3"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
-          <svg v-else class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-        </button>
-
-        <!-- 页面全屏按钮 -->
-        <button 
-          v-if="!isMobile" 
-          class="webfullscreen-fab" 
-          :class="{ 'is-active': isWebFullscreen }" 
-          @click="toggleWebFullscreen" 
-          :title="isWebFullscreen ? $t('deviceClient.exitWebFullscreen') : $t('deviceClient.enterWebFullscreen')"
-        >
-          <svg v-if="isWebFullscreen" class="icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          <svg v-else class="icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-        </button>
-        <!-- 画中画按钮 -->
-        <button v-if="!isMobile && pictureInPictureSupported" class="pip-fab" @click="togglePictureInPicture" :title="isPiP ? $t('deviceClient.exitPip') : $t('deviceClient.enterPip')">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
         </button>
 
         <!-- WebCodecs / WebSocket 极速锁相 Canvas 渲染器 -->
@@ -136,6 +118,20 @@
           @compositionstart="onCompositionStart"
           @compositionend="onCompositionEnd"
         ></textarea>
+
+        <!-- 画中画播放中占位提示覆盖层 (选中进入画中画时显示，杜绝主视窗黑屏无感知) -->
+        <div v-if="isPiP" class="pip-active-overlay" @click="togglePictureInPicture">
+          <div class="pip-active-card">
+            <div class="pip-active-icon">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor"></rect></svg>
+            </div>
+            <div class="pip-active-title">{{ $t('deviceClient.pipActiveTitle') }}</div>
+            <div class="pip-active-desc">{{ $t('deviceClient.pipActiveDesc') }}</div>
+            <button class="pip-active-restore-btn" @click.stop="togglePictureInPicture">
+              {{ $t('deviceClient.exitPip') }}
+            </button>
+          </div>
+        </div>
 
 
         <!-- 视频流状态面板 (常规模式左上角) -->
@@ -247,7 +243,13 @@
                 <span class="rec-dot" v-if="isRecording"></span>
                 🔴 {{ isRecording ? `${$t('deviceClient.stopRecord')} (${formattedRecordingTime})` : $t('deviceClient.localRecord') }}
               </button>
-              <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
+              <button 
+                class="fab-item" 
+                :class="{ disabled: isWebSocketMode }" 
+                :disabled="isWebSocketMode"
+                @click="togglePageMute(); showMobileMenu=false"
+                :title="isWebSocketMode ? $t('deviceClient.wsAudioDisabled') : ''"
+              >
                 {{ pageAudioMuted ? '🔊 ' + $t('deviceClient.audioListen') : '🔇 ' + $t('deviceClient.mute') }}
               </button>
               <button class="fab-item" :class="{ 'group-active': isFullscreen || isWebFullscreen }" @click="toggleFullscreen(); showMobileMenu=false">
@@ -314,12 +316,24 @@
                 <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="19" y1="12" x2="15" y2="12"></line></svg> {{ $t('deviceClient.volumeDown') }}
               </button>
               </template>
-              <button class="fab-item" @click="togglePageMute(); showMobileMenu=false">
+              <button 
+                class="fab-item" 
+                :class="{ disabled: isWebSocketMode }" 
+                :disabled="isWebSocketMode"
+                @click="togglePageMute(); showMobileMenu=false"
+                :title="isWebSocketMode ? $t('deviceClient.wsAudioDisabled') : ''"
+              >
                 <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
                 <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
                 {{ pageAudioMuted ? $t('deviceClient.unmute') : $t('deviceClient.mute') }}
               </button>
-              <button class="fab-item" @click="toggleConsole(); showMobileMenu=false">
+              <button 
+                class="fab-item" 
+                :class="{ disabled: isWebSocketMode }" 
+                :disabled="isWebSocketMode"
+                @click="toggleConsole(); showMobileMenu=false"
+                :title="isWebSocketMode ? $t('deviceClient.wsTerminalDisabled') : ''"
+              >
                 <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> {{ $t('deviceClient.terminal') }}
               </button>
               <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
@@ -397,6 +411,15 @@
           </svg>
           <span class="btn-text">{{ isWebSocketMode ? $t('deviceClient.wsStream') : 'WebRTC' }}</span>
         </button>
+        <button class="sidebar-btn" :class="{ active: isFullscreen || isWebFullscreen }" @click="toggleWebFullscreen" :title="isWebFullscreen ? $t('deviceClient.exitWebFullscreen') : $t('deviceClient.enterWebFullscreen')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <span class="btn-text">{{ isWebFullscreen ? $t('deviceClient.exitWebFullscreenShort') : $t('deviceClient.webFullscreenShort') }}</span>
+        </button>
         <div class="sidebar-divider"></div>
         <template v-if="!forbidTerminal">
         <button class="sidebar-btn" @click="quickKey('input keyevent 26')" :title="$t('deviceClient.power')">
@@ -420,7 +443,13 @@
           <span class="btn-text">{{ $t('deviceClient.volumeDown') }}</span>
         </button>
         </template>
-        <button class="sidebar-btn" :class="{ active: pageAudioMuted }" @click="togglePageMute" :title="pageAudioMuted ? $t('deviceClient.unmute') : $t('deviceClient.mute')">
+        <button 
+          class="sidebar-btn" 
+          :class="{ active: pageAudioMuted, disabled: isWebSocketMode }" 
+          :disabled="isWebSocketMode"
+          @click="togglePageMute" 
+          :title="isWebSocketMode ? $t('deviceClient.wsAudioDisabled') : (pageAudioMuted ? $t('deviceClient.unmute') : $t('deviceClient.mute'))"
+        >
           <svg v-if="pageAudioMuted" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
           <svg v-else class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a5 5 0 0 1 0 6"></path><path d="M17.7 6.3a9 9 0 0 1 0 11.4"></path></svg>
           <span class="btn-text">{{ pageAudioMuted ? $t('deviceClient.unmute') : $t('deviceClient.mute') }}</span>
@@ -429,10 +458,12 @@
           class="sidebar-btn" 
           :class="{ 
             active: deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer === 'console',
-            'is-behind': deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console'
+            'is-behind': deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console',
+            disabled: isWebSocketMode
           }" 
+          :disabled="isWebSocketMode"
           @click="toggleConsole" 
-          :title="deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console' ? $t('deviceClient.terminalOpenHint') : $t('deviceClient.terminal')"
+          :title="isWebSocketMode ? $t('deviceClient.wsTerminalDisabled') : (deviceStore.showGlobalConsole && deviceStore.consoleDeviceId === currentId && deviceStore.activeTopLayer !== 'console' ? $t('deviceClient.terminalOpenHint') : $t('deviceClient.terminal'))"
         >
           <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
           <span class="btn-text">{{ $t('deviceClient.terminal') }}</span>
@@ -2215,10 +2246,19 @@ onMounted(() => {
 })
 
 function handleFullscreenChange() {
-  isFullscreen.value = !!document.fullscreenElement
+  const nowFs = !!document.fullscreenElement
+  if (nowFs !== isFullscreen.value) {
+    if (nowFs) {
+      triggerQuickTextToast(t('deviceClient.sysFsEnterToast'))
+    } else {
+      triggerQuickTextToast(t('deviceClient.sysFsExitToast'))
+    }
+  }
+  isFullscreen.value = nowFs
   if (isFullscreen.value) {
     if (isWebFullscreen.value) {
       document.body.classList.remove('web-fullscreen')
+      document.body.classList.remove('has-web-fullscreen')
       isWebFullscreen.value = false
     }
   }
@@ -2521,10 +2561,13 @@ function toggleWebFullscreen() {
     document.body.classList.add('has-web-fullscreen')
     isWebFullscreen.value = true
     onFsUiActivity()
+    triggerQuickTextToast(t('deviceClient.webFsEnterToast'))
 
     // 若是 iOS 设备且当前不是独立的 PWA 模式，弹出友好提示
     if (isIOS.value && !isStandalonePWA.value) {
-      triggerQuickTextToast(t('deviceClient.iosPwaTip'))
+      setTimeout(() => {
+        triggerQuickTextToast(t('deviceClient.iosPwaTip'))
+      }, 1500)
     }
   } else {
     document.body.classList.remove('has-web-fullscreen')
@@ -2532,6 +2575,7 @@ function toggleWebFullscreen() {
     isWebFullscreen.value = false
     if (fsUiHideTimer) { clearTimeout(fsUiHideTimer); fsUiHideTimer = null }
     fsUiVisible.value = true
+    triggerQuickTextToast(t('deviceClient.webFsExitToast'))
   }
 }
 
@@ -2553,6 +2597,7 @@ async function togglePictureInPicture() {
       await document.exitPictureInPicture()
     }
     isPiP.value = false
+    triggerQuickTextToast(t('deviceClient.pipExitToast'))
     return
   }
 
@@ -2595,6 +2640,7 @@ async function togglePictureInPicture() {
       pipWindow.document.body.appendChild(container)
 
       isPiP.value = true
+      triggerQuickTextToast(t('deviceClient.pipEnterToast'))
 
       // When PiP window closes, move video back
       pipWindow.addEventListener('pagehide', () => {
@@ -2610,6 +2656,7 @@ async function togglePictureInPicture() {
         }
         isPiP.value = false
         pipWindow = null
+        triggerQuickTextToast(t('deviceClient.pipExitToast'))
       })
 
       return
@@ -2623,8 +2670,10 @@ async function togglePictureInPicture() {
   try {
     await videoElement.value.requestPictureInPicture()
     isPiP.value = true
+    triggerQuickTextToast(t('deviceClient.pipEnterToast'))
     videoElement.value.addEventListener('leavepictureinpicture', () => {
       isPiP.value = false
+      triggerQuickTextToast(t('deviceClient.pipExitToast'))
     }, { once: true })
   } catch (err) {
     console.error('PiP error:', err)
@@ -2869,6 +2918,18 @@ function onTouchEnd(e) {
     webrtc.sendTouch(1, touch.clientX, touch.clientY, touch.identifier, coord)
   }
 }
+
+defineExpose({
+  toggleFullscreen,
+  toggleWebFullscreen,
+  togglePictureInPicture,
+  isFullscreen,
+  isWebFullscreen,
+  isPiP,
+  pictureInPictureSupported,
+  isCanvasRendering,
+  triggerQuickTextToast
+})
 </script>
 
 <style scoped>
@@ -2917,26 +2978,45 @@ function onTouchEnd(e) {
   stroke-linejoin: round;
 }
 
+.fs-exit-fab,
 .fullscreen-fab {
   position: absolute;
   top: 16px;
-  right: 60px; /* Moved left to accommodate close button */
+  right: 16px;
   width: 36px;
   height: 36px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(248, 81, 73, 0.85);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 100;
+  z-index: 130;
   transition: all 0.2s;
+  opacity: 0;
+  pointer-events: none;
 }
+.fs-exit-fab.fs-ui-visible,
+.fullscreen-fab.fs-ui-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.fs-exit-fab .icon,
 .fullscreen-fab .icon { width: 18px; height: 18px; }
-.fullscreen-fab:hover { background: rgba(0, 0, 0, 0.8); transform: scale(1.1); }
+.fs-exit-fab:hover,
+.fullscreen-fab:hover { background: rgba(248, 81, 73, 1); transform: scale(1.1); }
+
+.sidebar-btn.disabled,
+.sidebar-btn:disabled,
+.fab-item.disabled,
+.fab-item:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.8);
+}
 
 .mobile-close-fab {
   position: absolute;
@@ -4180,6 +4260,94 @@ function onTouchEnd(e) {
   z-index: 2000;
   pointer-events: none;
   user-select: none;
+}
+
+/* 画中画激活状态主视窗提示遮罩 */
+.pip-active-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.85) 0%, rgba(3, 7, 18, 0.95) 100%);
+  backdrop-filter: blur(12px);
+  z-index: 80;
+  cursor: pointer;
+  user-select: none;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.pip-active-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 320px;
+  padding: 24px 20px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(56, 189, 248, 0.1);
+  pointer-events: auto;
+}
+
+.pip-active-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(56, 189, 248, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+}
+
+.pip-active-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.pip-active-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 6px;
+}
+
+.pip-active-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.pip-active-restore-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+}
+
+.pip-active-restore-btn:hover {
+  background: #0369a1;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.5);
+}
+
+.pip-active-restore-btn:active {
+  transform: translateY(0);
 }
 
 /* 移动端快捷文本弹层 */

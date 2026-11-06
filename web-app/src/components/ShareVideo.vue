@@ -28,7 +28,11 @@
       disableremoteplayback
       controlslist="nodownload nofullscreen noremoteplayback noplaybackrate"
       x-webkit-airplay="deny"
-      :muted="!soundOn"
+      muted
+      @loadedmetadata="resumeVideoPlayback"
+      @canplay="resumeVideoPlayback"
+      @webkitbeginfullscreen="isFullscreen = true"
+      @webkitendfullscreen="onVideoFullscreenEnd"
       @click="onVideoAreaClick"
       @mousedown="onMouseDown"
       @mousemove="onMouseMove"
@@ -147,6 +151,16 @@
           <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
           {{ isPiP ? $t('deviceClient.exitPip') : $t('deviceClient.enterPip') }}
         </button>
+      </div>
+    </div>
+
+    <div v-if="showVideoFullscreenNotice" class="video-fullscreen-notice" @click.stop @touchstart.stop @touchend.stop>
+      <div class="video-fullscreen-notice-card" role="dialog" aria-modal="true" :aria-label="$t('deviceClient.enterFullscreen')">
+        <p>{{ $t('share.videoFullscreenNotice') }}</p>
+        <div class="video-fullscreen-notice-actions">
+          <button class="fab-item" @click="showVideoFullscreenNotice = false">{{ $t('common.cancel') }}</button>
+          <button class="fab-item" @click="enterNativeVideoFullscreen">{{ $t('deviceClient.enterFullscreen') }}</button>
+        </div>
       </div>
     </div>
 
@@ -340,15 +354,33 @@ function openSettings() {
   showSettingsModal.value = true
 }
 
+// Keep the video-only stream muted; audio is played by useWebRTC separately.
+function resumeVideoPlayback() {
+  const video = videoEl.value
+  if (!video || isWebCodecs.value || !video.srcObject) return
+  video.muted = true
+  video.defaultMuted = true
+  video.playsInline = true
+  if (!video.paused && !video.ended) return
+  video.play().catch(err => {
+    console.warn('[ShareVideo] Video playback blocked:', err.name, err.message)
+  })
+}
+
+function onPageVisible() {
+  if (document.visibilityState === 'visible') resumeVideoPlayback()
+}
+
 // --- 声音控制（本地播放侧，立即生效） ---
 function enableSound() {
   if (!videoEl.value || !localSettings.value.audio) return
   soundOn.value = true
-  videoEl.value.muted = false
-  videoEl.value.play().catch(() => {})
+  webrtc.value?.setAudioMuted(false)
+  resumeVideoPlayback()
 }
 
 function onVideoAreaClick() {
+  resumeVideoPlayback()
   // 首次点击画面区域时顺便开声音（此时已有用户手势，autoplay 限制解除）
   if (!soundOn.value) enableSound()
   tryEnterFullscreenOnFirstGesture()
@@ -358,7 +390,7 @@ function togglePageMute() {
   showFabMenu.value = false
   if (soundOn.value) {
     soundOn.value = false
-    if (videoEl.value) videoEl.value.muted = true
+    webrtc.value?.setAudioMuted(true)
   } else {
     enableSound()
   }
@@ -510,6 +542,7 @@ function quickKey(keycode) {
 const containerRef = ref(null)
 const isFullscreen = ref(false)
 const showFullscreenHint = ref(true)
+const showVideoFullscreenNotice = ref(false)
 let hasAutoFullscreenTriggered = false
 
 function updateMedia() {
@@ -547,14 +580,49 @@ function onGlobalAnyKeyOrGesture(e) {
   }
 }
 
+function onVideoFullscreenEnd() {
+  isFullscreen.value = !!document.fullscreenElement
+  resumeVideoPlayback()
+}
+
 function onToggleFullscreen() {
   showFabMenu.value = false
   showFullscreenHint.value = false
-  if (!nativeFullscreenSupported.value) return
-  if (!document.fullscreenElement) {
-    containerRef.value?.requestFullscreen().catch(() => {})
-  } else {
-    document.exitFullscreen().catch(() => {})
+  const video = videoEl.value
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(err => console.warn('[ShareVideo] Exit fullscreen failed:', err))
+    return
+  }
+  if (video?.webkitDisplayingFullscreen) {
+    try {
+      video.webkitExitFullscreen()
+    } catch (err) {
+      console.warn('[ShareVideo] Exit video fullscreen failed:', err)
+    }
+    return
+  }
+  if (nativeFullscreenSupported.value && containerRef.value?.requestFullscreen) {
+    containerRef.value.requestFullscreen().catch(err => console.warn('[ShareVideo] Fullscreen failed:', err))
+    return
+  }
+  // Invoke synchronously from the menu click to preserve iOS user activation.
+  // Only explicit requests use native video fullscreen; ordinary touches keep controlling the device.
+  const enterVideoFullscreen = video?.webkitEnterFullscreen || video?.webkitEnterFullScreen
+  if (!isWebCodecs.value && enterVideoFullscreen) {
+    showVideoFullscreenNotice.value = true
+  }
+}
+
+function enterNativeVideoFullscreen() {
+  showVideoFullscreenNotice.value = false
+  const video = videoEl.value
+  const enter = video?.webkitEnterFullscreen || video?.webkitEnterFullScreen
+  if (!video || !enter || isWebCodecs.value) return
+  try {
+    resumeVideoPlayback()
+    enter.call(video)
+  } catch (err) {
+    console.warn('[ShareVideo] Native video fullscreen failed:', err)
   }
 }
 
@@ -698,6 +766,7 @@ function onMouseLeave(e) {
 }
 
 function onTouchStart(e) {
+  resumeVideoPlayback()
   tryEnterFullscreenOnFirstGesture()
   if (isViewOnly.value || !webrtc.value) return
   for (const t of e.changedTouches) {
@@ -735,6 +804,10 @@ function onWheel(e) {
 
 onMounted(() => {
   createConnection()
+  document.addEventListener('WeixinJSBridgeReady', resumeVideoPlayback)
+  document.addEventListener('visibilitychange', onPageVisible)
+  window.addEventListener('pageshow', resumeVideoPlayback)
+  window.addEventListener('touchend', resumeVideoPlayback, { capture: true, passive: true })
   document.addEventListener('fullscreenchange', onFullscreenChange)
   window.addEventListener('resize', updateMedia)
   window.addEventListener('keydown', onGlobalAnyKeyOrGesture)
@@ -745,6 +818,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('WeixinJSBridgeReady', resumeVideoPlayback)
+  document.removeEventListener('visibilitychange', onPageVisible)
+  window.removeEventListener('pageshow', resumeVideoPlayback)
+  window.removeEventListener('touchend', resumeVideoPlayback, { capture: true })
   destroyConnection()
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.removeEventListener('resize', updateMedia)
@@ -758,6 +835,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.video-fullscreen-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+}
+.video-fullscreen-notice-card {
+  max-width: 360px;
+  padding: 20px;
+  border-radius: 16px;
+  background: #20232b;
+  color: #fff;
+  line-height: 1.6;
+}
+.video-fullscreen-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.video-fullscreen-notice-actions .fab-item {
+  width: auto;
+  flex-shrink: 0;
+}
+
 .share-video-container {
   position: absolute;
   inset: 0;

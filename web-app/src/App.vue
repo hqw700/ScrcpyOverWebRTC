@@ -728,15 +728,67 @@
               <span class="vm-id">{{ activeDevice?.displayName || activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
             </div>
             <div class="panel-tools" @mousedown.stop>
+              <!-- 画中画 (PiP) -->
+              <button 
+                v-if="singleDeviceClientRef?.pictureInPictureSupported && !singleDeviceClientRef?.isCanvasRendering" 
+                class="tool-btn" 
+                :class="{ active: singleDeviceClientRef?.isPiP }"
+                @click="singleDeviceClientRef?.togglePictureInPicture()" 
+                :title="singleDeviceClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
+                :data-tooltip="singleDeviceClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
+              >
+                <svg class="tool-btn-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
+                <span v-if="singleDeviceClientRef?.isPiP" class="active-dot"></span>
+              </button>
+              <!-- 网页全屏 -->
+              <button 
+                class="tool-btn" 
+                :class="{ active: singleDeviceClientRef?.isWebFullscreen }"
+                @click="singleDeviceClientRef?.toggleWebFullscreen()" 
+                :title="singleDeviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
+                :data-tooltip="singleDeviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
+              >
+                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <polyline points="9 21 3 21 3 15"></polyline>
+                  <line x1="21" y1="3" x2="14" y2="10"></line>
+                  <line x1="3" y1="21" x2="10" y2="14"></line>
+                </svg>
+                <span v-if="singleDeviceClientRef?.isWebFullscreen" class="active-dot"></span>
+              </button>
+              <!-- 系统全屏 -->
+              <button 
+                class="tool-btn" 
+                :class="{ active: singleDeviceClientRef?.isFullscreen }"
+                @click="singleDeviceClientRef?.toggleFullscreen()" 
+                :title="singleDeviceClientRef?.isFullscreen ? $t('deviceClient.fsActiveHoverHint') : $t('deviceClient.enterFullscreen')"
+                :data-tooltip="singleDeviceClientRef?.isFullscreen ? $t('deviceClient.fsActiveHoverHint') : $t('deviceClient.enterFullscreen')"
+              >
+                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+                <span v-if="singleDeviceClientRef?.isFullscreen" class="active-dot"></span>
+              </button>
               <!-- 快捷切为多机模式 -->
-              <button class="tool-btn" @click="deviceStore.setDirectControlMode('multi')" :title="$t('multi.switchToMultiTitle')">
+              <button 
+                class="tool-btn" 
+                @click="deviceStore.setDirectControlMode('multi')" 
+                :title="$t('multi.switchToMultiTitle')"
+                :data-tooltip="$t('multi.switchToMultiTitle')"
+              >
                 <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="2" y="3" width="8" height="18" rx="2"></rect>
                   <rect x="14" y="3" width="8" height="18" rx="2"></rect>
                 </svg>
               </button>
               <!-- 靠边固定 / 悬浮窗口 -->
-              <button class="tool-btn" @click="toggleFloating" :title="isFloating ? $t('multi.pinToSide') : $t('multi.floatWindow')">
+              <button 
+                class="tool-btn" 
+                :class="{ active: isFloating }"
+                @click="handleToggleFloating" 
+                :title="isFloating ? $t('multi.floatingActiveHoverHint') : $t('multi.floatWindow')"
+                :data-tooltip="isFloating ? $t('multi.floatingActiveHoverHint') : $t('multi.floatWindow')"
+              >
                 <svg v-if="isFloating" class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                   <line x1="9" y1="3" x2="9" y2="21"></line>
@@ -745,9 +797,15 @@
                   <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                   <rect x="7" y="7" width="10" height="10"></rect>
                 </svg>
+                <span v-if="isFloating" class="active-dot"></span>
               </button>
               <!-- 关闭按钮 -->
-              <button class="tool-btn close" @click="closePanel" :title="$t('deviceClient.closeConn')">
+              <button 
+                class="tool-btn close" 
+                @click="closePanel" 
+                :title="$t('deviceClient.closeConn')"
+                :data-tooltip="$t('deviceClient.closeConn')"
+              >
                 <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -759,6 +817,7 @@
           <div class="panel-main">
             <!-- 渲染 DeviceClient -->
             <DeviceClient 
+              ref="singleDeviceClientRef"
               v-if="deviceStore.activeDeviceId" 
               :deviceId="deviceStore.activeDeviceId" 
               :key="`${deviceStore.activeDeviceId}_${deviceStore.getDeviceMode(deviceStore.activeDeviceId)}`"
@@ -958,7 +1017,8 @@ function getPreviewTagChipStyle(tag) {
   }
 }
 
-const systemVersion = ref('v0.4.0')
+const singleDeviceClientRef = ref(null)
+const systemVersion = ref('v0.4.4')
 const showUpdateModal = ref(false)
 const showFeedbackModal = ref(false)
 const updateInfo = ref(null)
@@ -1168,6 +1228,15 @@ function toggleFloating() {
     floatPos.value = { x: window.innerWidth - floatSize.value.w - 40, y: 80 }
   }
   isFloating.value = !isFloating.value
+}
+
+function handleToggleFloating() {
+  toggleFloating()
+  if (singleDeviceClientRef.value?.triggerQuickTextToast) {
+    singleDeviceClientRef.value.triggerQuickTextToast(
+      isFloating.value ? t('multi.floatingEnterToast') : t('multi.floatingExitToast')
+    )
+  }
 }
 
 // 拖拽逻辑
@@ -2774,16 +2843,120 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 .resize-corner.bottom-right { position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; cursor: nwse-resize; z-index: 101; }
 
 .panel-inner { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-secondary); border-radius: 12px; }
-.panel-top-bar { height: 50px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); cursor: grab; }
+.panel-top-bar { 
+  height: 50px; 
+  padding: 0 16px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  border-bottom: 1px solid var(--border); 
+  cursor: grab;
+  position: relative;
+  z-index: 100;
+  overflow: visible;
+}
 .vm-info { display: flex; align-items: center; gap: 8px; pointer-events: none; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
 .status-dot.offline { background: #8b949e; }
 .vm-id { font-weight: 600; font-size: 14px; }
-.panel-tools { display: flex; align-items: center; gap: 4px; }
-.tool-btn { background: none; border: none; color: #8b949e; cursor: pointer; padding: 6px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
-.tool-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-.tool-btn.close:hover { color: #f85149; }
+.panel-tools { 
+  display: flex; 
+  align-items: center; 
+  gap: 4px;
+  position: relative;
+  overflow: visible;
+}
+.tool-btn { 
+  background: none; 
+  border: none; 
+  color: #8b949e; 
+  cursor: pointer; 
+  padding: 6px; 
+  border-radius: 4px; 
+  display: inline-flex; 
+  align-items: center; 
+  justify-content: center; 
+  transition: all 0.2s ease; 
+  position: relative;
+}
+.tool-btn:hover { 
+  color: #fff; 
+  background: rgba(255, 255, 255, 0.08); 
+}
+.tool-btn.active { 
+  color: #38bdf8; 
+  background: rgba(56, 189, 248, 0.16); 
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.4);
+}
+.tool-btn.close:hover { 
+  color: #f85149; 
+  background: rgba(248, 81, 73, 0.15);
+}
 .tool-btn-svg { width: 16px; height: 16px; }
+
+/* 激活微光圆点指示器 */
+.tool-btn .active-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  pointer-events: none;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.75; }
+}
+
+/* 选中与悬停即时浮现的气泡 Tooltip 提示 */
+.panel-tools .tool-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  padding: 5px 9px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(12px);
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5), 0 0 10px rgba(56, 189, 248, 0.12);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 99999;
+}
+.panel-tools .tool-btn[data-tooltip]:hover::after,
+.panel-tools .tool-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.panel-tools .tool-btn:last-child[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-3px);
+}
+.panel-tools .tool-btn:last-child[data-tooltip]:hover::after,
+.panel-tools .tool-btn:last-child[data-tooltip]:focus-visible::after {
+  transform: translateY(0);
+}
+/* 选中激活状态下的 Tooltip 样式加强 */
+.panel-tools .tool-btn.active[data-tooltip]::after {
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  background: rgba(10, 15, 30, 0.98);
+}
 
 .panel-main { flex: 1; overflow: hidden; background: #000; }
 

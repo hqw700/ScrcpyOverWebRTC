@@ -176,6 +176,16 @@
                         selectedTemplate.volid || `CT ${selectedTemplate.vmid}`
                       }}</span
                     >
+                    <div class="template-repo-hint" v-if="!editing">
+                      <a href="https://github.com/hqw700/redroid-pve" target="_blank" rel="noopener noreferrer" class="repo-inline-link">
+                        <svg class="mini-repo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                          <polyline points="15 3 21 3 21 9"></polyline>
+                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        <span>{{ t('orchestrator.templateRepoHint') }}</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
                 <div class="config-row">
@@ -1263,9 +1273,6 @@ fieldset:disabled {
     animation: none;
   }
 }
-.network-warning {
-  color: #fbbf24;
-}
 </style>
 
 <style scoped>
@@ -1317,5 +1324,25 @@ fieldset:disabled {
 }
 .network-warning {
   color: #fbbf24;
+}
+.template-repo-hint {
+  margin-top: 6px;
+}
+.repo-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.repo-inline-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+.mini-repo-icon {
+  width: 13px;
+  height: 13px;
 }
 </style>

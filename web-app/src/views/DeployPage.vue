@@ -1,11 +1,11 @@
 <template>
   <div class="deploy-page">
-    <div class="deploy-layout">
+    <div class="deploy-layout" :class="{ 'magisk-layout': manualMode === 'magisk' }">
       <!-- 左侧: 参数表单 -->
-      <section class="form-section">
+      <section v-if="manualMode !== 'magisk'" class="form-section">
         <h2 class="section-title">{{ $t('deploy.title') }}</h2>
 
-        <div class="webusb-warning">
+        <div v-if="manualMode !== 'magisk'" class="webusb-warning">
           ⚠️ <b>{{ $t('deploy.warningTitle') }}</b>：{{ $t('deploy.warningNotice') }}<br>
           💡 <b>{{ $t('deploy.warningTipTitle') }}</b>：{{ $t('deploy.warningTip') }}
         </div>
@@ -69,6 +69,7 @@
         </div>
 
         <button
+          v-if="manualMode !== 'magisk'"
           class="deploy-btn"
           :disabled="isDeploying || !form.signalingUrl"
           @click="startDeploy"
@@ -80,7 +81,7 @@
       <!-- 右侧: 部署进度与手动部署指导 -->
       <div class="right-column">
         <!-- 部署日志/进度 -->
-        <section class="log-section">
+        <section v-if="manualMode !== 'magisk'" class="log-section">
           <h2 class="section-title">{{ $t('deploy.progress.title') }}</h2>
 
           <!-- 步骤列表 -->
@@ -213,7 +214,13 @@
                 <div class="command-grid">
                   <div class="command-card">
                     <div class="script-box-title">
-                      <span class="os-tag unix">Linux / macOS</span>
+                      <span class="os-tag unix">
+                        <svg class="os-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                          <polyline points="4 17 10 11 4 5"></polyline>
+                          <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
+                        Linux / macOS
+                      </span>
                       <span>{{ $t('deploy.manual.singleDeploy') }}</span>
                     </div>
                     <div class="code-container">
@@ -224,7 +231,12 @@
 
                   <div class="command-card">
                     <div class="script-box-title">
-                      <span class="os-tag win">Windows CMD</span>
+                      <span class="os-tag win">
+                        <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M3 5.48L10.37 4.5v6.52H3V5.48zm0 8.02h7.37v6.52L3 19.04V13.5zm8.41-9.13L21 3v8.02h-9.59V4.37zm0 8.15H21V21l-9.59-1.37v-7.11z"/>
+                        </svg>
+                        Windows CMD
+                      </span>
                       <span>{{ $t('deploy.manual.singleDeploy') }}</span>
                     </div>
                     <div class="code-container">
@@ -247,7 +259,13 @@
                   <div class="command-grid batch-command-grid">
                     <div class="command-card">
                       <div class="script-box-title">
-                        <span class="os-tag unix">Linux / macOS</span>
+                        <span class="os-tag unix">
+                          <svg class="os-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                          </svg>
+                          Linux / macOS
+                        </span>
                         <span>{{ $t('deploy.manual.batchStart') }}</span>
                       </div>
                       <div class="code-container">
@@ -258,7 +276,12 @@
 
                     <div class="command-card">
                       <div class="script-box-title">
-                        <span class="os-tag win">Windows CMD</span>
+                        <span class="os-tag win">
+                          <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 5.48L10.37 4.5v6.52H3V5.48zm0 8.02h7.37v6.52L3 19.04V13.5zm8.41-9.13L21 3v8.02h-9.59V4.37zm0 8.15H21V21l-9.59-1.37v-7.11z"/>
+                          </svg>
+                          Windows CMD
+                        </span>
                         <span>{{ $t('deploy.manual.batchStartWin') }}</span>
                       </div>
                       <div class="code-container">
@@ -305,6 +328,9 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                   <span class="step-badge magisk-badge">{{ $t('deploy.manual.step1') }}</span>
                   <span class="step-title">{{ $t('deploy.manual.getMagiskPkg') }}</span>
                 </div>
+                <MagiskPackageBuilder :options="form" @update:options="Object.assign(form, $event)" />
+                <details class="magisk-alternatives">
+                  <summary>{{ $t('deploy.manual.otherMagiskDownloads') }}</summary>
                 <div class="download-action-banner magisk-banner">
                   <div class="banner-left">
                     <div class="banner-icon">📱</div>
@@ -323,12 +349,9 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                       <span class="btn-icon">📥</span>
                       <span class="btn-text">{{ $t('deploy.manual.downloadMagiskZip') }}</span>
                     </a>
-                    <a href="/agent/magisk-config-tools.pkg" download="magisk-config-tools.zip" class="banner-download-btn magisk-tool-btn" :title="$t('deploy.manual.offlineConfigToolsHint')">
-                      <span class="btn-icon">🛠️</span>
-                      <span class="btn-text">{{ $t('deploy.manual.offlineConfigTools') }}</span>
-                    </a>
                   </div>
                 </div>
+                </details>
               </div>
 
               <!-- 第二步：刷入模块与参数配置 -->
@@ -340,6 +363,8 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                 <p class="step-desc" v-html="$t('deploy.manual.flashModuleDesc')"></p>
 
                 <!-- 配置方式卡片网格 -->
+                <details class="magisk-alternatives">
+                  <summary>{{ $t('deploy.manual.otherMagiskMethods') }}</summary>
                 <div class="magisk-methods-container">
                   <!-- 方式 A -->
                   <div class="magisk-method-card active-method">
@@ -353,35 +378,15 @@ adb shell "cat /data/local/tmp/cloudphone-agent.log"</pre>
                     </div>
                   </div>
 
-                  <!-- 方式 B & 方式 C -->
+                  <!-- 方式 B -->
                   <div class="magisk-method-subgrid">
                     <div class="magisk-submethod-card">
                       <div class="submethod-title">{{ $t('deploy.manual.methodBTitle') }}</div>
                       <p class="submethod-desc" v-html="$t('deploy.manual.methodBDesc')"></p>
                     </div>
-                    <div class="magisk-submethod-card config-tool-card">
-                      <div class="submethod-header-row">
-                        <div class="submethod-title">{{ $t('deploy.manual.methodCTitle') }}</div>
-                        <a href="/agent/magisk-config-tools.pkg" download="magisk-config-tools.zip" class="tool-download-btn" :title="$t('deploy.manual.downloadConfigToolHint')">
-                          <span>{{ $t('deploy.manual.downloadConfigTool') }}</span>
-                        </a>
-                      </div>
-                      <p class="submethod-desc">
-                        <span v-html="$t('deploy.manual.methodCDesc')"></span>
-                      </p>
-                      <div class="tool-usage-tips">
-                        <div class="tip-item">
-                          <span class="tip-os win">Windows</span>
-                          <span class="tip-text" v-html="$t('deploy.manual.methodCWinTip')"></span>
-                        </div>
-                        <div class="tip-item">
-                          <span class="tip-os unix">macOS / Linux</span>
-                          <span class="tip-text" v-html="$t('deploy.manual.methodCUnixTip', { cmd: magiskToolShCommand })"></span>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
+                </details>
               </div>
 
               <!-- 第三步：验证状态 -->
@@ -411,6 +416,7 @@ adb shell "su -c cpctl log"</pre>
 import { ref, reactive, watch, nextTick, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeploy } from '@/composables/useDeploy'
+import MagiskPackageBuilder from '@/components/MagiskPackageBuilder.vue'
 
 const { t } = useI18n()
 const { isDeploying, deployStatus, deployProgress, deployError, deployLog, deployAgent } = useDeploy()
@@ -580,15 +586,6 @@ const magiskCommand = computed(() => {
   return `su\ncpctl set CP_AGENT_SIGNALING "${sig}"${iceCmd}${devIdCmd}\ncpctl restart`
 })
 
-// 响应式生成 Magisk 离线配置工具执行命令
-const magiskToolShCommand = computed(() => {
-  const host = signalingIp.value
-  const isPlain = form.signalingUrl.startsWith('ws://') || form.signalingUrl.startsWith('http://')
-  const protocol = isPlain ? 'ws' : 'wss'
-  const sig = `${protocol}://${host}`
-  return `./configure_magisk.sh -s "${sig}"`
-})
-
 // 常用验证与状态检测命令
 const checkAgentCmd = 'adb shell "ps -A | grep cloudphone-agent"'
 const checkMagiskCmd = 'adb shell "su -c cpctl status"'
@@ -623,13 +620,14 @@ function formatIceServers(servers) {
 
 // 从后端接口动态拉取已配置的 ICE 服务器列表，自动填充默认值
 async function fetchIceServers() {
+  const initialIceServers = form.iceServers
   try {
     const res = await fetch('/api/ice_servers')
     if (res.ok) {
       const data = await res.json()
       if (Array.isArray(data) && data.length > 0) {
         const formatted = formatIceServers(data)
-        if (formatted) {
+        if (formatted && form.iceServers === initialIceServers) {
           form.iceServers = formatted
         }
       }
@@ -654,6 +652,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.magisk-alternatives { margin-top: 16px; }
+.magisk-alternatives > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.magisk-alternatives[open] > summary { margin-bottom: 12px; }
+.deploy-layout.magisk-layout { grid-template-columns: minmax(0, 1fr); max-width: 1100px; }
+
 .deploy-page {
   padding: 24px;
   height: 100%;
@@ -1417,20 +1420,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.banner-download-btn.magisk-tool-btn {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.35);
-}
-
-.banner-download-btn.magisk-tool-btn:hover {
-  background: rgba(168, 85, 247, 0.25);
-  border-color: #c084fc;
-  color: #ffffff;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
-}
-
 /* 第二步：自适应脚本命令网格 */
 .command-grid {
   display: grid;
@@ -1459,12 +1448,22 @@ onMounted(async () => {
 }
 
 .os-tag {
-  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.os-tag .os-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .os-tag.unix {
@@ -1659,94 +1658,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.08);
   padding: 2px 5px;
   border-radius: 4px;
-  font-size: 11px;
-  color: #c084fc;
-}
-
-.magisk-submethod-card.config-tool-card {
-  border-color: rgba(168, 85, 247, 0.35);
-  background: rgba(168, 85, 247, 0.02);
-}
-
-.submethod-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tool-download-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  background: rgba(168, 85, 247, 0.18);
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  color: #c084fc;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.tool-download-btn:hover {
-  background: #9333ea;
-  border-color: #9333ea;
-  color: #ffffff;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.3);
-}
-
-.tool-usage-tips {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-}
-
-.tip-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  flex-wrap: wrap;
-}
-
-.tip-os {
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.tip-os.win {
-  background: rgba(16, 185, 129, 0.15);
-  color: #3fb950;
-}
-
-.tip-os.unix {
-  background: rgba(59, 130, 246, 0.15);
-  color: #58a6ff;
-}
-
-.tip-text {
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.tip-text code {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 1px 4px;
-  border-radius: 3px;
   font-size: 11px;
   color: #c084fc;
 }

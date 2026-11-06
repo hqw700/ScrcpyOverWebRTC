@@ -594,7 +594,22 @@ export function useWebSocketStream(deviceId, options = {}) {
   }
 
   function sendCommand(cmd) {
-    return false
+    if (!cmd || typeof cmd !== 'string') return false
+    const trimmed = cmd.trim()
+
+    // 1. 系统快捷按键（如 input keyevent 26/3/4/24/25 等），直接走 UDS 按键通道注入，零延迟且无需额外进程开销
+    const keyMatch = trimmed.match(/^input\s+keyevent\s+(\d+)$/)
+    if (keyMatch) {
+      const keycode = parseInt(keyMatch[1], 10)
+      if (!isNaN(keycode)) {
+        sendInjectKeycode(0, keycode)
+        setTimeout(() => sendInjectKeycode(1, keycode), 50)
+        return true
+      }
+    }
+
+    // 2. 其它自定义 Shell 命令通过全局信令 WebSocket 转发
+    return deviceStore.sendCommand(deviceId, trimmed)
   }
 
   function setClipboard(text, opts = {}) {

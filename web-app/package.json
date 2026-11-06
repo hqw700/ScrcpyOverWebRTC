@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:demo": "vite --mode demo",
     "check:i18n": "node scripts/check-i18n.js",
+    "test:magisk": "node --test tests/magiskPackage.test.mjs",
     "build": "node scripts/check-i18n.js && rm -f ../assets/assets/wework.jpg && vite build",
     "build:demo": "node scripts/check-i18n.js && vite build --mode demo",
     "preview": "vite preview"
@@ -18,6 +19,7 @@
     "@yume-chan/stream-extra": "^2.1.0",
     "echarts": "^5.5.0",
     "h264decoder": "^1.0.0",
+    "jszip": "^3.10.2",
     "pinia": "^2.1.0",
     "vue": "^3.4.0",
     "vue-i18n": "^9.14.4",

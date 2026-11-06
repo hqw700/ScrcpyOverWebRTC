@@ -18,12 +18,30 @@
       </div>
 
       <div class="header-right" @mousedown.stop @click.stop>
+        <!-- 网页全屏按钮 -->
+        <button 
+          class="item-btn webfullscreen-btn" 
+          :class="{ active: deviceClientRef?.isWebFullscreen }"
+          @click="deviceClientRef?.toggleWebFullscreen()"
+          :title="deviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
+          :data-tooltip="deviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <span v-if="deviceClientRef?.isWebFullscreen" class="active-dot"></span>
+        </button>
+
         <!-- 音频静音开关 -->
         <button 
           class="item-btn audio-btn" 
           :class="{ muted: isMuted }" 
           @click="toggleMute"
           :title="isMuted ? $t('multi.unmute') : $t('multi.mute')"
+          :data-tooltip="isMuted ? $t('multi.unmute') : $t('multi.mute')"
         >
           <svg v-if="!isMuted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -41,6 +59,7 @@
           class="item-btn close-btn" 
           @click="closeThis"
           :title="$t('multi.closeDeviceConn')"
+          :data-tooltip="$t('multi.closeDeviceConn')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -53,6 +72,7 @@
     <!-- 画面渲染区 (内嵌 DeviceClient) -->
     <div class="item-body">
       <DeviceClient 
+        ref="deviceClientRef"
         :deviceId="deviceId" 
         :key="`${deviceId}_${deviceStore.getDeviceMode(deviceId)}`"
         :is-mini="isMini"
@@ -82,6 +102,8 @@ const props = defineProps({
     default: true
   }
 })
+
+const deviceClientRef = ref(null)
 
 const deviceStore = useDeviceStore()
 const isFocused = computed(() => 
@@ -165,6 +187,9 @@ function closeThis() {
   flex-shrink: 0;
   user-select: none;
   cursor: pointer;
+  position: relative;
+  z-index: 50;
+  overflow: visible;
 }
 
 .is-focused .item-header {
@@ -237,6 +262,7 @@ function closeThis() {
   height: 24px;
   min-width: 24px;
   transition: all 0.15s ease;
+  position: relative;
 }
 
 .item-btn svg {
@@ -247,6 +273,68 @@ function closeThis() {
 .item-btn:hover {
   background: #21262d;
   color: #c9d1d9;
+}
+
+.item-btn.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.4);
+}
+
+.item-btn .active-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 4px #38bdf8;
+  pointer-events: none;
+}
+
+.header-right .item-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(8px);
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 9999;
+}
+
+.header-right .item-btn[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.header-right .item-btn:last-child[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+.header-right .item-btn:last-child[data-tooltip]:hover::after {
+  transform: translateY(0);
+}
+
+.header-right .item-btn.active[data-tooltip]::after {
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
 }
 
 .item-btn.master-btn {

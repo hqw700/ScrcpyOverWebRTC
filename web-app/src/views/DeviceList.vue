@@ -664,9 +664,26 @@ cpctl restart</pre>
               <!-- 离线设备区块（数据来自服务端离线记录，可折叠，默认折叠） -->
               <div v-if="filteredOfflineDevices.length > 0" class="offline-section">
                 <div class="offline-section-header clickable" @click="offlineCollapsed = !offlineCollapsed">
-                  <span class="offline-section-title">{{ $t('deviceList.offlineSection') }}</span>
-                  <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
-                  <span class="offline-section-arrow">{{ offlineCollapsed ? '▸' : '▾' }}</span>
+                  <div class="offline-header-left">
+                    <span class="offline-section-title">{{ $t('deviceList.offlineSection') }}</span>
+                    <span class="offline-section-count">{{ filteredOfflineDevices.length }}</span>
+                  </div>
+                  <div class="offline-header-actions" @click.stop>
+                    <button 
+                      v-if="authStore.isAdmin" 
+                      class="clean-offline-btn" 
+                      :disabled="isCleaningOffline"
+                      @click.stop="handleCleanAllOffline"
+                      :title="$t('deviceList.cleanOfflineTip')"
+                    >
+                      <svg class="clean-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                      <span>{{ isCleaningOffline ? $t('deviceList.cleaningOffline') : $t('deviceList.cleanOffline') }}</span>
+                    </button>
+                    <span class="offline-section-arrow">{{ offlineCollapsed ? '▸' : '▾' }}</span>
+                  </div>
                 </div>
                 <div 
                   v-show="!offlineCollapsed"
@@ -1209,6 +1226,39 @@ watch(() => deviceStore.offlineDevices.length, len => {
     deviceStore.showOfflineOnly = false
   }
 })
+
+// 离线设备一键批量清理
+const isCleaningOffline = ref(false)
+
+async function handleCleanAllOffline() {
+  const count = filteredOfflineDevices.value.length
+  if (count === 0) return
+  if (!confirm(t('deviceList.confirmCleanOffline', { count }))) {
+    return
+  }
+  isCleaningOffline.value = true
+  try {
+    const list = [...filteredOfflineDevices.value]
+    let successCount = 0
+    let failedCount = 0
+    for (const dev of list) {
+      try {
+        await deviceStore.deleteOfflineDevice(dev.id)
+        successCount++
+      } catch (err) {
+        console.warn(`[CleanOffline] Failed to delete ${dev.id}:`, err)
+        failedCount++
+      }
+    }
+    batchTextNotice.value = t('deviceList.cleanOfflineDone', { count: successCount })
+    if (failedCount > 0) {
+      batchTextNotice.value += ` (${t('deviceList.cleanOfflineFailed', { count: failedCount })})`
+    }
+    setTimeout(() => { batchTextNotice.value = '' }, 3500)
+  } finally {
+    isCleaningOffline.value = false
+  }
+}
 
 function openGlobalSettings() {
   selectedDeviceId.value = ''
@@ -2010,8 +2060,60 @@ function connectDevice(deviceId) {
 .offline-section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.offline-section-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.offline-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.offline-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clean-offline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clean-offline-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  transform: translateY(-1px);
+}
+
+.clean-offline-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clean-offline-btn .clean-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .offline-section-header.clickable {

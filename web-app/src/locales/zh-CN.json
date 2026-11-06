@@ -1739,6 +1739,7 @@
     "muteAll": "全员静音",
     "unmuteAll": "解除静音",
     "activeFocus": "当前焦点设备: {id}",
+    "focusedTag": "焦点",
     "brandTitle": "多机直连",
     "units": "台",
     "addDeviceHint": "添加更多虚机加入直连",

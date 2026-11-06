@@ -466,8 +466,8 @@ export const useDeviceStore = defineStore('devices', () => {
 
   function openDevice(id) {
     if (!id) return
-    // 单机模式下：只保持当前设备直连，若已有其他设备则平滑关闭并切换
-    if (directControlMode.value === 'single') {
+    // 移动端：保持单屏单机体验，切换时关闭上一台
+    if (isMobileClient) {
       const others = activeDeviceIds.value.filter(devId => devId !== id)
       others.forEach(devId => closeDevice(devId))
       activeDeviceIds.value = [id]
@@ -477,7 +477,7 @@ export const useDeviceStore = defineStore('devices', () => {
       return
     }
 
-    // 多机模式：追加并聚焦
+    // 桌面端：统一自由多开浮窗体系，追加设备并聚焦
     if (!activeDeviceIds.value.includes(id)) {
       activeDeviceIds.value.push(id)
     }

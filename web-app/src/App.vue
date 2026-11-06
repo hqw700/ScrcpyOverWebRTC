@@ -440,46 +440,13 @@
                       {{ $t('topBar.viewTable') }}
                     </button>
                   </div>
-
-                  <div class="dropdown-divider"></div>
-
-                  <!-- 直控工作台模式 (单机模式 vs 多机直连) -->
-                  <div class="dropdown-control-mode-group">
-                    <div class="dropdown-panel-title">{{ $t('topBar.controlMode') }}</div>
-                    <div class="dropdown-view-toggle">
-                      <button 
-                        class="view-toggle-opt" 
-                        :class="{ active: deviceStore.directControlMode === 'single' }" 
-                        @click="deviceStore.setDirectControlMode('single')"
-                        :title="$t('topBar.modeSingleTip')"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                          <line x1="12" y1="18" x2="12.01" y2="18"></line>
-                        </svg>
-                        {{ $t('topBar.modeSingle') }}
-                      </button>
-                      <button 
-                        class="view-toggle-opt" 
-                        :class="{ active: deviceStore.directControlMode === 'multi' }" 
-                        @click="deviceStore.setDirectControlMode('multi')"
-                        :title="$t('topBar.modeMultiTip')"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="2" y="3" width="8" height="18" rx="2"></rect>
-                          <rect x="14" y="3" width="8" height="18" rx="2"></rect>
-                        </svg>
-                        {{ $t('topBar.modeMulti') }}
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </transition>
             </div>
 
-            <!-- 直连状态与快速关闭按钮：多机模式 vs 单机模式 -->
+            <!-- 直连状态与快速全部关闭按钮 -->
             <button 
-              v-if="deviceStore.directControlMode === 'multi' && deviceStore.activeDeviceIds.length > 0"
+              v-if="deviceStore.activeDeviceIds.length > 0"
               class="top-action-btn primary-action-btn active" 
               @click.stop="deviceStore.closeAllDevices()" 
               :title="$t('topBar.multiConnectedTip')"
@@ -488,19 +455,12 @@
                 <rect x="2" y="3" width="8" height="18" rx="2"></rect>
                 <rect x="14" y="3" width="8" height="18" rx="2"></rect>
               </svg>
-              <span class="btn-text">{{ $t('topBar.multiConnected', { count: deviceStore.activeDeviceIds.length }) }}</span>
-            </button>
-            <button 
-              v-else-if="deviceStore.directControlMode === 'single' && !!deviceStore.activeDeviceId"
-              class="top-action-btn primary-action-btn active" 
-              @click.stop="deviceStore.clearActiveDevice()" 
-              :title="$t('topBar.controllingTip')"
-            >
-              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                <line x1="12" y1="18" x2="12.01" y2="18"></line>
-              </svg>
-              <span class="btn-text">{{ $t('topBar.controlling', { name: activeDevice?.displayName || activeDevice?.info?.model || deviceStore.activeDeviceId }) }}</span>
+              <span class="btn-text">
+                {{ deviceStore.activeDeviceIds.length === 1 
+                  ? $t('topBar.controlling', { name: activeDevice?.displayName || activeDevice?.info?.model || deviceStore.activeDeviceId })
+                  : $t('topBar.multiConnected', { count: deviceStore.activeDeviceIds.length }) 
+                }}
+              </span>
             </button>
 
             <!-- 群控模式开关按钮 (管理员 或 拥有2台以上设备的用户) -->
@@ -692,162 +652,30 @@
       </section>
     </main>
 
-    <!-- 3. 右侧控制面板 (支持悬浮和拉伸) -->
+    <!-- 3. 移动端全屏控制抽屉 (单机触控) -->
     <aside 
-      class="control-panel-wrapper" 
+      v-if="isMobile"
+      class="control-panel-wrapper is-mobile" 
       :class="{ 
-        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files'),
-        'is-floating': isFloating && !isMobile,
-        'is-mobile': isMobile,
-        'is-top-layer': deviceStore.activeTopLayer === 'connection'
+        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files')
       }"
-      :style="panelStyle"
-      @mousedown.capture="!isMobile && deviceStore.setActiveTopLayer('connection')"
-      @touchstart.capture="!isMobile && deviceStore.setActiveTopLayer('connection')"
+      @touchstart.capture="deviceStore.setActiveTopLayer('connection')"
     >
-      <!-- 调整大小的手柄 (PC固定模式) -->
-      <div class="side-resizer" v-if="!isFloating && !isMobile" @mousedown="startResizing('left', $event)"></div>
-      
-      <!-- 悬浮模式的缩放手柄 -->
-      <template v-if="isFloating && !isMobile">
-        <div class="resize-handle top" @mousedown="startResizing('top', $event)"></div>
-        <div class="resize-handle bottom" @mousedown="startResizing('bottom', $event)"></div>
-        <div class="resize-handle left" @mousedown="startResizing('left', $event)"></div>
-        <div class="resize-handle right" @mousedown="startResizing('right', $event)"></div>
-        <div class="resize-corner bottom-right" @mousedown="startResizing('bottom-right', $event)"></div>
-      </template>
-
-      <!-- 面板内容区 -->
-      <div class="panel-inner" v-if="deviceStore.activeDeviceIds.length > 0">
-        <!-- 模式 A：单机直控模式 -->
-        <template v-if="deviceStore.directControlMode === 'single'">
-          <!-- PC 单机顶部工具栏 (移动端不显示) -->
-          <header class="panel-top-bar" @mousedown="startDragging" v-if="!isMobile">
-            <div class="vm-info">
-              <span class="status-dot" :class="{ online: activeDevice?.status === 'online', offline: activeDevice?.status !== 'online' }"></span>
-              <span class="vm-id">{{ activeDevice?.displayName || activeDevice?.info?.model || activeDevice?.id || deviceStore.activeDeviceId }}</span>
-            </div>
-            <div class="panel-tools" @mousedown.stop>
-              <!-- 画中画 (PiP) -->
-              <button 
-                v-if="singleDeviceClientRef?.pictureInPictureSupported && !singleDeviceClientRef?.isCanvasRendering" 
-                class="tool-btn" 
-                :class="{ active: singleDeviceClientRef?.isPiP }"
-                @click="singleDeviceClientRef?.togglePictureInPicture()" 
-                :title="singleDeviceClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
-                :data-tooltip="singleDeviceClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
-                <span v-if="singleDeviceClientRef?.isPiP" class="active-dot"></span>
-              </button>
-              <!-- 网页全屏 -->
-              <button 
-                class="tool-btn" 
-                :class="{ active: singleDeviceClientRef?.isWebFullscreen }"
-                @click="singleDeviceClientRef?.toggleWebFullscreen()" 
-                :title="singleDeviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
-                :data-tooltip="singleDeviceClientRef?.isWebFullscreen ? $t('deviceClient.webFsActiveHoverHint') : $t('deviceClient.enterWebFullscreen')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <polyline points="9 21 3 21 3 15"></polyline>
-                  <line x1="21" y1="3" x2="14" y2="10"></line>
-                  <line x1="3" y1="21" x2="10" y2="14"></line>
-                </svg>
-                <span v-if="singleDeviceClientRef?.isWebFullscreen" class="active-dot"></span>
-              </button>
-              <!-- 系统全屏 -->
-              <button 
-                class="tool-btn" 
-                :class="{ active: singleDeviceClientRef?.isFullscreen }"
-                @click="singleDeviceClientRef?.toggleFullscreen()" 
-                :title="singleDeviceClientRef?.isFullscreen ? $t('deviceClient.fsActiveHoverHint') : $t('deviceClient.enterFullscreen')"
-                :data-tooltip="singleDeviceClientRef?.isFullscreen ? $t('deviceClient.fsActiveHoverHint') : $t('deviceClient.enterFullscreen')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-                </svg>
-                <span v-if="singleDeviceClientRef?.isFullscreen" class="active-dot"></span>
-              </button>
-              <!-- 快捷切为多机模式 -->
-              <button 
-                class="tool-btn" 
-                @click="deviceStore.setDirectControlMode('multi')" 
-                :title="$t('multi.switchToMultiTitle')"
-                :data-tooltip="$t('multi.switchToMultiTitle')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="3" width="8" height="18" rx="2"></rect>
-                  <rect x="14" y="3" width="8" height="18" rx="2"></rect>
-                </svg>
-              </button>
-              <!-- 靠边固定 / 悬浮窗口 -->
-              <button 
-                class="tool-btn" 
-                :class="{ active: isFloating }"
-                @click="handleToggleFloating" 
-                :title="isFloating ? $t('multi.floatingActiveHoverHint') : $t('multi.floatWindow')"
-                :data-tooltip="isFloating ? $t('multi.floatingActiveHoverHint') : $t('multi.floatWindow')"
-              >
-                <svg v-if="isFloating" class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                  <line x1="9" y1="3" x2="9" y2="21"></line>
-                </svg>
-                <svg v-else class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                  <rect x="7" y="7" width="10" height="10"></rect>
-                </svg>
-                <span v-if="isFloating" class="active-dot"></span>
-              </button>
-              <!-- 关闭按钮 -->
-              <button 
-                class="tool-btn close" 
-                @click="closePanel" 
-                :title="$t('deviceClient.closeConn')"
-                :data-tooltip="$t('deviceClient.closeConn')"
-              >
-                <svg class="tool-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          </header>
-
-          <div class="panel-main">
-            <!-- 渲染 DeviceClient -->
-            <DeviceClient 
-              ref="singleDeviceClientRef"
-              v-if="deviceStore.activeDeviceId" 
-              :deviceId="deviceStore.activeDeviceId" 
-              :key="`${deviceStore.activeDeviceId}_${deviceStore.getDeviceMode(deviceStore.activeDeviceId)}`"
-              :is-mini="false"
-              :is-focused="true"
-              :audio-muted="false"
-              @recommend-layout="handleRecommendLayout" 
-            />
-          </div>
-        </template>
-
-        <!-- 模式 B：多机直连工作台 (平铺 / 标签 / 浮窗) -->
-        <template v-else>
-          <div class="panel-main">
-            <!-- 统一由 MultiDeviceContainer 承载直连工作台 (支持 1~N 台的平铺、标签、主从、浮窗全生命周期) -->
-            <MultiDeviceContainer />
-          </div>
-        </template>
-      </div>
-
-      <div class="panel-empty" v-else>
-        <div class="hint-icon-wrapper">
-          <svg class="hint-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-            <line x1="12" y1="18" x2="12.01" y2="18"></line>
-          </svg>
+      <div class="panel-inner" v-if="deviceStore.activeDeviceId">
+        <div class="panel-main">
+          <DeviceClient 
+            :deviceId="deviceStore.activeDeviceId" 
+            :key="`${deviceStore.activeDeviceId}_${deviceStore.getDeviceMode(deviceStore.activeDeviceId)}`"
+            :is-mini="false"
+            :is-focused="true"
+            :audio-muted="false"
+          />
         </div>
-        <p>{{ $t('deviceClient.selectDeviceToControl') }}<br/>{{ $t('deviceClient.startRemoteControl') }}</p>
       </div>
     </aside>
+
+    <!-- 4. 桌面端全局自由多悬浮窗口体系 (自由拖拽 / 缩放 / 多开置顶 / 托盘收纳) -->
+    <FloatingWindowManager v-if="!isMobile" />
 
     <!-- 4. 移动端底部导航栏 (仅在主视图显示活跃虚机视频时才隐藏，其余页面均保持可见) -->
     <nav class="mobile-bottom-nav" v-if="isMobile && (route.path !== '/' || !deviceStore.activeDeviceId)">
@@ -964,7 +792,7 @@ import DeviceConsole from '@/components/DeviceConsole.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
 import UpdateModal from '@/components/UpdateModal.vue'
 import FeedbackModal from '@/components/FeedbackModal.vue'
-import MultiDeviceContainer from '@/components/multi/MultiDeviceContainer.vue'
+import FloatingWindowManager from '@/components/floating/FloatingWindowManager.vue'
 import DeviceClient from '@/views/DeviceClient.vue'
 import { useGroupControlStore } from '@/stores/groupControl'
 

@@ -450,25 +450,13 @@ function onCardClick(e) {
   if (!showMenu.value) {
     // 默认点击卡片始终以屏幕连接为主
     deviceStore.setDeviceMode(props.device.id, 'display')
-    if (e && (e.ctrlKey || e.metaKey)) {
-      if (deviceStore.directControlMode !== 'multi') {
-        deviceStore.setDirectControlMode('multi')
-      }
-      deviceStore.openDevice(props.device.id)
-    } else if (deviceStore.directControlMode === 'multi') {
-      deviceStore.openDevice(props.device.id)
-    } else {
-      emit('connect', props.device.id)
-    }
+    deviceStore.openDevice(props.device.id)
   }
 }
 
 function onAddToMulti() {
   showMenu.value = false
   deviceStore.setDeviceMode(props.device.id, 'display')
-  if (deviceStore.directControlMode !== 'multi') {
-    deviceStore.setDirectControlMode('multi')
-  }
   deviceStore.openDevice(props.device.id)
 }
 

@@ -303,16 +303,7 @@ function onRowClick(e) {
   if (props.device.status !== 'online') return
   if (!showMenu.value) {
     deviceStore.setDeviceMode(props.device.id, 'display')
-    if (e && (e.ctrlKey || e.metaKey)) {
-      if (deviceStore.directControlMode !== 'multi') {
-        deviceStore.setDirectControlMode('multi')
-      }
-      deviceStore.openDevice(props.device.id)
-    } else if (deviceStore.directControlMode === 'multi') {
-      deviceStore.openDevice(props.device.id)
-    } else {
-      emit('connect', props.device.id)
-    }
+    deviceStore.openDevice(props.device.id)
   }
 }
 
@@ -321,9 +312,6 @@ function onThumbClick(e) { onRowClick(e) }
 function onAddToMulti() {
   showMenu.value = false
   deviceStore.setDeviceMode(props.device.id, 'display')
-  if (deviceStore.directControlMode !== 'multi') {
-    deviceStore.setDirectControlMode('multi')
-  }
   deviceStore.openDevice(props.device.id)
 }
 

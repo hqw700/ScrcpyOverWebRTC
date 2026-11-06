@@ -1739,6 +1739,7 @@
     "muteAll": "Mute All",
     "unmuteAll": "Unmute All",
     "activeFocus": "Active Device: {id}",
+    "focusedTag": "Active",
     "brandTitle": "Multi-Device Connect",
     "units": "devices",
     "addDeviceHint": "Add more devices to multi-connect",

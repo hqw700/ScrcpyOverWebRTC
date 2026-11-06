@@ -852,9 +852,6 @@ function toggleViewMode() {
 }
 
 function openMultiDirectControl() {
-  if (deviceStore.directControlMode !== 'multi') {
-    deviceStore.setDirectControlMode('multi')
-  }
   if (deviceStore.activeDeviceIds.length === 0) {
     const online = deviceStore.onlineDevices.slice(0, 2)
     if (online.length > 0) {

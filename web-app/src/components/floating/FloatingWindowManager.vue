@@ -110,26 +110,78 @@ const windowStates = reactive({})
 const minimizedIds = ref([])
 let topZIndex = 1100
 
+// 全局记录用户最近一次点击/交互坐标，用于新浮窗就近在当前操作位置旁边打开
+let lastPointerPos = null
+
+function onGlobalPointerDown(e) {
+  if (e.isPrimary) {
+    lastPointerPos = { x: e.clientX, y: e.clientY }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('pointerdown', onGlobalPointerDown, { capture: true, passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pointerdown', onGlobalPointerDown, { capture: true })
+})
+
 const allMinimized = computed(() => {
   return activeDeviceIds.value.length > 0 &&
     activeDeviceIds.value.every(id => minimizedIds.value.includes(id))
 })
 
-// 为新设备分配窗口初始尺寸与阶梯级联坐标
+// 为新设备分配窗口初始尺寸与就近定位（就在当前点击/操作位置旁边打开，不用贴着侧边）
 function getOrCreateWindowState(id) {
   if (!windowStates[id]) {
-    const existingCount = Object.keys(windowStates).length
     const defaultW = 430
     const defaultH = Math.min(680, window.innerHeight - 80)
+    const existingStates = Object.values(windowStates)
+    const existingCount = existingStates.length
 
-    // 智能阶梯级联定位：从右上方开始向下、向左适度级联
-    const cascadeOffset = (existingCount % 6) * 36
-    const startX = Math.max(40, window.innerWidth - defaultW - 50 - cascadeOffset)
-    const startY = Math.max(60, 70 + cascadeOffset)
+    let startX = 120
+    let startY = 80
+
+    if (lastPointerPos) {
+      // 1. 若有最近交互/点击位置（例如点击设备卡片或操作按钮），优先在点击位置右侧展开；若右侧贴边则向左侧展开
+      const pad = 24
+      if (lastPointerPos.x + pad + defaultW <= window.innerWidth - 20) {
+        startX = lastPointerPos.x + pad
+      } else if (lastPointerPos.x - pad - defaultW >= 20) {
+        startX = lastPointerPos.x - pad - defaultW
+      } else {
+        startX = Math.max(20, Math.min(lastPointerPos.x - 40, window.innerWidth - defaultW - 20))
+      }
+      startY = Math.max(60, Math.min(lastPointerPos.y - 40, window.innerHeight - defaultH - 20))
+    } else if (existingStates.length > 0) {
+      // 2. 若没有捕获到点击事件但已有活动浮窗，则在最后一个浮窗右下方阶梯级联平移
+      const lastWs = existingStates[existingStates.length - 1]
+      startX = lastWs.x + 36
+      startY = lastWs.y + 36
+    } else {
+      // 3. 初始首台设备若无交互坐标，居中偏左上方舒适工作区呈现（不贴着右侧边）
+      startX = Math.max(60, Math.min(180, Math.floor((window.innerWidth - defaultW) / 3)))
+      startY = Math.max(70, Math.floor((window.innerHeight - defaultH) / 3))
+    }
+
+    // 若检测到与已有窗口几乎完全重叠，进行适度错位级联
+    const isOverlapping = existingStates.some(ws => Math.abs(ws.x - startX) < 24 && Math.abs(ws.y - startY) < 24)
+    if (isOverlapping) {
+      const offset = (existingCount % 6) * 32
+      startX += offset
+      startY += offset
+    }
+
+    // 视口安全钳制：确保窗口绝不超出屏幕边界
+    const maxX = Math.max(20, window.innerWidth - defaultW - 20)
+    const maxY = Math.max(60, window.innerHeight - defaultH - 20)
+    startX = Math.max(20, Math.min(startX, maxX))
+    startY = Math.max(60, Math.min(startY, maxY))
 
     windowStates[id] = {
-      x: startX,
-      y: startY,
+      x: Math.round(startX),
+      y: Math.round(startY),
       w: defaultW,
       h: defaultH,
       zIndex: ++topZIndex,

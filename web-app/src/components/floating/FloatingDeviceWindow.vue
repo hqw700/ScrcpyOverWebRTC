@@ -33,6 +33,20 @@
           :data-tooltip="deviceClientRef?.isPiP ? $t('deviceClient.pipActiveHoverHint') : $t('deviceClient.enterPip')"
         >
           <svg class="btn-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><rect x="11" y="9" width="9" height="7" rx="1" ry="1" fill="currentColor" stroke="none"></rect></svg>
+          <span v-if="deviceClientRef?.isPiP" class="active-dot"></span>
+        </button>
+
+        <!-- 停靠到侧边栏 -->
+        <button 
+          class="win-btn dock-btn" 
+          @click="deviceStore.setSidebarDockedDevice(deviceId)" 
+          :title="$t('multi.pinToSide')"
+          :data-tooltip="$t('multi.pinToSide')"
+        >
+          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="15" y1="3" x2="15" y2="21"></line>
+          </svg>
         </button>
 
         <!-- 网页全屏 / 窗口最大化 -->
@@ -55,6 +69,7 @@
             <line x1="21" y1="3" x2="14" y2="10"></line>
             <line x1="3" y1="21" x2="10" y2="14"></line>
           </svg>
+          <span v-if="isMaximized" class="active-dot"></span>
         </button>
 
         <!-- 最小化到托盘 -->
@@ -404,6 +419,25 @@ defineExpose({
 .win-btn.active {
   color: #38bdf8;
   background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.4);
+}
+
+.win-btn .active-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  pointer-events: none;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.75; }
 }
 
 .win-btn.close-btn:hover {

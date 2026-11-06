@@ -396,12 +396,17 @@ export const useDeviceStore = defineStore('devices', () => {
       } catch (e) {}
     }
     // 当从多机切换为单机模式时：若当前打开了多台设备，保留焦点设备，平滑关闭其余设备
-    if (mode === 'single' && activeDeviceIds.value.length > 1) {
-      const keepId = focusedDeviceId.value || activeDeviceIds.value[0]
-      const toClose = activeDeviceIds.value.filter(id => id !== keepId)
-      toClose.forEach(id => closeDevice(id))
-      focusedDeviceId.value = keepId
-      masterDeviceId.value = keepId
+    if (mode === 'single') {
+      if (activeDeviceIds.value.length > 1) {
+        const keepId = focusedDeviceId.value || sidebarDockedDeviceId.value || activeDeviceIds.value[0]
+        const toClose = activeDeviceIds.value.filter(id => id !== keepId)
+        toClose.forEach(id => closeDevice(id))
+        focusedDeviceId.value = keepId
+        masterDeviceId.value = keepId
+        sidebarDockedDeviceId.value = keepId
+      } else if (activeDeviceIds.value.length === 1) {
+        sidebarDockedDeviceId.value = activeDeviceIds.value[0]
+      }
     }
   }
 
@@ -464,28 +469,43 @@ export const useDeviceStore = defineStore('devices', () => {
     devices.value.find(d => d.id === activeDeviceId.value)
   )
 
+  // 多机模式下停靠在右侧侧边栏的设备 ID (null 表示全部作为自由悬浮窗，默认停靠当前焦点设备)
+  const sidebarDockedDeviceId = ref(null)
+
   function openDevice(id) {
     if (!id) return
-    // 移动端：保持单屏单机体验，切换时关闭上一台
-    if (isMobileClient) {
+    // 单机模式 或 移动端：只保持单机体验，切换时关闭上一台
+    if (directControlMode.value === 'single' || isMobileClient) {
       const others = activeDeviceIds.value.filter(devId => devId !== id)
       others.forEach(devId => closeDevice(devId))
       activeDeviceIds.value = [id]
       focusedDeviceId.value = id
       masterDeviceId.value = id
+      sidebarDockedDeviceId.value = id
       activeTopLayer.value = 'connection'
       return
     }
 
-    // 桌面端：统一自由多开浮窗体系，追加设备并聚焦
+    // 多机模式：追加并聚焦
     if (!activeDeviceIds.value.includes(id)) {
       activeDeviceIds.value.push(id)
     }
     focusedDeviceId.value = id
+    // 若侧边栏当前为空，则将新打开的设备停靠在侧边栏
+    if (!sidebarDockedDeviceId.value || !activeDeviceIds.value.includes(sidebarDockedDeviceId.value)) {
+      sidebarDockedDeviceId.value = id
+    }
     if (!masterDeviceId.value) {
       masterDeviceId.value = id
     }
     activeTopLayer.value = 'connection'
+  }
+
+  function setSidebarDockedDevice(id) {
+    sidebarDockedDeviceId.value = id
+    if (id) {
+      focusedDeviceId.value = id
+    }
   }
 
   function closeDevice(id) {
@@ -499,6 +519,9 @@ export const useDeviceStore = defineStore('devices', () => {
     }
     if (masterDeviceId.value === id) {
       masterDeviceId.value = activeDeviceIds.value[0] || null
+    }
+    if (sidebarDockedDeviceId.value === id) {
+      sidebarDockedDeviceId.value = activeDeviceIds.value[0] || null
     }
     if (maximizedDeviceId.value === id) {
       maximizedDeviceId.value = null
@@ -543,6 +566,7 @@ export const useDeviceStore = defineStore('devices', () => {
     activeDeviceIds.value = []
     focusedDeviceId.value = null
     masterDeviceId.value = null
+    sidebarDockedDeviceId.value = null
     maximizedDeviceId.value = null
     activeWebRTCMap.value = new Map()
     deviceConnectionModes.value = {}
@@ -566,6 +590,9 @@ export const useDeviceStore = defineStore('devices', () => {
   }
 
   function toggleMaximizeDevice(id) {
+    if (sidebarDockedDeviceId.value === id) {
+      sidebarDockedDeviceId.value = activeDeviceIds.value[0] || null
+    }
     if (maximizedDeviceId.value === id) {
       maximizedDeviceId.value = null
     } else {
@@ -1327,6 +1354,8 @@ export const useDeviceStore = defineStore('devices', () => {
     activeDeviceIds,
     focusedDeviceId,
     masterDeviceId,
+    sidebarDockedDeviceId,
+    setSidebarDockedDevice,
     multiLayoutMode,
     audioFocusMode,
     globalBroadcastInput,

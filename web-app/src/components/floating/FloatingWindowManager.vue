@@ -1,8 +1,8 @@
 <template>
-  <div class="floating-window-manager-root" v-if="activeDeviceIds.length > 0">
-    <!-- 渲染所有激活的自由悬浮窗口 -->
+  <div class="floating-window-manager-root" v-if="displayFloatingDeviceIds.length > 0">
+    <!-- 渲染所有激活的自由悬浮窗口 (除停靠在侧边栏的设备之外) -->
     <FloatingDeviceWindow
-      v-for="id in activeDeviceIds"
+      v-for="id in displayFloatingDeviceIds"
       :key="id"
       :deviceId="id"
       :windowState="getOrCreateWindowState(id)"
@@ -96,6 +96,17 @@ import FloatingDeviceWindow from './FloatingDeviceWindow.vue'
 const deviceStore = useDeviceStore()
 const activeDeviceIds = computed(() => deviceStore.activeDeviceIds)
 const focusedDeviceId = computed(() => deviceStore.focusedDeviceId)
+
+// 自由悬浮窗口展示列表 (单机模式由侧边栏承载；多机模式展示除侧边栏停靠设备之外的所有自由浮窗)
+const displayFloatingDeviceIds = computed(() => {
+  if (deviceStore.directControlMode === 'single') {
+    return []
+  }
+  if (!deviceStore.sidebarDockedDeviceId) {
+    return activeDeviceIds.value
+  }
+  return activeDeviceIds.value.filter(id => id !== deviceStore.sidebarDockedDeviceId)
+})
 
 // 窗口状态表 (响应式记录每台设备的坐标与尺寸)
 const windowStates = reactive({})

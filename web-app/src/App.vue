@@ -68,13 +68,26 @@
         </span>
       </button>
       <div class="nav-links">
-        <router-link to="/" class="nav-item" exact-active-class="active">
-          <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-            <line x1="12" y1="18" x2="12.01" y2="18"></line>
-          </svg>
-          <span class="nav-item-text">{{ $t('nav.devices') }}</span>
-        </router-link>
+        <div class="nav-link-row">
+          <router-link to="/" class="nav-item" exact-active-class="active" @click="handleDevicesNavClick">
+            <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+            <span class="nav-item-text">{{ $t('nav.devices') }}</span>
+          </router-link>
+          <button 
+            v-if="isNavExpanded" 
+            class="nav-drawer-toggle-sub-btn" 
+            :class="{ active: isDeviceDrawerOpen }"
+            @click.stop.prevent="toggleDeviceDrawer"
+            :title="isDeviceDrawerOpen ? $t('deviceDrawer.collapse') : $t('deviceDrawer.expand')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
         <router-link to="/monitor" class="nav-item" exact-active-class="active" v-if="authStore.isAdmin">
           <svg class="nav-item-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -233,6 +246,37 @@
         {{ isNavExpanded ? $t('nav.version') + ' ' + systemVersion : systemVersion.split('-')[0] }}
       </div>
     </nav>
+
+    <!-- 侧边抽屉呼出滑动微手柄 (当抽屉关闭且非移动端时展现) -->
+    <button 
+      v-if="!isMobile && !isDeviceDrawerOpen" 
+      class="drawer-expand-tab"
+      :class="{ 'nav-expanded': isNavExpanded }"
+      @click="toggleDeviceDrawer"
+      :title="$t('deviceDrawer.expand')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </button>
+
+    <!-- 二级设备列表抽屉面板 (支持悬浮滑出与固定常驻) -->
+    <DeviceDrawer
+      v-if="!isMobile && isDeviceDrawerOpen"
+      :is-pinned="isDeviceDrawerPinned"
+      :nav-expanded="isNavExpanded"
+      @close="closeDeviceDrawer"
+      @toggle-pin="togglePinDeviceDrawer"
+    />
+
+    <!-- 浮动抽屉背景遮罩 (仅在未固定且抽屉打开时存在，点击空白自动收起) -->
+    <transition name="drawer-fade">
+      <div 
+        v-if="!isMobile && isDeviceDrawerOpen && !isDeviceDrawerPinned" 
+        class="drawer-floating-backdrop"
+        @click="closeDeviceDrawer"
+      ></div>
+    </transition>
 
     <!-- 2. 主内容区域 -->
     <main class="main-content" id="main-layout-content">
@@ -948,6 +992,7 @@ import UpdateModal from '@/components/UpdateModal.vue'
 import FeedbackModal from '@/components/FeedbackModal.vue'
 import FloatingWindowManager from '@/components/floating/FloatingWindowManager.vue'
 import DeviceClient from '@/views/DeviceClient.vue'
+import DeviceDrawer from '@/components/sidebar/DeviceDrawer.vue'
 import { useGroupControlStore } from '@/stores/groupControl'
 
 const { t, locale } = useI18n()
@@ -1076,6 +1121,35 @@ const isFloating = ref(false)
 const isResizing = ref(false)
 const userAdjusted = ref(false)
 const isNavExpanded = ref(false)
+
+// 二级设备列表抽屉 (DeviceDrawer) 状态管理 (方案一：滑动/固定抽屉面板)
+const savedDrawerOpen = localStorage.getItem('cloudphone_drawer_open')
+// 桌面端首次使用默认展开，让用户一眼发现新特性；若用户显式关闭过则保持记忆
+const isDeviceDrawerOpen = ref(savedDrawerOpen === null ? true : savedDrawerOpen === 'true')
+const isDeviceDrawerPinned = ref(localStorage.getItem('cloudphone_drawer_pinned') === 'true')
+
+function toggleDeviceDrawer() {
+  isDeviceDrawerOpen.value = !isDeviceDrawerOpen.value
+  localStorage.setItem('cloudphone_drawer_open', String(isDeviceDrawerOpen.value))
+}
+
+function closeDeviceDrawer() {
+  isDeviceDrawerOpen.value = false
+  localStorage.setItem('cloudphone_drawer_open', 'false')
+}
+
+function togglePinDeviceDrawer() {
+  isDeviceDrawerPinned.value = !isDeviceDrawerPinned.value
+  localStorage.setItem('cloudphone_drawer_pinned', String(isDeviceDrawerPinned.value))
+}
+
+function handleDevicesNavClick() {
+  // 点击侧边栏“所有机器”导航按钮时：若抽屉未打开，则顺畅展开
+  if (!isDeviceDrawerOpen.value) {
+    isDeviceDrawerOpen.value = true
+    localStorage.setItem('cloudphone_drawer_open', 'true')
+  }
+}
 const showHelpMenu = ref(false)
 const activationKey = ref('')
 const isActivating = ref(false)
@@ -1659,6 +1733,127 @@ body { margin: 0; background: var(--bg-primary); color: #c9d1d9; font-family: -a
 
 .nav-item.active { opacity: 1; color: var(--accent); background: rgba(88,166,255,0.1); }
 .nav-item.logout-nav-item:hover { opacity: 1; color: #f85149; background: rgba(248,81,73,0.1); }
+
+/* 机器列表抽屉与侧边栏联动样式 */
+.nav-link-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.side-nav.expanded .nav-link-row {
+  justify-content: stretch;
+}
+
+.side-nav.expanded .nav-link-row .nav-item {
+  flex: 1;
+  padding-right: 28px;
+}
+
+.nav-drawer-toggle-sub-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.6;
+}
+
+.nav-drawer-toggle-sub-btn:hover {
+  color: #f0f6fc;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-drawer-toggle-sub-btn.active {
+  color: var(--accent, #58a6ff);
+  opacity: 1;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.nav-drawer-toggle-sub-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 抽屉呼出滑动微手柄 */
+.drawer-expand-tab {
+  position: fixed;
+  left: var(--nav-width, 64px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 52px;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid var(--border, #30363d);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  padding: 0;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.35);
+  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.15s ease,
+              background 0.15s ease,
+              color 0.15s ease;
+}
+
+.drawer-expand-tab.nav-expanded {
+  left: 180px;
+}
+
+.drawer-expand-tab:hover {
+  width: 20px;
+  background: rgba(30, 38, 48, 0.98);
+  color: var(--accent, #58a6ff);
+  box-shadow: 6px 0 16px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-expand-tab svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 悬浮抽屉背景遮罩 (点击空白自动收起) */
+.drawer-floating-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1040;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+.drawer-fade-enter-active,
+.drawer-fade-leave-active {
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer-fade-enter-from,
+.drawer-fade-leave-to {
+  opacity: 0;
+}
 
 .top-bar-right {
   display: flex;

@@ -2369,5 +2369,25 @@
     "regenerateSubnet": "Auto-assign new subnet",
     "customSubnetDetails": "Customize gateway & IP pool",
     "subnetDerivedHint": "Auto-calculated: gateway {gateway}, usable pool {start} ~ {end}"
+  },
+  "deviceDrawer": {
+    "title": "All Devices",
+    "searchPlaceholder": "Search by name, model, ID...",
+    "pinTip": "Pin Drawer Panel",
+    "unpinTip": "Unpin Drawer (Floating)",
+    "collapse": "Collapse Device List",
+    "expand": "Expand Device List",
+    "tabAll": "All",
+    "tabOnline": "Online",
+    "tabActive": "Active",
+    "tabOffline": "Offline",
+    "controlling": "Active",
+    "focusWindow": "Focus Window",
+    "openControl": "Open Direct Control",
+    "cameraMonitor": "Camera Surveillance Mode",
+    "noDevicesFound": "No matching devices found",
+    "onlineCount": "{count} online",
+    "activeCount": "{count} active",
+    "offlineTip": "Device is offline and cannot connect"
   }
 }

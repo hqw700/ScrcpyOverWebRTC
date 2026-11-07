@@ -2369,5 +2369,25 @@
     "regenerateSubnet": "重新生成空闲网段",
     "customSubnetDetails": "自定义网关与地址池",
     "subnetDerivedHint": "已自动推导：网关 {gateway}，可用地址池 {start} ~ {end}"
+  },
+  "deviceDrawer": {
+    "title": "所有机器",
+    "searchPlaceholder": "搜索机器名称、型号、ID...",
+    "pinTip": "固定侧边抽屉面板",
+    "unpinTip": "取消固定（浮动抽屉）",
+    "collapse": "收起机器列表",
+    "expand": "展开机器列表",
+    "tabAll": "全部",
+    "tabOnline": "在线",
+    "tabActive": "直控中",
+    "tabOffline": "离线",
+    "controlling": "直控中",
+    "focusWindow": "置顶聚焦窗口",
+    "openControl": "打开直控窗口",
+    "cameraMonitor": "摄像头监控模式",
+    "noDevicesFound": "未找到匹配的机器",
+    "onlineCount": "在线 {count} 台",
+    "activeCount": "直控 {count} 台",
+    "offlineTip": "设备已离线，无法建立连接"
   }
 }

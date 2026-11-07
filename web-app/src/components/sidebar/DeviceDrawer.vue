@@ -125,8 +125,13 @@
           <div class="item-info-col">
             <div class="item-name-row">
               <span class="item-name" :title="dev.displayName || dev.id">{{ dev.displayName || dev.id }}</span>
-              <span v-if="isDeviceActive(dev.id)" class="item-active-pill" :title="$t('deviceDrawer.controlling')">
-                {{ $t('deviceDrawer.controlling') }}
+              <span
+                v-if="isDeviceActive(dev.id)"
+                class="item-active-pill"
+                :class="{ 'ws-pill': isWebSocketMode(dev.id) }"
+                :title="isWebSocketMode(dev.id) ? $t('deviceCard.wsModeTitle') : $t('deviceDrawer.controlling')"
+              >
+                {{ isWebSocketMode(dev.id) ? $t('deviceCard.wsStreaming') : $t('deviceDrawer.controlling') }}
               </span>
             </div>
             <div class="item-sub-row">
@@ -134,46 +139,17 @@
             </div>
           </div>
 
-          <!-- 悬停快捷操作栏 -->
+          <!-- 快捷操作栏：仅保留 WS 投屏按键 -->
           <div class="item-actions-col" @click.stop>
-            <!-- 快速直控/聚焦 -->
             <button
-              class="quick-action-btn"
-              :class="{ active: isDeviceActive(dev.id) }"
+              class="quick-action-btn ws-btn"
+              :class="{ active: isDeviceActive(dev.id) && isWebSocketMode(dev.id) }"
               :disabled="dev.status !== 'online'"
-              @click.stop="quickControl(dev)"
-              :title="isDeviceActive(dev.id) ? $t('deviceDrawer.focusWindow') : $t('deviceDrawer.openControl')"
+              @click.stop="quickWebSocket(dev)"
+              :title="$t('deviceCard.wsMode')"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                <path d="M6 12h4m-2-2v4"></path>
-                <circle cx="17" cy="10" r="0.8" fill="currentColor"></circle>
-                <circle cx="15" cy="13" r="0.8" fill="currentColor"></circle>
-              </svg>
-            </button>
-            <!-- 摄像头监控 -->
-            <button
-              class="quick-action-btn camera"
-              :disabled="dev.status !== 'online'"
-              @click.stop="quickCamera(dev)"
-              :title="$t('deviceDrawer.cameraMonitor')"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                <circle cx="12" cy="13" r="4"></circle>
-              </svg>
-            </button>
-            <!-- 终端 (仅管理员且在线可见) -->
-            <button
-              v-if="authStore.isAdmin"
-              class="quick-action-btn terminal"
-              :disabled="dev.status !== 'online'"
-              @click.stop="quickTerminal(dev)"
-              :title="$t('nav.terminal')"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="4 17 10 11 4 5"></polyline>
-                <line x1="12" y1="19" x2="20" y2="19"></line>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
             </button>
           </div>
@@ -325,7 +301,11 @@ function getDeviceMeta(dev) {
   return parts.join(' · ') || dev.id
 }
 
-// 点击设备 Item
+function isWebSocketMode(deviceId) {
+  return deviceStore.getDeviceMode(deviceId) === 'websocket'
+}
+
+// 默认点击设备 Item：WebRTC 直连
 function handleDeviceClick(dev) {
   if (dev.status !== 'online') {
     showToast(t('deviceDrawer.offlineTip'))
@@ -335,30 +315,24 @@ function handleDeviceClick(dev) {
   if (isDeviceActive(dev.id)) {
     deviceStore.focusDevice(dev.id)
   } else {
+    // 默认以 WebRTC 直连 (display 模式) 打开
+    deviceStore.setDeviceMode(dev.id, 'display')
     deviceStore.openDevice(dev.id)
   }
 }
 
-// 快速直控/聚焦
-function quickControl(dev) {
-  if (dev.status !== 'online') return
-  if (isDeviceActive(dev.id)) {
+// 快捷 WS 投屏
+function quickWebSocket(dev) {
+  if (dev.status !== 'online') {
+    showToast(t('deviceDrawer.offlineTip'))
+    return
+  }
+
+  if (isDeviceActive(dev.id) && isWebSocketMode(dev.id)) {
     deviceStore.focusDevice(dev.id)
   } else {
-    deviceStore.openDevice(dev.id)
+    deviceStore.openDeviceAsWebSocket(dev.id)
   }
-}
-
-// 摄像头监控
-function quickCamera(dev) {
-  if (dev.status !== 'online') return
-  deviceStore.openDeviceAsCamera(dev.id)
-}
-
-// 终端
-function quickTerminal(dev) {
-  if (dev.status !== 'online') return
-  deviceStore.openGlobalConsole(dev.id, 'shell')
 }
 </script>
 
@@ -820,12 +794,12 @@ function quickTerminal(dev) {
   white-space: nowrap;
 }
 
-/* 快捷操作栏 */
+/* 快捷操作栏：仅保留 WS 投屏按钮 */
 .item-actions-col {
   display: flex;
   align-items: center;
   gap: 4px;
-  opacity: 0.15;
+  opacity: 0.35;
   transition: opacity 0.15s ease;
   flex-shrink: 0;
 }
@@ -834,49 +808,47 @@ function quickTerminal(dev) {
   opacity: 1;
 }
 
-.quick-action-btn {
+.quick-action-btn.ws-btn {
   background: transparent;
   border: none;
   color: #8b949e;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: all 0.12s ease;
+  transition: all 0.15s ease;
 }
 
-.quick-action-btn svg {
+.quick-action-btn.ws-btn svg {
   width: 14px;
   height: 14px;
 }
 
-.quick-action-btn:hover:not(:disabled) {
-  color: #f0f6fc;
-  background: rgba(255, 255, 255, 0.12);
+.quick-action-btn.ws-btn:hover:not(:disabled) {
+  color: #f2c744;
+  background: rgba(227, 179, 65, 0.16);
+  box-shadow: 0 0 8px rgba(227, 179, 65, 0.25);
 }
 
-.quick-action-btn.active {
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.15);
+.quick-action-btn.ws-btn.active {
+  color: #e3b341;
+  background: rgba(227, 179, 65, 0.22);
+  box-shadow: 0 0 10px rgba(227, 179, 65, 0.45);
 }
 
-.quick-action-btn.camera:hover:not(:disabled) {
-  color: #3fb950;
-  background: rgba(63, 185, 80, 0.15);
-}
-
-.quick-action-btn.terminal:hover:not(:disabled) {
-  color: #d29922;
-  background: rgba(210, 153, 34, 0.15);
-}
-
-.quick-action-btn:disabled {
-  opacity: 0.3;
+.quick-action-btn.ws-btn:disabled {
+  opacity: 0.25;
   cursor: not-allowed;
+}
+
+.item-active-pill.ws-pill {
+  background: rgba(227, 179, 65, 0.18);
+  color: #f2c744;
+  border-color: rgba(227, 179, 65, 0.4);
 }
 
 /* 空状态 */

@@ -1,15 +1,22 @@
-# Scrcpy over WebRTC (穿云投屏)
+<p align="center">
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC">
+    <img src="logo.svg" width="130" height="130" alt="ScrcpyOverWebRTC Logo" />
+  </a>
+</p>
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![Docker Image Size](https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![GitHub Stars](https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github)](https://github.com/hqw700/ScrcpyOverWebRTC)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE)
+<h1 align="center">Scrcpy over WebRTC (穿云投屏)</h1>
 
-中文 | [English](README.en.md)
+<p align="center">
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker" alt="Docker Pulls" /></a>
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker" alt="Docker Image Size" /></a>
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux" alt="Architectures" /></a>
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC"><img src="https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square" alt="License" /></a>
+</p>
 
-> [!IMPORTANT]
-> **v0.4.3 紧急修复**：已移除早期测试版本遗留的 Agent 默认到期限制。请更新并重新部署设备端 Agent；仅更新服务端无效。[下载修复包](https://webrtc-phone.com/#download) · [旧版本恢复指南](https://webrtc-phone.com/docs/agent-expiration-fix.html)
+<p align="center">
+  <b>中文</b> | <a href="README.en.md">English</a>
+</p>
 
 📖 **官方技术文档与保姆级部署指南**：👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
 📱 **官方原生 Android 控制端 App**：👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)（基于 Kotlin + Compose + WebRTC 全新重构开源，支持多机直控、P2P文件分发与终端运维）  
@@ -147,17 +154,6 @@ docker run -d \
 ---
 
 ## 3. 添加手机：部署 Android Agent (入网)
-
-> [!IMPORTANT]
-> **v0.4.3 Agent 到期紧急修复**：由于早期测试版本的疏漏，内置测试到期日期（2026-11-01）未及时移除，导致旧 Agent 无法启动或自动退出。v0.4.3 已移除默认到期限制，对造成的不便深表歉意。
->
-> **推荐**：更新至 v0.4.3 并重新部署设备端 Agent；Magisk / KernelSU 用户请更新模块并重启设备。仅更新服务端无法解决。
->
-> **暂时无法升级**：
-> - **旧版 run.sh / run.bat**：将实际启动命令中的 `env GODEBUG=asyncpreemptoff=1` 改为 `env GODEBUG=asyncpreemptoff=1 CP_AGENT_EXPIRES_AT=2099-01-01`，再运行脚本。仅追加 `-expires-at` 参数不会生效。
-> - **Magisk / KernelSU**：在 `/data/adb/modules/cloudphone-agent/config.conf` 中追加 `export CP_AGENT_EXPIRES_AT="2099-01-01"`（必须保留 `export`），执行 `cpctl restart` 或重启设备。
->
-> [下载 v0.4.3](https://webrtc-phone.com/#download) · [完整恢复指南](https://webrtc-phone.com/docs/agent-expiration-fix.html)
 
 服务端拉起后，访问网页管理后台进入 **“部署新设备”** 页面，页面会根据当前服务地址动态生成接入指令与资源包下载（Docker 用户也可以通过 `docker logs cp-aio` 查看接入说明）。支持以下几种部署方式：
 

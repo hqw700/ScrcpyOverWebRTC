@@ -1,15 +1,22 @@
-# Scrcpy over WebRTC (CloudPhone)
+<p align="center">
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC">
+    <img src="logo.svg" width="130" height="130" alt="ScrcpyOverWebRTC Logo" />
+  </a>
+</p>
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![Docker Image Size](https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux)](https://hub.docker.com/r/buutuu/scrcpy-over-webrtc)
-[![GitHub Stars](https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github)](https://github.com/hqw700/ScrcpyOverWebRTC)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE)
+<h1 align="center">Scrcpy over WebRTC (CloudPhone)</h1>
 
-[中文](README.md) | English
+<p align="center">
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/docker/pulls/buutuu/scrcpy-over-webrtc?style=flat-square&logo=docker" alt="Docker Pulls" /></a>
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/docker/image-size/buutuu/scrcpy-over-webrtc/latest?style=flat-square&logo=docker" alt="Docker Image Size" /></a>
+  <a href="https://hub.docker.com/r/buutuu/scrcpy-over-webrtc"><img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue?style=flat-square&logo=linux" alt="Architectures" /></a>
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC"><img src="https://img.shields.io/github/stars/hqw700/ScrcpyOverWebRTC?style=flat-square&logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/hqw700/ScrcpyOverWebRTC/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square" alt="License" /></a>
+</p>
 
-> [!IMPORTANT]
-> **v0.4.3 Emergency Hotfix:** Removed the default Agent expiration left in early test versions. Update and redeploy device-side Agents; updating the server alone does not resolve the issue. [Download](https://webrtc-phone.com/#download) · [Recovery guide](https://webrtc-phone.com/docs/en/agent-expiration-fix.html)
+<p align="center">
+  <a href="README.md">中文</a> | <b>English</b>
+</p>
 
 📖 **Official Technical Documentation & Deployment Guide**: 👉 [https://webrtc-phone.com/docs/](https://webrtc-phone.com/docs/)  
 📱 **Official Native Android Client App**: 👉 [WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android) (Fully refactored with Kotlin + Compose + WebRTC; direct multi-device control, P2P file relay & remote terminal)  
@@ -206,17 +213,6 @@ For enterprise high-density clusters and server virtualization, ScrcpyOverWebRTC
 ---
 
 ## 3. Deploy Android Agent (Onboarding)
-
-> [!IMPORTANT]
-> **v0.4.3 Agent Expiration Hotfix:** Due to an oversight in an early test version, the November 1, 2026 test expiration date was left in place, preventing older Agents from starting or causing automatic exits. v0.4.3 removes the default expiration. We apologize for the disruption.
->
-> **Recommended:** Update to v0.4.3 and redeploy device-side Agents. Magisk / KernelSU users should update the module and reboot. Updating the server alone does not resolve the issue.
->
-> **If you cannot upgrade immediately:**
-> - **Older run.sh / run.bat:** Replace `env GODEBUG=asyncpreemptoff=1` with `env GODEBUG=asyncpreemptoff=1 CP_AGENT_EXPIRES_AT=2099-01-01` in the actual launch command, then rerun the script. Simply appending `-expires-at` does not work.
-> - **Magisk / KernelSU:** Append `export CP_AGENT_EXPIRES_AT="2099-01-01"` to `/data/adb/modules/cloudphone-agent/config.conf` (keep `export`), then run `cpctl restart` or reboot.
->
-> [Download v0.4.3](https://webrtc-phone.com/#download) · [Full recovery guide](https://webrtc-phone.com/docs/en/agent-expiration-fix.html)
 
 Once the server is running, open the web dashboard and go to the **"Deploy New Device"** page. It dynamically generates onboarding commands and download links based on your current server address (Docker users can also run `docker logs cp-aio` to view the instructions). The following deployment methods are supported:
 

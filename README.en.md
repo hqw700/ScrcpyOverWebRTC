@@ -25,7 +25,9 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
-- **Agent Expiration Hotfix (v0.4.3)**: Removed the default test expiration date, fixing startup failures and automatic exits after expiration. Update device-side Agents as well.
+- **Multi-Device Floating Windows & Device Drawer (v0.4.4)**: Refactored multi-device direct control with desktop-grade floating windows supporting free dragging, 8-directional resizing, individual sidebars, and dock minimization. Added a secondary flyout/pinned device drawer in the sidebar with real-time search, status filters, WebRTC direct connection, and one-click WebSocket mirror shortcut.
+- **Stream Lifecycle Optimization & Deadlock Fix (v0.4.4)**: Improved stream lifecycle management with on-demand tear-down, resolving disconnect deadlocks and ensuring matrix thumbnails resume updating reliably. Added graceful Opus codec fallback to video-only streaming, preventing crashes on devices lacking hardware Opus encoders.
+- **PVE Orchestrator VPC Egress Gateway & Dual-NIC (v0.4.4)**: Introduced an enterprise VPC egress gateway system supporting isolated subnets, automated gateway provisioning, and multi-protocol outbound proxies (Trojan/Vmess/Socks5/HTTP). Added cellular dual-NIC (`rmnet0`) and wireless WiFi (`wlan0`) pass-through.
 - **Ultra-Low Latency & High Performance**: Zero-copy stream parsing + hardware-level PTS passthrough, featuring WebCodecs phase-locked hardware rendering (matching native Scrcpy latency) and standard HTML5 video engines.
 - **Clientless Browser-Native Access**: No client apps, drivers, or plugins required on the control side; access and control instantly through any modern web browser (PC / Mac / iOS / Android).
 - **Brand-New Refactored Native Android Client (v0.4.2)**: Official mobile app rewritten with Kotlin + Jetpack Compose + WebRTC, independently open-sourced ([WebrtcPhone-Android](https://github.com/hqw700/WebrtcPhone-Android)), featuring low-latency direct streaming and Root/Shizuku autonomous background keep-alive.

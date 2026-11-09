@@ -336,6 +336,16 @@
               >
                 <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> {{ $t('deviceClient.terminal') }}
               </button>
+              <button 
+                class="fab-item" 
+                :class="{ active: isCellularProxyActive }" 
+                @click="toggleCellularProxy(); showMobileMenu=false"
+                :title="cellularProxyTooltip"
+              >
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v20M17 5a7 7 0 0 1 0 14M7 5a7 7 0 0 0 0 14M21 2a11 11 0 0 1 0 20M3 2a11 11 0 0 0 0 20"/>
+                </svg> {{ isCellularProxyActive ? $t('deviceClient.cellularProxyOn') : $t('deviceClient.cellularProxy') }}
+              </button>
               <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> {{ $t('deviceClient.keymap') }}
               </button>
@@ -467,6 +477,24 @@
         >
           <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
           <span class="btn-text">{{ $t('deviceClient.terminal') }}</span>
+        </button>
+        <button 
+          class="sidebar-btn proxy-btn" 
+          :class="{ 
+            active: isCellularProxyActive, 
+            loading: isCellularProxyTesting 
+          }" 
+          :disabled="isCellularProxyTesting"
+          @click="toggleCellularProxy" 
+          :title="cellularProxyTooltip"
+        >
+          <svg v-if="!isCellularProxyTesting" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5a7 7 0 0 1 0 14M7 5a7 7 0 0 0 0 14M21 2a11 11 0 0 1 0 20M3 2a11 11 0 0 0 0 20"/>
+          </svg>
+          <svg v-else class="icon spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+          </svg>
+          <span class="btn-text">{{ isCellularProxyActive ? $t('deviceClient.cellularProxyOn') : $t('deviceClient.cellularProxy') }}</span>
         </button>
         <button class="sidebar-btn" @click="keymapStore.setEditMode(true)" :title="$t('deviceClient.keymap')">
           <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
@@ -885,7 +913,7 @@
 
     <!-- 快速文本操作轻提示 Toast -->
     <transition name="fade">
-      <div v-if="quickTextToastMessage" class="quick-text-toast">
+      <div v-if="quickTextToastMessage" class="quick-text-toast" :class="quickTextToastType">
         {{ quickTextToastMessage }}
       </div>
     </transition>
@@ -948,14 +976,105 @@ const isComposingQuickText = ref(false)
 const quickTextInputRef = ref(null)
 const mobileQuickTextInputRef = ref(null)
 const quickTextToastMessage = ref('')
+const quickTextToastType = ref('')
 let quickTextToastTimer = null
 
-function triggerQuickTextToast(msg) {
+function triggerToast(msg, type = 'info', duration = 3000) {
   quickTextToastMessage.value = msg
+  quickTextToastType.value = type
   if (quickTextToastTimer) clearTimeout(quickTextToastTimer)
   quickTextToastTimer = setTimeout(() => {
     quickTextToastMessage.value = ''
-  }, 2000)
+    quickTextToastType.value = ''
+  }, duration)
+}
+
+function triggerQuickTextToast(msg) {
+  triggerToast(msg, 'info', 2000)
+}
+
+// --- 蜂窝数据反代状态与控制 ---
+const isCellularProxyActive = ref(false)
+const isCellularProxyTesting = ref(false)
+const cellularProxyEgressIp = ref('')
+const cellularProxyLocation = ref('')
+
+const cellularProxyTooltip = computed(() => {
+  if (isCellularProxyTesting.value) {
+    return t('deviceClient.proxyTesting')
+  }
+  if (isCellularProxyActive.value) {
+    const loc = cellularProxyLocation.value ? ` (${cellularProxyLocation.value})` : ''
+    return `${t('deviceClient.cellularProxyOn')}: ${cellularProxyEgressIp.value || t('deviceClient.proxyConnected')}${loc}`
+  }
+  return t('deviceClient.enableCellularProxy')
+})
+
+async function checkCellularProxyStatus() {
+  if (!currentId.value) return
+  try {
+    const raw = await webrtc.executeCommand('cloudphone_proxy status', 5000)
+    if (raw && raw.stdout) {
+      const res = JSON.parse(raw.stdout.trim())
+      if (res && res.success) {
+        isCellularProxyActive.value = !!res.enabled
+        if (res.ip) {
+          cellularProxyEgressIp.value = res.ip
+          cellularProxyLocation.value = res.location || ''
+        }
+      }
+    }
+  } catch (_) {
+    // 静默忽略
+  }
+}
+
+async function toggleCellularProxy() {
+  if (isCellularProxyTesting.value) return
+
+  if (isCellularProxyActive.value) {
+    // 执行关闭反代
+    isCellularProxyTesting.value = true
+    try {
+      const raw = await webrtc.executeCommand('cloudphone_proxy disable', 5000)
+      const res = raw && raw.stdout ? JSON.parse(raw.stdout.trim()) : {}
+      isCellularProxyActive.value = false
+      cellularProxyEgressIp.value = ''
+      cellularProxyLocation.value = ''
+      triggerToast(t('deviceClient.proxyDisabledToast'), 'info', 3000)
+    } catch (e) {
+      triggerToast(t('deviceClient.proxyDisableFailed', { err: e.message || e }), 'error', 4000)
+    } finally {
+      isCellularProxyTesting.value = false
+    }
+  } else {
+    // 执行开启反代并探测连通性
+    isCellularProxyTesting.value = true
+    triggerToast(t('deviceClient.proxyEnablingPrompt'), 'info', 8000)
+    try {
+      const raw = await webrtc.executeCommand('cloudphone_proxy enable', 12000)
+      if (!raw || !raw.stdout) {
+        throw new Error(t('deviceClient.proxyNoResponse'))
+      }
+      const res = JSON.parse(raw.stdout.trim())
+      if (res.success) {
+        isCellularProxyActive.value = true
+        cellularProxyEgressIp.value = res.ip || ''
+        cellularProxyLocation.value = res.location || ''
+        const locText = res.location ? `(${res.location})` : ''
+        triggerToast(t('deviceClient.proxySuccessToast', { ip: res.ip || '', location: locText }), 'success', 5000)
+      } else {
+        isCellularProxyActive.value = false
+        const errMsg = res.error || t('deviceClient.proxyUnknownError')
+        triggerToast(t('deviceClient.proxyFailedToast', { err: errMsg }), 'error', 6000)
+      }
+    } catch (e) {
+      isCellularProxyActive.value = false
+      triggerToast(t('deviceClient.proxyFailedToast', { err: e.message || e }), 'error', 6000)
+    } finally {
+      isCellularProxyTesting.value = false
+    }
+  }
 }
 
 function toggleQuickTextDropdown() {
@@ -1400,6 +1519,7 @@ function reconnectStream(msg = '正在切换参数并重新建连...') {
       currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
       deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
+  setTimeout(checkCellularProxyStatus, 2000)
     }, 800)
   }
 }
@@ -1658,6 +1778,7 @@ function resetSettings() {
     currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
     deviceStore.registerWebRTC(currentId.value, webrtc)
     setupWebRTC()
+  setTimeout(checkCellularProxyStatus, 2000)
   }
 }
 
@@ -2033,7 +2154,10 @@ function updateMobileState() {
   isScreenLandscape.value = window.innerWidth > window.innerHeight
 }
 
-function onVideoLoaded() { checkAndRecommendLayout() }
+function onVideoLoaded() {
+  checkAndRecommendLayout()
+  checkCellularProxyStatus()
+}
 function onVideoResize() { checkAndRecommendLayout() }
 
 // 响应式重新连接
@@ -2059,6 +2183,7 @@ watch(currentId, (newId, oldId) => {
     currentWebRTC.value = createStreamInstance(newId, scrcpyOptions.value)
     deviceStore.registerWebRTC(newId, webrtc)
     setupWebRTC()
+  setTimeout(checkCellularProxyStatus, 2000)
   }
 })
 
@@ -2210,6 +2335,7 @@ function handleSettingsUpdated(event) {
       currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
       deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
+  setTimeout(checkCellularProxyStatus, 2000)
     }
   }
 }
@@ -2227,6 +2353,7 @@ onMounted(() => {
   window.addEventListener('cloudphone-settings-updated', handleSettingsUpdated)
   
   setupWebRTC()
+  setTimeout(checkCellularProxyStatus, 2000)
   runDemoLoop()
   updateCameraClock()
   cameraClockTimer = setInterval(updateCameraClock, 1000)
@@ -4260,6 +4387,39 @@ defineExpose({
   z-index: 2000;
   pointer-events: none;
   user-select: none;
+  transition: all 0.25s ease;
+}
+
+.quick-text-toast.success {
+  background: rgba(16, 185, 129, 0.95);
+  border: 1px solid rgba(110, 231, 183, 0.5);
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(16, 185, 129, 0.4);
+}
+
+.quick-text-toast.error {
+  background: rgba(239, 68, 68, 0.95);
+  border: 1px solid rgba(252, 165, 165, 0.5);
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(239, 68, 68, 0.4);
+}
+
+/* 蜂窝反代侧边栏按钮样式 */
+.sidebar-btn.proxy-btn.active {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.sidebar-btn.proxy-btn.loading {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.fab-item.active {
+  color: #10b981 !important;
+  font-weight: bold;
 }
 
 /* 画中画激活状态主视窗提示遮罩 */

@@ -44,6 +44,7 @@ export const useDeviceStore = defineStore('devices', () => {
   // --- 顶栏共享与视图控制状态 ---
   const searchQuery = ref('')
   const cardSize = ref(Number(localStorage.getItem('cloudphone_card_size') || 200))
+  const cardOrientation = ref(localStorage.getItem('cloudphone_card_orientation') || 'auto') // 'auto' | 'landscape' | 'portrait'
   const viewMode = ref(localStorage.getItem('cloudphone_view_mode') || 'grid') // 'grid' | 'table'
   const showLicenseModal = ref(false)
   const showGlobalSettingsModal = ref(false)
@@ -52,6 +53,11 @@ export const useDeviceStore = defineStore('devices', () => {
   function setCardSize(size) {
     cardSize.value = Number(size)
     localStorage.setItem('cloudphone_card_size', String(size))
+  }
+
+  function setCardOrientation(orientation) {
+    cardOrientation.value = orientation
+    localStorage.setItem('cloudphone_card_orientation', orientation)
   }
 
   function setViewMode(mode) {
@@ -486,6 +492,41 @@ export const useDeviceStore = defineStore('devices', () => {
       masterDeviceId.value = id
     }
     activeTopLayer.value = 'connection'
+  }
+
+  const projectionExitOptions = ref(null)
+  let completeProjectionExit = null
+
+  function resolveProjectionExit(choice) {
+    const resolve = completeProjectionExit
+    completeProjectionExit = null
+    projectionExitOptions.value = null
+    resolve?.(choice)
+  }
+
+  async function confirmDeviceExit(ids) {
+    if (completeProjectionExit) return false
+    const sessions = ids.map(getWebRTC).filter(stream => stream?.hasProjectionSession?.())
+    if (!sessions.length) return true
+    const canResume = sessions.some(stream => stream.canResumeProjection())
+    const choice = await new Promise(resolve => {
+      completeProjectionExit = resolve
+      projectionExitOptions.value = { canResume }
+    })
+    if (choice === 'end') sessions.forEach(stream => stream.endProjection())
+    return choice === 'end' || choice === 'temporary'
+  }
+
+  async function requestCloseDevice(id) {
+    if (!(await confirmDeviceExit([id]))) return false
+    closeDevice(id)
+    return true
+  }
+
+  async function requestCloseAllDevices() {
+    if (!(await confirmDeviceExit([...activeDeviceIds.value]))) return false
+    closeAllDevices()
+    return true
   }
 
   function closeDevice(id) {
@@ -1021,6 +1062,39 @@ export const useDeviceStore = defineStore('devices', () => {
     removeDevice(deviceId)
   }
 
+  // 更新设备别名（Display Name / Alias）
+  async function updateDeviceAlias(deviceId, alias) {
+    const token = localStorage.getItem('auth_token') || ''
+    const cleanAlias = (alias || '').trim()
+    const res = await fetch('/api/devices/alias', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        device_id: deviceId,
+        alias: cleanAlias
+      })
+    })
+    if (!res.ok) {
+      const text = (await res.text()).trim()
+      throw new Error(text || `更新设备别名失败 (${res.status})`)
+    }
+    // 本地乐观更新
+    const dev = devices.value.find(d => d.id === deviceId)
+    if (dev) {
+      dev.displayName = cleanAlias
+      devices.value = [...devices.value]
+    }
+    const offDev = offlineDevices.value.find(d => d.id === deviceId)
+    if (offDev) {
+      offDev.displayName = cleanAlias
+      offlineDevices.value = [...offlineDevices.value]
+    }
+    return cleanAlias
+  }
+
   const lastSnapshotHash = new Map()
 
   function handleSnapshotUpdated(deviceId, url, hash) {
@@ -1334,6 +1408,10 @@ export const useDeviceStore = defineStore('devices', () => {
     openDevice,
     closeDevice,
     closeAllDevices,
+    requestCloseDevice,
+    requestCloseAllDevices,
+    projectionExitOptions,
+    resolveProjectionExit,
     focusDevice,
     setMasterDevice,
     setMultiLayoutMode,
@@ -1367,6 +1445,7 @@ export const useDeviceStore = defineStore('devices', () => {
     openDeviceAsWebSocket,
     setDeviceMode,
     getDeviceMode,
+    updateDeviceAlias,
     getDeviceDisplayName,
     setActiveWebRTC,
     clearActiveDevice,
@@ -1410,11 +1489,13 @@ export const useDeviceStore = defineStore('devices', () => {
     globalInteractiveMode,
     searchQuery,
     cardSize,
+    cardOrientation,
     viewMode,
     showLicenseModal,
     showGlobalSettingsModal,
     showTagManagerModal,
     setCardSize,
+    setCardOrientation,
     setViewMode,
     toggleViewMode,
     licenseUsedCount,

@@ -94,6 +94,7 @@
         :key="`${deviceId}_${deviceStore.getDeviceMode(deviceId)}`"
         :is-mini="false"
         :is-focused="isFocused"
+        :input-enabled="!isMinimized && deviceStore.activeTopLayer !== 'console'"
         :audio-muted="!isFocused && audioFocusMode === 'exclusive'"
         @recommend-layout="onRecommendLayout"
       />

@@ -464,6 +464,17 @@
                     />
                   </div>
 
+                  <div class="dropdown-slider-row" v-if="deviceStore.viewMode === 'grid'">
+                    <div class="slider-header">
+                      <span>{{ $t('topBar.cardOrientation') }}</span>
+                    </div>
+                    <div class="preset-density-row">
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardOrientation === 'auto' }" @click="deviceStore.setCardOrientation('auto')">{{ $t('topBar.orientationAuto') }}</button>
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardOrientation === 'landscape' }" @click="deviceStore.setCardOrientation('landscape')">{{ $t('topBar.orientationLandscape') }}</button>
+                      <button class="preset-density-btn" :class="{ active: deviceStore.cardOrientation === 'portrait' }" @click="deviceStore.setCardOrientation('portrait')">{{ $t('topBar.orientationPortrait') }}</button>
+                    </div>
+                  </div>
+
                   <div class="dropdown-view-toggle">
                     <button 
                       class="view-toggle-opt" 
@@ -523,7 +534,7 @@
             <button 
               v-if="deviceStore.activeDeviceIds.length > 0"
               class="top-action-btn primary-action-btn active" 
-              @click.stop="deviceStore.closeAllDevices()" 
+              @click.stop="deviceStore.requestCloseAllDevices()"
               :title="$t('topBar.multiConnectedTip')"
             >
               <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -731,7 +742,7 @@
     <aside 
       class="control-panel-wrapper" 
       :class="{ 
-        'is-open': !!deviceStore.activeDeviceId && !isPanelHiddenPage && !(isMobile && route.path === '/files') && (deviceStore.directControlMode === 'single' || isMobile),
+        'is-open': isDevicePanelOpen,
         'is-floating': isFloating && !isMobile && deviceStore.directControlMode === 'single',
         'is-mobile': isMobile,
         'is-top-layer': deviceStore.activeTopLayer === 'connection'
@@ -850,11 +861,12 @@
             <!-- 渲染单机 DeviceClient -->
             <DeviceClient 
               ref="singleDeviceClientRef"
-              v-if="deviceStore.activeDeviceId" 
+              v-if="deviceStore.activeDeviceId && (deviceStore.directControlMode === 'single' || isMobile)"
               :deviceId="deviceStore.activeDeviceId" 
               :key="`${deviceStore.activeDeviceId}_${deviceStore.getDeviceMode(deviceStore.activeDeviceId)}`"
               :is-mini="false"
               :is-focused="true"
+              :input-enabled="isDevicePanelOpen && deviceStore.activeTopLayer !== 'console'"
               :audio-muted="false"
               @recommend-layout="handleRecommendLayout" 
             />
@@ -957,6 +969,8 @@
       </div>
     </transition>
 
+    <ProjectionExitDialog />
+
     <!-- 系统授权管理面板 -->
     <LicensePanel :visible="showLicensePanel" @close="showLicensePanel = false" />
 
@@ -990,6 +1004,7 @@ import DeviceConsole from '@/components/DeviceConsole.vue'
 import LicensePanel from '@/components/LicensePanel.vue'
 import UpdateModal from '@/components/UpdateModal.vue'
 import FeedbackModal from '@/components/FeedbackModal.vue'
+import ProjectionExitDialog from '@/components/ProjectionExitDialog.vue'
 import FloatingWindowManager from '@/components/floating/FloatingWindowManager.vue'
 import DeviceClient from '@/views/DeviceClient.vue'
 import DeviceDrawer from '@/components/sidebar/DeviceDrawer.vue'
@@ -1185,6 +1200,8 @@ const isMainMatrixPage = computed(() => route.path === '/')
 
 // 部署 / 大盘页面隐藏右侧控制面板（保持原有行为）
 const isPanelHiddenPage = computed(() => route.path === '/deploy' || route.path === '/monitor')
+const isDevicePanelOpen = computed(() => !!deviceStore.activeDeviceId && !isPanelHiddenPage.value &&
+  !(isMobile.value && route.path === '/files') && (deviceStore.directControlMode === 'single' || isMobile.value))
 
 function dispatchTopAction(action) {
   if (action === 'tag-manager') {
@@ -1501,7 +1518,7 @@ watch(() => deviceStore.activeDeviceId, (newId) => {
 })
 
 function closePanel() {
-  deviceStore.clearActiveDevice()
+  deviceStore.requestCloseAllDevices()
 }
 </script>
 

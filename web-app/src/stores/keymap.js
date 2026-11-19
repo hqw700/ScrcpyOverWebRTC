@@ -11,26 +11,56 @@ const DEFAULT_CONFIG = {
   ]
 }
 
+const isPosition = (pos) => Number.isFinite(pos?.x) && Number.isFinite(pos?.y)
+
+function hasProfileFields(profile) {
+  return typeof profile?.id === 'string' && typeof profile.name === 'string' &&
+    Array.isArray(profile.mappings)
+}
+
+export function isValidProfile(profile) {
+  return hasProfileFields(profile) && profile.mappings.every(isValidMapping)
+}
+
+function isValidMapping(mapping) {
+  if (typeof mapping?.id !== 'string') return false
+  switch (mapping.type) {
+    case 'tap':
+      return typeof mapping.key === 'string' && isPosition(mapping.pos)
+    case 'swipe':
+      return typeof mapping.key === 'string' && isPosition(mapping.startPos) && isPosition(mapping.endPos)
+    case 'joystick':
+      return ['up', 'down', 'left', 'right'].every(dir => typeof mapping.keys?.[dir] === 'string') &&
+        isPosition(mapping.center) && Number.isFinite(mapping.radius)
+    case 'wheel':
+      return ['scroll', 'zoom'].includes(mapping.action) && isPosition(mapping.pos)
+    case 'command':
+      return typeof mapping.key === 'string' && typeof mapping.cmd === 'string'
+    default:
+      return false
+  }
+}
+
 export const useKeymapStore = defineStore('keymap', {
   state: () => {
-    let data = DEFAULT_CONFIG
+    let data = structuredClone(DEFAULT_CONFIG)
     try {
       const stored = localStorage.getItem('cloudphone_keymap')
       if (stored) {
-        data = JSON.parse(stored)
-        // 自动将默认 default 配置清空 mappings (如果包含系统预置的 'm_1'/'m_2'/'m_3')
-        const defProfile = data.profiles?.find(p => p.id === 'default')
-        if (defProfile && defProfile.mappings && defProfile.mappings.some(m => m.id === 'm_1' || m.id === 'm_2' || m.id === 'm_3')) {
-          defProfile.mappings = []
-          localStorage.setItem('cloudphone_keymap', JSON.stringify(data))
-        }
+        const config = JSON.parse(stored)
+        const profiles = Array.isArray(config?.profiles)
+          ? config.profiles.filter(hasProfileFields).map(profile => ({
+              ...profile,
+              mappings: profile.mappings.filter(isValidMapping)
+            }))
+          : []
+        if (profiles.length) data = { ...config, profiles }
       }
     } catch (e) {
       console.warn('Failed to load keymap config', e)
     }
     return {
       config: data,
-      isEditMode: false,
       showKeyHints: false
     }
   },
@@ -53,9 +83,6 @@ export const useKeymapStore = defineStore('keymap', {
         this.config.profiles[index] = profile
         this.save()
       }
-    },
-    setEditMode(mode) {
-      this.isEditMode = mode
     },
     toggleKeyHints() {
       this.showKeyHints = !this.showKeyHints

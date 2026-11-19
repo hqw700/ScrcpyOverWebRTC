@@ -1,364 +1,256 @@
+import { TouchSlots } from './touchSlots.js'
+
+const DOWN = 0
+const UP = 1
+const MOVE = 2
+const DIRECTIONS = ['up', 'down', 'left', 'right']
+
+function getPhysicalKey(event) {
+  return event.code && event.code !== 'Unidentified' ? event.code : event.key.toLowerCase()
+}
+
 export class KeymapEngine {
-  constructor(sendTouchCallback, sendCommandCallback) {
-    this.activeProfile = null;
-    this.sendTouch = sendTouchCallback;
-    this.sendCommand = sendCommandCallback;
-    
-    // 虚拟触控 ID 从 10 开始，避免与真实手指/鼠标 (0-9 或 -1) 冲突
-    this.pointerIdBase = 10;
-    this.activePointers = new Map(); // mapping.id -> pointerId
-    
-    // 摇杆状态记录 mapping.id -> { state: { up, down, left, right }, pointerId: number|null }
-    this.joysticks = new Map(); 
-    
-    // 滚轮状态记录 mapping.id -> { pointerId1, pointerId2, timeoutId, accumulatedDelta }
-    this.wheels = new Map();
+  constructor(sendTouch, sendCommand, slots = new TouchSlots()) {
+    this.sendTouch = sendTouch
+    this.sendCommand = sendCommand
+    this.slots = slots
+    this.mappings = []
+    this.pressedKeys = new Map()
+    this.taps = new Map()
+    this.swipes = new Map()
+    this.joysticks = new Map()
+    this.wheels = new Map()
   }
 
   updateProfile(profile) {
-    this.activeProfile = profile;
-    // 如果切换配置，释放所有当前激活的模拟触控
-    this.releaseAll();
+    this.releaseAll()
+    this.mappings = profile?.mappings ?? []
   }
 
   releaseAll() {
-    // 发送 ACTION_UP (1) 释放所有 tap 触控
-    for (const [mapId, pointerId] of this.activePointers.entries()) {
-      this.sendTouch(1, 0, 0, pointerId, { x: 0, y: 0, isRotated: true });
+    for (const pointer of this.taps.values()) this.endTouch(pointer)
+    for (const swipe of this.swipes.values()) {
+      cancelAnimationFrame(swipe.frame)
+      this.endTouch(swipe.pointer)
     }
-    this.activePointers.clear();
-
-    // 释放所有 joystick 触控
-    for (const [mapId, joy] of this.joysticks.entries()) {
-      if (joy.pointerId !== null) {
-        this.sendTouch(1, 0, 0, joy.pointerId, { x: 0, y: 0, isRotated: true });
-        joy.pointerId = null;
-      }
-      joy.state = { up: false, down: false, left: false, right: false };
+    for (const joystick of this.joysticks.values()) {
+      if (joystick.pointer) this.endTouch(joystick.pointer)
     }
-    
-    // 释放所有 wheel 触控
-    for (const [mapId, state] of this.wheels.entries()) {
-      if (state.timeoutId) clearTimeout(state.timeoutId);
-      if (state.pointerId1 !== null) {
-        this.sendTouch(1, 0, 0, state.pointerId1, { x: 0, y: 0, isRotated: true });
-      }
-      if (state.pointerId2 !== null) {
-        this.sendTouch(1, 0, 0, state.pointerId2, { x: 0, y: 0, isRotated: true });
-      }
+    for (const wheel of this.wheels.values()) {
+      clearTimeout(wheel.timer)
+      for (const pointer of wheel.pointers) this.endTouch(pointer)
     }
-    this.wheels.clear();
+    this.pressedKeys.clear()
+    this.taps.clear()
+    this.swipes.clear()
+    this.joysticks.clear()
+    this.wheels.clear()
   }
 
-  /**
-   * 处理键盘事件
-   * @param {KeyboardEvent} event 
-   * @param {boolean} isDown 
-   * @param {number} videoWidth 
-   * @param {number} videoHeight 
-   * @returns {boolean} 是否拦截（消耗）了该事件
-   */
-  handleKeyEvent(event, isDown, videoWidth, videoHeight) {
-    if (!this.activeProfile || !this.activeProfile.mappings) return false;
-    
-    const key = event.key.toLowerCase();
-    let consumed = false;
-    
-    for (const map of this.activeProfile.mappings) {
-      if (map.type === 'tap' && map.key.toLowerCase() === key) {
-        if (!event.repeat) {
-          this.handleTap(map, isDown, videoWidth, videoHeight);
-        }
-        consumed = true;
-      }
-      else if (map.type === 'command' && map.key.toLowerCase() === key) {
-        if (isDown && !event.repeat) {
-          // console.log(`[Keymap] Executing command for key ${key}: ${map.cmd}`);
-          this.sendCommand(map.cmd);
-        }
-        consumed = true;
-      }
-      else if (map.type === 'joystick') {
-        const keys = map.keys;
-        let direction = null;
-        if (key === keys.up.toLowerCase()) direction = 'up';
-        else if (key === keys.down.toLowerCase()) direction = 'down';
-        else if (key === keys.left.toLowerCase()) direction = 'left';
-        else if (key === keys.right.toLowerCase()) direction = 'right';
-        
-        if (direction) {
-          if (!event.repeat) {
-            this.handleJoystick(map, direction, isDown, videoWidth, videoHeight);
-          }
-          consumed = true;
-        }
-      }
-      else if (map.type === 'swipe' && map.key.toLowerCase() === key) {
-        if (!event.repeat) {
-          this.handleSwipe(map, isDown, videoWidth, videoHeight);
-        }
-        consumed = true;
+  handleKeyDown(event, width, height) {
+    const key = event.key.toLowerCase()
+    const physicalKey = getPhysicalKey(event)
+    if (this.pressedKeys.has(physicalKey)) return true
+
+    const bindings = []
+    for (const mapping of this.mappings) {
+      if (mapping.type === 'joystick') {
+        const direction = DIRECTIONS.find(dir => mapping.keys[dir]?.toLowerCase() === key)
+        if (direction) bindings.push({ mapping, direction })
+      } else if (mapping.key?.toLowerCase() === key) {
+        bindings.push({ mapping })
       }
     }
-    
-    return consumed;
+    if (!bindings.length) return false
+    if (event.repeat) return true
+
+    this.pressedKeys.set(physicalKey, bindings)
+    for (const { mapping, direction } of bindings) {
+      switch (mapping.type) {
+        case 'tap': {
+          if (this.taps.has(mapping)) break
+          const [pointer] = this.startTouches([this.toPixels(mapping.pos, width, height)])
+          if (pointer) this.taps.set(mapping, pointer)
+          break
+        }
+        case 'swipe':
+          this.startSwipe(mapping, width, height)
+          break
+        case 'joystick':
+          this.updateJoystick(mapping, direction, true, width, height)
+          break
+        case 'command':
+          this.sendCommand(mapping.cmd)
+          break
+      }
+    }
+    return true
   }
 
-  handleTap(map, isDown, videoWidth, videoHeight) {
-    // 映射坐标计算：pos.x/y 是相对于视频原尺寸的百分比
-    const px = map.pos.x * videoWidth;
-    const py = map.pos.y * videoHeight;
-    const coord = { x: px, y: py, isRotated: true };
+  handleKeyUp(event, width, height) {
+    const physicalKey = getPhysicalKey(event)
+    const bindings = this.pressedKeys.get(physicalKey)
+    if (!bindings) return false
 
-    if (isDown) {
-      if (!this.activePointers.has(map.id)) {
-        const ptrId = this.pointerIdBase++;
-        this.activePointers.set(map.id, ptrId);
-        // Action 0: ACTION_DOWN
-        this.sendTouch(0, 0, 0, ptrId, coord); 
+    this.pressedKeys.delete(physicalKey)
+    for (const { mapping, direction } of bindings) {
+      const stillPressed = Array.from(this.pressedKeys.values()).some(keys =>
+        keys.some(binding => binding.mapping === mapping && binding.direction === direction))
+      if (stillPressed) continue
+      const pointer = this.taps.get(mapping)
+      if (pointer) {
+        this.endTouch(pointer)
+        this.taps.delete(mapping)
       }
-    } else {
-      if (this.activePointers.has(map.id)) {
-        const ptrId = this.activePointers.get(map.id);
-        // Action 1: ACTION_UP
-        this.sendTouch(1, 0, 0, ptrId, coord);
-        this.activePointers.delete(map.id);
-      }
+      if (direction) this.updateJoystick(mapping, direction, false, width, height)
+    }
+    return true
+  }
+
+  toPixels(pos, width, height) {
+    return { x: pos.x * width, y: pos.y * height }
+  }
+
+  startTouches(positions) {
+    const slots = this.slots.acquire(positions.length)
+    if (!slots) return []
+
+    return positions.map(({ x, y }, index) => {
+      const pointer = { id: slots[index], x, y }
+      this.emitTouch(DOWN, pointer)
+      return pointer
+    })
+  }
+
+  moveTouch(pointer, x, y) {
+    pointer.x = x
+    pointer.y = y
+    this.emitTouch(MOVE, pointer)
+  }
+
+  endTouch(pointer) {
+    this.emitTouch(UP, pointer)
+    this.slots.release(pointer.id)
+  }
+
+  emitTouch(action, { id, x, y }) {
+    this.sendTouch(action, 0, 0, id, { x, y, isRotated: true })
+  }
+
+  updateJoystick(mapping, direction, isDown, width, height) {
+    let joystick = this.joysticks.get(mapping)
+    if (!joystick) {
+      joystick = { directions: new Set(), pointer: null }
+      this.joysticks.set(mapping, joystick)
+    }
+    if (isDown) joystick.directions.add(direction)
+    else joystick.directions.delete(direction)
+
+    const { directions } = joystick
+    const dx = Number(directions.has('right')) - Number(directions.has('left'))
+    const dy = Number(directions.has('down')) - Number(directions.has('up'))
+    const length = Math.hypot(dx, dy)
+    if (!length) {
+      if (joystick.pointer) this.endTouch(joystick.pointer)
+      joystick.pointer = null
+      if (!directions.size) this.joysticks.delete(mapping)
+      return
+    }
+
+    const center = this.toPixels(mapping.center, width, height)
+    const radius = mapping.radius * width
+    if (!joystick.pointer) [joystick.pointer] = this.startTouches([center])
+    if (joystick.pointer) {
+      this.moveTouch(joystick.pointer, center.x + dx * radius / length, center.y + dy * radius / length)
     }
   }
 
-  handleJoystick(map, direction, isDown, videoWidth, videoHeight) {
-    if (!this.joysticks.has(map.id)) {
-      this.joysticks.set(map.id, { state: { up: false, down: false, left: false, right: false }, pointerId: null });
-    }
-    const joy = this.joysticks.get(map.id);
-    
-    // 更新按下状态
-    joy.state[direction] = isDown;
-    
-    // 计算方向向量
-    let dx = 0;
-    let dy = 0;
-    if (joy.state.up) dy -= 1;
-    if (joy.state.down) dy += 1;
-    if (joy.state.left) dx -= 1;
-    if (joy.state.right) dx += 1;
-    
-    const isNeutral = (dx === 0 && dy === 0);
-    
-    const centerX = map.center.x * videoWidth;
-    const centerY = map.center.y * videoHeight;
-    const radiusPx = map.radius * videoWidth; // 半径基于宽度比例计算
-    
-    if (isNeutral) {
-      // 状态：活动 -> 归位 (发送 ACTION_UP)
-      if (joy.pointerId !== null) {
-        const centerCoord = { x: centerX, y: centerY, isRotated: true };
-        this.sendTouch(1, 0, 0, joy.pointerId, centerCoord);
-        joy.pointerId = null;
-      }
-    } else {
-      // 标准化向量，保证斜向距离也是 radius
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const nx = dx / length;
-      const ny = dy / length;
-      
-      const targetX = centerX + nx * radiusPx;
-      const targetY = centerY + ny * radiusPx;
-      const coord = { x: targetX, y: targetY, isRotated: true };
-      
-      if (joy.pointerId === null) {
-        // 状态：归位 -> 活动 (先在中心点 ACTION_DOWN，紧接着 ACTION_MOVE 到边缘)
-        joy.pointerId = this.pointerIdBase++;
-        const centerCoord = { x: centerX, y: centerY, isRotated: true };
-        this.sendTouch(0, 0, 0, joy.pointerId, centerCoord);
-        this.sendTouch(2, 0, 0, joy.pointerId, coord);
+  startSwipe(mapping, width, height) {
+    if (this.swipes.has(mapping)) return
+    const start = this.toPixels(mapping.startPos, width, height)
+    const end = this.toPixels(mapping.endPos, width, height)
+    const [pointer] = this.startTouches([start])
+    if (!pointer) return
+
+    const duration = mapping.duration > 0 ? mapping.duration : 150
+    const startTime = performance.now()
+    const swipe = { pointer, frame: null }
+    const animate = (now) => {
+      const progress = Math.max(0, Math.min(1, (now - startTime) / duration))
+      this.moveTouch(pointer, start.x + (end.x - start.x) * progress, start.y + (end.y - start.y) * progress)
+      if (progress === 1) {
+        this.endTouch(pointer)
+        this.swipes.delete(mapping)
       } else {
-        // 状态：活动 -> 活动 (方向改变，发送 ACTION_MOVE)
-        this.sendTouch(2, 0, 0, joy.pointerId, coord);
+        swipe.frame = requestAnimationFrame(animate)
       }
     }
+    this.swipes.set(mapping, swipe)
+    swipe.frame = requestAnimationFrame(animate)
   }
 
-  handleSwipe(map, isDown, videoWidth, videoHeight) {
-    if (isDown) {
-      if (this.activePointers.has(map.id)) return;
+  handleWheelEvent(event, width, height) {
+    const direction = Math.sign(event.deltaY)
+    if (!direction) return false
 
-      const ptrId = this.pointerIdBase++;
-      this.activePointers.set(map.id, ptrId);
-
-      const startX = map.startPos.x * videoWidth;
-      const startY = map.startPos.y * videoHeight;
-      const endX = map.endPos.x * videoWidth;
-      const endY = map.endPos.y * videoHeight;
-      
-      const duration = map.duration || 150; 
-      const startTime = Date.now();
-      
-      this.sendTouch(0, 0, 0, ptrId, { x: startX, y: startY, isRotated: true });
-      
-      const requestAnimFrame = (typeof requestAnimationFrame !== 'undefined') 
-        ? requestAnimationFrame 
-        : (cb) => setTimeout(cb, 16);
-
-      const animate = () => {
-        if (!this.activePointers.has(map.id) || this.activePointers.get(map.id) !== ptrId) {
-          return;
-        }
-        
-        const now = Date.now();
-        const elapsed = now - startTime;
-        let progress = elapsed / duration;
-        if (progress >= 1) progress = 1;
-        
-        const currentX = startX + (endX - startX) * progress;
-        const currentY = startY + (endY - startY) * progress;
-        
-        this.sendTouch(2, 0, 0, ptrId, { x: currentX, y: currentY, isRotated: true });
-        
-        if (progress < 1) {
-          requestAnimFrame(animate);
-        }
-      };
-      
-      requestAnimFrame(animate);
-      
-    } else {
-      if (this.activePointers.has(map.id)) {
-        const ptrId = this.activePointers.get(map.id);
-        const endX = map.endPos.x * videoWidth;
-        const endY = map.endPos.y * videoHeight;
-        this.sendTouch(1, 0, 0, ptrId, { x: endX, y: endY, isRotated: true });
-        this.activePointers.delete(map.id);
-      }
+    let consumed = false
+    for (const mapping of this.mappings) {
+      if (mapping.type !== 'wheel') continue
+      if (mapping.action === 'zoom') this.handleZoom(mapping, direction, width, height)
+      else this.handleScroll(mapping, direction, width, height)
+      consumed = true
     }
+    return consumed
   }
 
-  /**
-   * 处理滚轮事件
-   */
-  handleWheelEvent(event, videoWidth, videoHeight) {
-    if (!this.activeProfile || !this.activeProfile.mappings) return false;
-    
-    let consumed = false;
-    for (const map of this.activeProfile.mappings) {
-      if (map.type === 'wheel') {
-        this.handleWheel(map, event.deltaY, videoWidth, videoHeight);
-        consumed = true;
-      }
+  handleScroll(mapping, direction, width, height) {
+    const { x, y } = this.toPixels(mapping.pos, width, height)
+    let wheel = this.wheels.get(mapping)
+    if (!wheel) {
+      const offset = direction * height * 0.15
+      const pointers = this.startTouches([{ x, y: Math.max(0, Math.min(height - 1, y + offset)) }])
+      if (!pointers.length) return
+      wheel = { pointers, offset }
+      this.wheels.set(mapping, wheel)
     }
-    return consumed;
+
+    wheel.offset -= direction * height * 0.06
+    const nextY = y + wheel.offset
+    this.moveTouch(wheel.pointers[0], x, Math.max(0, Math.min(height - 1, nextY)))
+    this.finishWheel(mapping, wheel, nextY <= 0 || nextY >= height - 1 || Math.abs(wheel.offset) > height * 0.3)
   }
 
-  handleWheel(map, deltaY, videoWidth, videoHeight) {
-    if (!this.wheels.has(map.id)) {
-      this.wheels.set(map.id, { pointerId1: null, pointerId2: null, timeoutId: null, accumulatedDelta: 0 });
+  handleZoom(mapping, direction, width, height) {
+    const span = Math.min(width, height)
+    const minRadius = span * 0.05
+    const maxRadius = span * 0.4
+    const positions = radius => [-1, 1].map(sign => {
+      const offset = sign * radius / Math.SQRT2
+      return { x: width / 2 + offset, y: height / 2 + offset }
+    })
+
+    let wheel = this.wheels.get(mapping)
+    if (!wheel) {
+      const offset = direction < 0 ? minRadius + span * 0.02 : maxRadius - span * 0.02
+      const pointers = this.startTouches(positions(offset))
+      if (!pointers.length) return
+      wheel = { pointers, offset }
+      this.wheels.set(mapping, wheel)
     }
-    const state = this.wheels.get(map.id);
-    const px = map.pos.x * videoWidth;
-    const py = map.pos.y * videoHeight;
 
-    if (state.timeoutId) {
-      clearTimeout(state.timeoutId);
-      state.timeoutId = null;
+    const nextRadius = wheel.offset - direction * span * 0.05
+    wheel.offset = Math.max(minRadius, Math.min(maxRadius, nextRadius))
+    positions(wheel.offset).forEach(({ x, y }, index) => this.moveTouch(wheel.pointers[index], x, y))
+    this.finishWheel(mapping, wheel, nextRadius <= minRadius || nextRadius >= maxRadius)
+  }
+
+  finishWheel(mapping, wheel, atLimit) {
+    clearTimeout(wheel.timer)
+    const release = () => {
+      for (const pointer of wheel.pointers) this.endTouch(pointer)
+      this.wheels.delete(mapping)
     }
-
-    if (map.action === 'scroll') {
-      if (state.pointerId1 === null) {
-        state.pointerId1 = this.pointerIdBase++;
-        // 根据滚轮方向决定初始落点：滚轮向下(内容向上)，手指从偏下方落下然后往上滑
-        state.accumulatedDelta = Math.sign(deltaY) * (videoHeight * 0.15);
-        let startY = py + state.accumulatedDelta;
-        startY = Math.max(0, Math.min(videoHeight, startY));
-        this.sendTouch(0, 0, 0, state.pointerId1, { x: px, y: startY, isRotated: true });
-      }
-      
-      const step = Math.sign(deltaY) * (videoHeight * 0.06); 
-      state.accumulatedDelta -= step;
-      
-      let currentY = py + state.accumulatedDelta;
-      
-      // 如果滑动了超过 30% 屏幕高度，或者到达边缘，立刻抬起手指，使得连续滚动时产生“反复拨动”的真实操作感
-      if (currentY <= 0 || currentY >= videoHeight || Math.abs(state.accumulatedDelta) > videoHeight * 0.3) {
-        currentY = Math.max(0, Math.min(videoHeight, currentY));
-        this.sendTouch(2, 0, 0, state.pointerId1, { x: px, y: currentY, isRotated: true });
-        this.sendTouch(1, 0, 0, state.pointerId1, { x: px, y: currentY, isRotated: true });
-        state.pointerId1 = null;
-      } else {
-        this.sendTouch(2, 0, 0, state.pointerId1, { x: px, y: currentY, isRotated: true });
-        
-        state.timeoutId = setTimeout(() => {
-          if (state.pointerId1 !== null) {
-            this.sendTouch(1, 0, 0, state.pointerId1, { x: px, y: currentY, isRotated: true });
-            state.pointerId1 = null;
-          }
-        }, 200);
-      }
-      
-    } else if (map.action === 'zoom') {
-      // 强制以屏幕中心为原点，并采用 45 度角倾斜，模拟最真实的手指捏合习惯
-      const centerX = videoWidth / 2;
-      const centerY = videoHeight / 2;
-      const minRadius = videoHeight * 0.05;
-      const maxRadius = videoHeight * 0.40;
-
-      if (state.pointerId1 === null) {
-        state.pointerId1 = this.pointerIdBase++;
-        state.pointerId2 = this.pointerIdBase++;
-        
-        // 放大时，手指从靠近中心开始往外分；缩小时，手指从外围开始往中心捏
-        if (deltaY < 0) { // scroll up -> zoom in
-          state.accumulatedDelta = minRadius + (videoHeight * 0.02);
-        } else { // scroll down -> zoom out
-          state.accumulatedDelta = maxRadius - (videoHeight * 0.02);
-        }
-        
-        const angle = Math.PI / 4; // 45度倾斜
-        const offsetX = state.accumulatedDelta * Math.cos(angle);
-        const offsetY = state.accumulatedDelta * Math.sin(angle);
-        
-        this.sendTouch(0, 0, 0, state.pointerId1, { x: centerX - offsetX, y: centerY - offsetY, isRotated: true });
-        this.sendTouch(0, 0, 0, state.pointerId2, { x: centerX + offsetX, y: centerY + offsetY, isRotated: true });
-      }
-
-      const step = Math.sign(deltaY) * (videoHeight * 0.05); 
-      // scroll up (deltaY<0) -> step < 0 -> accumulatedDelta 增加 (放大)
-      // scroll down (deltaY>0) -> step > 0 -> accumulatedDelta 减小 (缩小)
-      state.accumulatedDelta -= step;
-      
-      let outOfBounds = false;
-      if (state.accumulatedDelta <= minRadius) {
-        state.accumulatedDelta = minRadius;
-        outOfBounds = true;
-      }
-      if (state.accumulatedDelta >= maxRadius) {
-        state.accumulatedDelta = maxRadius;
-        outOfBounds = true;
-      }
-
-      const angle = Math.PI / 4;
-      const offsetX = state.accumulatedDelta * Math.cos(angle);
-      const offsetY = state.accumulatedDelta * Math.sin(angle);
-
-      this.sendTouch(2, 0, 0, state.pointerId1, { x: centerX - offsetX, y: centerY - offsetY, isRotated: true });
-      this.sendTouch(2, 0, 0, state.pointerId2, { x: centerX + offsetX, y: centerY + offsetY, isRotated: true });
-
-      if (outOfBounds) {
-        // 到达捏合/扩张的极限，立刻抬手，使得继续滚动滚轮时触发新的一轮捏合/扩张动作
-        this.sendTouch(1, 0, 0, state.pointerId1, { x: centerX - offsetX, y: centerY - offsetY, isRotated: true });
-        this.sendTouch(1, 0, 0, state.pointerId2, { x: centerX + offsetX, y: centerY + offsetY, isRotated: true });
-        state.pointerId1 = null;
-        state.pointerId2 = null;
-      } else {
-        state.timeoutId = setTimeout(() => {
-          if (state.pointerId1 !== null) {
-            this.sendTouch(1, 0, 0, state.pointerId1, { x: centerX - offsetX, y: centerY - offsetY, isRotated: true });
-            this.sendTouch(1, 0, 0, state.pointerId2, { x: centerX + offsetX, y: centerY + offsetY, isRotated: true });
-            state.pointerId1 = null;
-            state.pointerId2 = null;
-          }
-        }, 200);
-      }
-    }
+    if (atLimit) release()
+    else wheel.timer = setTimeout(release, 200)
   }
 }

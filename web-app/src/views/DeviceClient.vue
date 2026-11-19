@@ -38,7 +38,7 @@
         </div>
 
         <!-- 移动端退出按钮 (右上角，全屏时自动隐藏让画面更纯净) -->
-        <button v-if="isMobile && !isFullscreen && !isWebFullscreen" class="mobile-close-fab" @click="deviceStore.clearActiveDevice()" :title="$t('deviceClient.closeConn')">
+        <button v-if="isMobile && !isFullscreen && !isWebFullscreen" class="mobile-close-fab" @click="goBackToList" :title="$t('deviceClient.closeConn')">
           ✕
         </button>
 
@@ -66,7 +66,7 @@
           @mousemove="onMouseMove"
           @mouseup="onMouseUp"
           @mouseleave="onMouseLeave"
-          @wheel.prevent="onWheel"
+          @wheel="onWheel"
           @dblclick="onCameraDblClick"
           @contextmenu.prevent
           @touchstart.prevent="onTouchStart"
@@ -92,7 +92,7 @@
           @mousemove="onMouseMove"
           @mouseup="onMouseUp"
           @mouseleave="onMouseLeave"
-          @wheel.prevent="onWheel"
+          @wheel="onWheel"
           @dblclick="onCameraDblClick"
           @contextmenu.prevent
           @touchstart.prevent="onTouchStart"
@@ -163,9 +163,9 @@
         <div v-if="showOverlay" class="panel-overlay">
           <div class="overlay-box">
             <div v-if="connMetaText" class="conn-meta">{{ connMetaText }}</div>
-            <template v-if="['connecting', 'signaling', 'waiting_offer', 'connecting_webrtc'].includes(currentWebRTC.status.value)">
-              <div class="mini-spinner"></div>
-              <p>{{ loadingText }}</p>
+            <template v-if="['connecting', 'signaling', 'waiting_offer', 'waiting_projection', 'connecting_webrtc'].includes(currentWebRTC.status.value)">
+              <ConnectionLogo class="conn-logo" />
+              <p class="loading-label">{{ loadingText }}</p>
             </template>
             <template v-else-if="currentWebRTC.error.value">
               <p class="error-msg">❌ {{ $t('deviceClient.connectFailed') }}</p>
@@ -336,17 +336,7 @@
               >
                 <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> {{ $t('deviceClient.terminal') }}
               </button>
-              <button 
-                class="fab-item" 
-                :class="{ active: isCellularProxyActive }" 
-                @click="toggleCellularProxy(); showMobileMenu=false"
-                :title="cellularProxyTooltip"
-              >
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2v20M17 5a7 7 0 0 1 0 14M7 5a7 7 0 0 0 0 14M21 2a11 11 0 0 1 0 20M3 2a11 11 0 0 0 0 20"/>
-                </svg> {{ isCellularProxyActive ? $t('deviceClient.cellularProxyOn') : $t('deviceClient.cellularProxy') }}
-              </button>
-              <button class="fab-item" @click="keymapStore.setEditMode(true); showMobileMenu=false">
+              <button class="fab-item" @click="isKeymapEditing = true; showMobileMenu=false">
                 <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> {{ $t('deviceClient.keymap') }}
               </button>
               <button class="fab-item" @click="keymapStore.toggleKeyHints(); showMobileMenu=false">
@@ -369,6 +359,12 @@
               </button>
               <button class="fab-item" @click="showMobileQuickTextModal = true; showMobileMenu = false">
                 <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg> {{ $t('deviceClient.quickText') }}
+              </button>
+              <button class="fab-item" @click="showLayoutInspector = true; showMobileMenu = false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <path d="M3 9h18M9 21V9"></path>
+                </svg> {{ $t('deviceClient.showLayout') }}
               </button>
               
               <template v-if="!forbidTerminal">
@@ -399,12 +395,39 @@
         </div>
 
         <!-- 按键映射编辑器 (仅常规模式) -->
-        <KeymapEditor v-if="!isCameraMode" :video-element="videoElement" />
+        <KeymapEditor
+          v-if="!isCameraMode && inputEnabled && (isKeymapEditing || keymapStore.showKeyHints)"
+          :is-editing="isKeymapEditing"
+          :media-element="activeMedia"
+          :video-size="videoNaturalSize"
+          :rotated="needRotateCoords"
+          @close="isKeymapEditing = false"
+        />
       </div>
     </div>
 
     <!-- PC 右侧控制栏 (常规云手机模式) -->
-    <div v-if="!isMobile && !isMini && !isCameraMode" class="control-sidebar" :class="{ 'fs-ui-visible': fsUiVisible }">
+    <div 
+      v-if="!isMobile && !isMini && !isCameraMode" 
+      class="control-sidebar" 
+      :class="{ 
+        'fs-ui-visible': fsUiVisible,
+        'is-collapsed': isWebFullscreen && isWebFsSidebarCollapsed 
+      }"
+    >
+      <!-- 网页全屏下的收起/展开切换把手 -->
+      <button 
+        v-if="isWebFullscreen" 
+        class="fs-sidebar-toggle-btn" 
+        @click.stop="toggleWebFsSidebar" 
+        :title="isWebFsSidebarCollapsed ? $t('deviceClient.expandSidebar') : $t('deviceClient.collapseSidebar')"
+      >
+        <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline v-if="isWebFsSidebarCollapsed" points="15 18 9 12 15 6"></polyline>
+          <polyline v-else points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </button>
+
       <div class="sidebar-group">
         <button v-if="authStore.isAdmin || deviceStore.devices.length > 1" class="sidebar-btn group-control-btn" :class="{ active: groupControlStore.isGroupControlActive }" @click="toggleGroupControl" :title="groupControlStore.isGroupControlActive ? $t('deviceClient.cancelGroupControl') : $t('deviceClient.groupControl')">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -478,25 +501,7 @@
           <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
           <span class="btn-text">{{ $t('deviceClient.terminal') }}</span>
         </button>
-        <button 
-          class="sidebar-btn proxy-btn" 
-          :class="{ 
-            active: isCellularProxyActive, 
-            loading: isCellularProxyTesting 
-          }" 
-          :disabled="isCellularProxyTesting"
-          @click="toggleCellularProxy" 
-          :title="cellularProxyTooltip"
-        >
-          <svg v-if="!isCellularProxyTesting" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v20M17 5a7 7 0 0 1 0 14M7 5a7 7 0 0 0 0 14M21 2a11 11 0 0 1 0 20M3 2a11 11 0 0 0 0 20"/>
-          </svg>
-          <svg v-else class="icon spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
-          </svg>
-          <span class="btn-text">{{ isCellularProxyActive ? $t('deviceClient.cellularProxyOn') : $t('deviceClient.cellularProxy') }}</span>
-        </button>
-        <button class="sidebar-btn" @click="keymapStore.setEditMode(true)" :title="$t('deviceClient.keymap')">
+        <button class="sidebar-btn" @click="isKeymapEditing = true" :title="$t('deviceClient.keymap')">
           <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
           <span class="btn-text">{{ $t('deviceClient.keymapShort') }}</span>
         </button>
@@ -529,6 +534,20 @@
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
           <span class="btn-text">{{ $t('deviceClient.quickText') }}</span>
+        </button>
+
+        <!-- UI 布局远程重绘按键 -->
+        <button 
+          class="sidebar-btn layout-sidebar-btn" 
+          :class="{ active: showLayoutInspector }" 
+          @click="toggleLayoutInspector" 
+          :title="$t('deviceClient.showLayout')"
+        >
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <path d="M3 9h18M9 21V9"></path>
+          </svg>
+          <span class="btn-text">{{ $t('deviceClient.layout') }}</span>
         </button>
       </div>
       
@@ -831,6 +850,15 @@
       @close="showScreenshot = false" 
     />
 
+    <!-- UI 布局远程重绘抽屉 -->
+    <LayoutInspector
+      v-model:visible="showLayoutInspector"
+      :webrtc="currentWebRTC"
+      :device-id="currentId"
+      :device-name="currentDevice?.displayName || currentId"
+      :is-mobile="isMobile"
+    />
+
     <!-- 连接设置弹窗 -->
     <SettingsModal 
       v-if="showSettingsModal" 
@@ -913,7 +941,7 @@
 
     <!-- 快速文本操作轻提示 Toast -->
     <transition name="fade">
-      <div v-if="quickTextToastMessage" class="quick-text-toast" :class="quickTextToastType">
+      <div v-if="quickTextToastMessage" class="quick-text-toast">
         {{ quickTextToastMessage }}
       </div>
     </transition>
@@ -922,7 +950,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, shallowRef, computed, onBeforeUnmount, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { debugLog, debugWarn } from '@/utils/debug'
 import { useDeviceStore } from '@/stores/devices'
@@ -930,14 +958,18 @@ import { useWebRTC } from '@/composables/useWebRTC'
 import { useWebSocketStream } from '@/composables/useWebSocketStream'
 import { useKeymapStore } from '@/stores/keymap'
 import { KeymapEngine } from '@/utils/keymapEngine'
+import { getRenderedVideoRect } from '@/utils/renderedVideo'
+import { TouchSlots } from '@/utils/touchSlots'
 import { getDeviceSettings, saveDeviceSettings, hasCustomSettings, deleteDeviceSettings, applyPolicyToSettings, policyLockedSections, getCameraPreferences, saveCameraPreferences } from '@/utils/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupControlStore } from '@/stores/groupControl'
 import { useQuickTextStore, getQuickTextTitle, getQuickTextContent } from '@/stores/quickTexts'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import ConnectionLogo from '@/components/ConnectionLogo.vue'
 import ScreenshotModal from '@/components/ScreenshotModal.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import KeymapEditor from '@/components/KeymapEditor.vue'
+import LayoutInspector from '@/components/LayoutInspector.vue'
 
 const { t } = useI18n()
 
@@ -953,6 +985,10 @@ const props = defineProps({
   isFocused: {
     type: Boolean,
     default: false
+  },
+  inputEnabled: {
+    type: Boolean,
+    default: true
   },
   audioMuted: {
     type: Boolean,
@@ -976,105 +1012,14 @@ const isComposingQuickText = ref(false)
 const quickTextInputRef = ref(null)
 const mobileQuickTextInputRef = ref(null)
 const quickTextToastMessage = ref('')
-const quickTextToastType = ref('')
 let quickTextToastTimer = null
 
-function triggerToast(msg, type = 'info', duration = 3000) {
+function triggerQuickTextToast(msg) {
   quickTextToastMessage.value = msg
-  quickTextToastType.value = type
   if (quickTextToastTimer) clearTimeout(quickTextToastTimer)
   quickTextToastTimer = setTimeout(() => {
     quickTextToastMessage.value = ''
-    quickTextToastType.value = ''
-  }, duration)
-}
-
-function triggerQuickTextToast(msg) {
-  triggerToast(msg, 'info', 2000)
-}
-
-// --- 蜂窝数据反代状态与控制 ---
-const isCellularProxyActive = ref(false)
-const isCellularProxyTesting = ref(false)
-const cellularProxyEgressIp = ref('')
-const cellularProxyLocation = ref('')
-
-const cellularProxyTooltip = computed(() => {
-  if (isCellularProxyTesting.value) {
-    return t('deviceClient.proxyTesting')
-  }
-  if (isCellularProxyActive.value) {
-    const loc = cellularProxyLocation.value ? ` (${cellularProxyLocation.value})` : ''
-    return `${t('deviceClient.cellularProxyOn')}: ${cellularProxyEgressIp.value || t('deviceClient.proxyConnected')}${loc}`
-  }
-  return t('deviceClient.enableCellularProxy')
-})
-
-async function checkCellularProxyStatus() {
-  if (!currentId.value) return
-  try {
-    const raw = await webrtc.executeCommand('cloudphone_proxy status', 5000)
-    if (raw && raw.stdout) {
-      const res = JSON.parse(raw.stdout.trim())
-      if (res && res.success) {
-        isCellularProxyActive.value = !!res.enabled
-        if (res.ip) {
-          cellularProxyEgressIp.value = res.ip
-          cellularProxyLocation.value = res.location || ''
-        }
-      }
-    }
-  } catch (_) {
-    // 静默忽略
-  }
-}
-
-async function toggleCellularProxy() {
-  if (isCellularProxyTesting.value) return
-
-  if (isCellularProxyActive.value) {
-    // 执行关闭反代
-    isCellularProxyTesting.value = true
-    try {
-      const raw = await webrtc.executeCommand('cloudphone_proxy disable', 5000)
-      const res = raw && raw.stdout ? JSON.parse(raw.stdout.trim()) : {}
-      isCellularProxyActive.value = false
-      cellularProxyEgressIp.value = ''
-      cellularProxyLocation.value = ''
-      triggerToast(t('deviceClient.proxyDisabledToast'), 'info', 3000)
-    } catch (e) {
-      triggerToast(t('deviceClient.proxyDisableFailed', { err: e.message || e }), 'error', 4000)
-    } finally {
-      isCellularProxyTesting.value = false
-    }
-  } else {
-    // 执行开启反代并探测连通性
-    isCellularProxyTesting.value = true
-    triggerToast(t('deviceClient.proxyEnablingPrompt'), 'info', 8000)
-    try {
-      const raw = await webrtc.executeCommand('cloudphone_proxy enable', 12000)
-      if (!raw || !raw.stdout) {
-        throw new Error(t('deviceClient.proxyNoResponse'))
-      }
-      const res = JSON.parse(raw.stdout.trim())
-      if (res.success) {
-        isCellularProxyActive.value = true
-        cellularProxyEgressIp.value = res.ip || ''
-        cellularProxyLocation.value = res.location || ''
-        const locText = res.location ? `(${res.location})` : ''
-        triggerToast(t('deviceClient.proxySuccessToast', { ip: res.ip || '', location: locText }), 'success', 5000)
-      } else {
-        isCellularProxyActive.value = false
-        const errMsg = res.error || t('deviceClient.proxyUnknownError')
-        triggerToast(t('deviceClient.proxyFailedToast', { err: errMsg }), 'error', 6000)
-      }
-    } catch (e) {
-      isCellularProxyActive.value = false
-      triggerToast(t('deviceClient.proxyFailedToast', { err: e.message || e }), 'error', 6000)
-    } finally {
-      isCellularProxyTesting.value = false
-    }
-  }
+  }, 2000)
 }
 
 function toggleQuickTextDropdown() {
@@ -1268,10 +1213,7 @@ function toggleGroupControl() {
   groupControlStore.toggleGroupControl(active, currentId.value)
 }
 
-const goBackToList = () => {
-  deviceStore.setDeviceMode(currentId.value, 'display')
-  deviceStore.clearActiveDevice()
-}
+const goBackToList = () => deviceStore.requestCloseAllDevices()
 
 const switchToDisplayMode = () => {
   deviceStore.setDeviceMode(currentId.value, 'display')
@@ -1283,6 +1225,12 @@ const hiddenInput = ref(null)
 const containerRef = ref(null)
 const isFullscreen = ref(false)
 const isWebFullscreen = ref(false)
+// 网页全屏下侧边栏折叠状态：默认折叠收起 (true)，避免全屏时遮挡触控和画面
+const isWebFsSidebarCollapsed = ref(localStorage.getItem('cloudphone_webfs_sidebar_collapsed') !== 'false')
+function toggleWebFsSidebar() {
+  isWebFsSidebarCollapsed.value = !isWebFsSidebarCollapsed.value
+  localStorage.setItem('cloudphone_webfs_sidebar_collapsed', String(isWebFsSidebarCollapsed.value))
+}
 const CLIPBOARD_SOURCE_LOCAL = 'local'
 const CLIPBOARD_SOURCE_DEVICE = 'device'
 const CLIPBOARD_SOURCE_KEYBOARD = 'keyboard'
@@ -1293,6 +1241,10 @@ const pendingClipboardWrites = []
 const showScreenshot = ref(false)
 const screenshotData = ref(null)
 const showSettingsModal = ref(false)
+const showLayoutInspector = ref(false)
+function toggleLayoutInspector() {
+  showLayoutInspector.value = !showLayoutInspector.value
+}
 const cameraSupport = ref(true)
 
 // 用户级设置管控：管理员配置的锁定项（码率/帧率/分辨率/音频）在 UI 置灰，服务端同步强制
@@ -1509,7 +1461,7 @@ function reconnectStream(msg = '正在切换参数并重新建连...') {
   }
 
   if (currentId.value) {
-    webrtc.disconnect()
+    disconnectStream()
     if (reconnectStreamTimer) {
       clearTimeout(reconnectStreamTimer)
       reconnectStreamTimer = null
@@ -1519,7 +1471,6 @@ function reconnectStream(msg = '正在切换参数并重新建连...') {
       currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
       deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
-  setTimeout(checkCellularProxyStatus, 2000)
     }, 800)
   }
 }
@@ -1740,6 +1691,12 @@ function saveSettings(newSettings) {
     return
   }
   
+  // 在线协助可用当前授权重建连接，保留投屏面板和单设备设置。
+  if (currentDevice.value?.info?.projection_on_demand) {
+    reconnectStream()
+    return
+  }
+
   // WebRTC 模式与手动“关闭面板再点连接”同效：先卸载面板触发完整断开清理（onUnmounted → disconnect），
   // 等待 Agent 完成 scrcpy 停服/重启后再自动重开。
   // 原地断开即连会撞上 Agent 侧停服/重启窗口，导致新推流会话起不来。
@@ -1774,11 +1731,10 @@ function resetSettings() {
   }
 
   if (currentId.value) {
-    webrtc.disconnect()
+    disconnectStream()
     currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
     deviceStore.registerWebRTC(currentId.value, webrtc)
     setupWebRTC()
-  setTimeout(checkCellularProxyStatus, 2000)
   }
 }
 
@@ -1908,6 +1864,7 @@ const isWebSocketMode = computed(() => {
 })
 const isWebCodecs = computed(() => Boolean(currentWebRTC.value?.isWebCodecsActive?.value))
 const isCanvasRendering = computed(() => isWebSocketMode.value || isWebCodecs.value)
+const activeMedia = computed(() => isCanvasRendering.value ? canvasElement.value : videoElement.value)
 
 function toggleStreamMode() {
   // 只改 store 的连接模式：MultiDeviceItem 的 :key="deviceId_mode" 会驱动组件重挂载，
@@ -1925,54 +1882,92 @@ if (currentId.value) {
 }
 
 const keymapStore = useKeymapStore()
+const isKeymapEditing = ref(false)
+const touchSlots = new TouchSlots()
+const activeScreenTouches = new Map()
 const keymapEngine = new KeymapEngine(
   (action, cx, cy, id, coord) => webrtc.sendTouch(action, cx, cy, id, coord),
-  (cmd) => webrtc.sendCommand(cmd)
+  (cmd) => webrtc.sendCommand(cmd),
+  touchSlots
 )
 
-watch(() => keymapStore.activeProfile, (newProfile) => {
-  keymapEngine.updateProfile(newProfile)
-}, { immediate: true, deep: true })
+watch(() => keymapStore.activeProfile?.mappings, () => {
+  keymapEngine.updateProfile(keymapStore.activeProfile)
+}, { immediate: true, deep: true, flush: 'sync' })
+
+const canUseKeymap = computed(() => props.inputEnabled && effectiveFocused.value &&
+  !isCameraMode.value && !isKeymapEditing.value && currentWebRTC.value?.status.value === 'connected')
+
+watch(canUseKeymap, (enabled) => {
+  if (!enabled) releaseMappedInput()
+}, { flush: 'sync' })
+
+watch([() => props.inputEnabled, effectiveFocused], ([enabled, focused]) => {
+  if (!enabled || !focused) isKeymapEditing.value = false
+})
+
+watch([showLayoutInspector, showScreenshot, showSettingsModal, showMobileQuickTextModal], (overlays) => {
+  if (overlays.some(Boolean)) releaseMappedInput()
+})
+
+function releaseMappedInput() {
+  keymapEngine.releaseAll()
+}
+
+function disconnectStream() {
+  releaseMappedInput()
+  for (const [identifier, { x, y }] of activeScreenTouches) {
+    finishScreenTouch(identifier, x, y)
+  }
+  webrtc.disconnect()
+}
+
+function hasInputOverlay() {
+  return showLayoutInspector.value || showScreenshot.value ||
+    Boolean(document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog'))
+}
+
+function isEditableTarget(target) {
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
+function handleMappedKeyDown(e) {
+  if (!canUseKeymap.value || e.defaultPrevented || e.isComposing || hasInputOverlay()) return false
+  if (e.target !== hiddenInput.value && isEditableTarget(e.target)) return false
+  if (e.ctrlKey || e.metaKey || e.altKey) return false
+  const { width, height } = videoNaturalSize.value
+  if (!getRenderedVideoRect(activeMedia.value, width, height, needRotateCoords.value)) return false
+
+  if (!keymapEngine.handleKeyDown(e, width, height)) return false
+  e.preventDefault()
+  e.stopPropagation()
+  return true
+}
+
+function handleMappedKeyUp(e) {
+  const { width, height } = videoNaturalSize.value
+  if (keymapEngine.handleKeyUp(e, width, height)) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}
 
 function onGlobalKeyDown(e) {
-  // 多机直连隔离：非焦点设备不消费全局键盘事件
-  if (!effectiveFocused.value) return
-
-  debugLog('[GlobalKey] KeyDown. target:', e.target.tagName, 'activeElement:', document.activeElement ? document.activeElement.tagName : 'none', 'key:', e.key)
-  
-  // 拦截 Esc 键快速退出页面全屏
-  if (e.key === 'Escape' || e.key === 'Esc') {
-    if (isWebFullscreen.value) {
-      toggleWebFullscreen()
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-  }
-
-  if (keymapStore.isEditMode) return;
-  
-  const hasModal = document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog');
-  if (hasModal) return;
-
-  const tag = e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
-  if (!videoNaturalSize.value.width) return;
-
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+  if (!props.inputEnabled || !effectiveFocused.value || e.defaultPrevented || isKeymapEditing.value) return
+  if ((e.key === 'Escape' || e.key === 'Esc') && isWebFullscreen.value) {
+    toggleWebFullscreen()
+    e.preventDefault()
+    e.stopPropagation()
     return
   }
-
-  if (keymapEngine.handleKeyEvent(e, true, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
-    e.preventDefault();
-  }
+  if (e.target !== hiddenInput.value) handleMappedKeyDown(e)
 }
 
 function onGlobalPaste(e) {
   // 多机直连隔离：非焦点设备不处理全局粘贴
-  if (!effectiveFocused.value) return
+  if (!props.inputEnabled || !effectiveFocused.value) return
 
-  if (keymapStore.isEditMode) return
+  if (isKeymapEditing.value) return
   const tag = e.target.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return
   if (!videoNaturalSize.value.width) return
@@ -2021,34 +2016,15 @@ function setDeviceClipboard(text, { paste = false, source = CLIPBOARD_SOURCE_LOC
   return ok
 }
 
-function onGlobalKeyUp(e) {
-  // 多机直连隔离：非焦点设备不处理按键弹起
-  if (!effectiveFocused.value) return
-
-  if (keymapStore.isEditMode) return;
-
-  const hasModal = document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog');
-  if (hasModal) return;
-
-  const tag = e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
-  if (!videoNaturalSize.value.width) return;
-
-  if (keymapEngine.handleKeyEvent(e, false, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
-    e.preventDefault();
-  }
-}
-
 function onGlobalWheel(e) {
-  // 多机直连隔离：非焦点设备不处理滚轮
-  if (!effectiveFocused.value) return
-  if (isCameraMode.value) return
-  if (e.__cloudphoneWheelHandled) return
-  handleWheel(e)
+  if (!e.defaultPrevented && e.target !== activeMedia.value && containerRef.value?.contains(e.target)) {
+    handleWheel(e)
+  }
 }
 
 function onWheel(e) {
   if (isCameraMode.value) {
+    e.preventDefault()
     const delta = e.deltaY < 0 ? 0.2 : -0.2
     const newZoom = Math.min(10.0, Math.max(1.0, parseFloat((cameraZoom.value + delta).toFixed(1))))
     cameraZoom.value = newZoom
@@ -2058,39 +2034,7 @@ function onWheel(e) {
     }
     return
   }
-  e.__cloudphoneWheelHandled = true
   handleWheel(e)
-}
-
-function isPointInRenderedVideo(clientX, clientY) {
-  const video = videoElement.value
-  const videoW = videoNaturalSize.value.width
-  const videoH = videoNaturalSize.value.height
-  if (!video || !videoW || !videoH) return false
-
-  if (needRotateCoords.value) {
-    return clientX >= 0 && clientX <= window.innerWidth && clientY >= 0 && clientY <= window.innerHeight
-  }
-
-  const rect = video.getBoundingClientRect()
-  const clientRatio = rect.width / rect.height
-  const videoRatio = videoW / videoH
-  let actualW, actualH, offsetX, offsetY
-  if (clientRatio > videoRatio) {
-    actualH = rect.height
-    actualW = rect.height * videoRatio
-    offsetX = (rect.width - actualW) / 2
-    offsetY = 0
-  } else {
-    actualW = rect.width
-    actualH = rect.width / videoRatio
-    offsetX = 0
-    offsetY = (rect.height - actualH) / 2
-  }
-
-  const left = rect.left + offsetX
-  const top = rect.top + offsetY
-  return clientX >= left && clientX <= left + actualW && clientY >= top && clientY <= top + actualH
 }
 
 function wheelDeltaToScroll(delta) {
@@ -2100,44 +2044,26 @@ function wheelDeltaToScroll(delta) {
 }
 
 function handleWheel(e) {
-  debugLog('[Wheel] fired', 'editMode:', keymapStore.isEditMode, 'target:', e.target.tagName, 'deltaX:', e.deltaX, 'deltaY:', e.deltaY)
-  if (keymapStore.isEditMode) return;
+  if (!canUseKeymap.value || hasInputOverlay() || isEditableTarget(e.target)) return
 
-  const hasModal = document.querySelector('.modal-overlay, .modal, .settings-modal, .card-menu, .dialog');
-  if (hasModal) {
-    debugLog('[Wheel] blocked by modal')
+  const { width, height } = videoNaturalSize.value
+  const rotated = needRotateCoords.value
+  const rect = getRenderedVideoRect(activeMedia.value, width, height, rotated)
+  if (!rect) return
+  const x = (e.clientX - rect.left) / rect.width
+  const y = (e.clientY - rect.top) / rect.height
+  if (x < 0 || x > 1 || y < 0 || y > 1) return
+
+  if (keymapEngine.handleWheelEvent(e, width, height)) {
+    e.preventDefault()
     return
   }
 
-  const tag = e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) {
-    debugLog('[Wheel] blocked by input')
-    return
-  }
-  if (!videoNaturalSize.value.width) {
-    debugLog('[Wheel] blocked: no videoNaturalSize', videoNaturalSize.value)
-    return
-  }
-  if (!isPointInRenderedVideo(e.clientX, e.clientY)) {
-    debugLog('[Wheel] ignored outside rendered video')
-    return
-  }
-
-  const consumed = keymapEngine.handleWheelEvent(e, videoNaturalSize.value.width, videoNaturalSize.value.height);
-  debugLog('[Wheel] keymapEngine consumed:', consumed)
-  if (consumed) {
-    e.preventDefault();
-    return;
-  }
-
-  const scrollV = wheelDeltaToScroll(e.deltaY);
-  const scrollH = wheelDeltaToScroll(e.deltaX);
-  debugLog('[Wheel] scrollV:', scrollV, 'scrollH:', scrollH, 'sendScroll:', typeof webrtc.sendScroll)
-  if (scrollV !== 0 || scrollH !== 0) {
-    const coord = rotateCoords(e.clientX, e.clientY);
-    if (webrtc.sendScroll(e.clientX, e.clientY, scrollH, scrollV, coord)) {
-      e.preventDefault();
-    }
+  const scrollV = wheelDeltaToScroll(e.deltaY)
+  const scrollH = wheelDeltaToScroll(e.deltaX)
+  if (scrollV || scrollH) {
+    const coord = rotated ? rotateCoords(e.clientX, e.clientY) : null
+    if (webrtc.sendScroll(e.clientX, e.clientY, scrollH, scrollV, coord)) e.preventDefault()
   }
 }
 
@@ -2154,10 +2080,7 @@ function updateMobileState() {
   isScreenLandscape.value = window.innerWidth > window.innerHeight
 }
 
-function onVideoLoaded() {
-  checkAndRecommendLayout()
-  checkCellularProxyStatus()
-}
+function onVideoLoaded() { checkAndRecommendLayout() }
 function onVideoResize() { checkAndRecommendLayout() }
 
 // 响应式重新连接
@@ -2166,7 +2089,7 @@ watch(currentId, (newId, oldId) => {
     if (deviceStore.showGlobalConsole) {
       deviceStore.consoleDeviceId = newId
     }
-    webrtc.disconnect()
+    disconnectStream()
     const sessionMode = deviceStore.getDeviceMode(newId)
     const st = getDeviceSettings(newId)
     st.videoSource = sessionMode
@@ -2183,7 +2106,6 @@ watch(currentId, (newId, oldId) => {
     currentWebRTC.value = createStreamInstance(newId, scrcpyOptions.value)
     deviceStore.registerWebRTC(newId, webrtc)
     setupWebRTC()
-  setTimeout(checkCellularProxyStatus, 2000)
   }
 })
 
@@ -2293,7 +2215,7 @@ const handlePopState = (e) => {
   // 多机直连下每个 DeviceClient 实例都会收到 popstate 广播：
   // 只让当前聚焦的实例响应，且只关闭自己，避免一次返回键把 N 台设备全部断开
   if (!effectiveFocused.value) return
-  deviceStore.closeDevice(currentId.value)
+  deviceStore.requestCloseDevice(currentId.value)
 }
 
 function onWindowFocus() {
@@ -2331,11 +2253,10 @@ function handleSettingsUpdated(event) {
         deviceStore.sendPreviewControl('start_preview', currentId.value, fps, maxSize, bitrate, stayAwake)
         return
       }
-      webrtc.disconnect()
+      disconnectStream()
       currentWebRTC.value = createStreamInstance(currentId.value, scrcpyOptions.value)
       deviceStore.registerWebRTC(currentId.value, webrtc)
       setupWebRTC()
-  setTimeout(checkCellularProxyStatus, 2000)
     }
   }
 }
@@ -2353,7 +2274,6 @@ onMounted(() => {
   window.addEventListener('cloudphone-settings-updated', handleSettingsUpdated)
   
   setupWebRTC()
-  setTimeout(checkCellularProxyStatus, 2000)
   runDemoLoop()
   updateCameraClock()
   cameraClockTimer = setInterval(updateCameraClock, 1000)
@@ -2363,7 +2283,8 @@ onMounted(() => {
 
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('keydown', onGlobalKeyDown)
-  document.addEventListener('keyup', onGlobalKeyUp)
+  document.addEventListener('keyup', handleMappedKeyUp, true)
+  window.addEventListener('blur', releaseMappedInput)
   document.addEventListener('paste', onGlobalPaste)
   document.addEventListener('wheel', onGlobalWheel, { passive: false })
   layoutInterval = setInterval(checkAndRecommendLayout, 2000)
@@ -2390,6 +2311,8 @@ function handleFullscreenChange() {
     }
   }
 }
+
+onBeforeUnmount(disconnectStream)
 
 onUnmounted(() => {
   document.removeEventListener('click', onGlobalClick)
@@ -2425,8 +2348,7 @@ onUnmounted(() => {
   // 注意：卸载时不要重置连接模式（setDeviceMode 'display'）——
   // 模式切换(:key 重挂载)和网格最大化(v-if 互斥)都会经过卸载，重置会把 websocket/camera 模式偷改回 display。
   // 模式的清理由 store 的 closeDevice/closeAllDevices 负责。
-  webrtc.disconnect()
-  if (currentId.value) {
+  if (currentId.value && deviceStore.getWebRTC(currentId.value) === webrtc) {
     deviceStore.unregisterWebRTC(currentId.value)
   }
   if (reconnectStreamTimer) {
@@ -2435,7 +2357,8 @@ onUnmounted(() => {
   }
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('keydown', onGlobalKeyDown)
-  document.removeEventListener('keyup', onGlobalKeyUp)
+  document.removeEventListener('keyup', handleMappedKeyUp, true)
+  window.removeEventListener('blur', releaseMappedInput)
   document.removeEventListener('paste', onGlobalPaste)
   document.removeEventListener('wheel', onGlobalWheel)
   if (layoutInterval) clearInterval(layoutInterval)
@@ -2524,6 +2447,7 @@ const statusText = computed(() => {
     'connected': t('deviceClient.statusConnected'),
     'connecting': t('deviceClient.statusConnecting'),
     'signaling': t('deviceClient.statusSignaling'),
+    'waiting_projection': t('deviceClient.projectionWaiting'),
     'disconnected': t('deviceClient.statusDisconnected'),
     'error': t('deviceClient.statusError')
   }
@@ -2531,6 +2455,7 @@ const statusText = computed(() => {
 })
 
 const loadingText = computed(() => {
+  if (currentWebRTC.value.status.value === 'waiting_projection') return t('deviceClient.projectionWaiting')
   if (currentWebRTC.value.status.value === 'waiting_offer') return t('deviceClient.waitingDevice')
   return t('deviceClient.establishingConn')
 })
@@ -2570,11 +2495,13 @@ const needRotateCoords = computed(() => isMobile.value && isVideoLandscape.value
 // 存储视频实际尺寸用于坐标转换
 const videoNaturalSize = ref({ width: 0, height: 0 })
 
+watch([() => videoNaturalSize.value.width, () => videoNaturalSize.value.height], releaseMappedInput)
+
 function checkAndRecommendLayout() {
-  const activeMedia = (isCanvasRendering.value && canvasElement.value) ? canvasElement.value : videoElement.value
-  if (!activeMedia) return
-  const videoW = activeMedia.videoWidth || activeMedia.width || videoNaturalSize.value.width || 0
-  const videoH = activeMedia.videoHeight || activeMedia.height || videoNaturalSize.value.height || 0
+  const media = activeMedia.value
+  if (!media) return
+  const videoW = media.videoWidth || media.width || videoNaturalSize.value.width || 0
+  const videoH = media.videoHeight || media.height || videoNaturalSize.value.height || 0
   if (!videoW || !videoH) return
   const isPhysical = videoW > videoH
   const rot = webrtc.deviceRotation ? webrtc.deviceRotation.value : 0
@@ -2582,53 +2509,27 @@ function checkAndRecommendLayout() {
   const landscape = isPhysical || isHwc
   const ratio = isHwc ? (videoH / videoW) : (videoW / videoH)
   isVideoLandscape.value = landscape
-  videoNaturalSize.value = { width: videoW, height: videoH }
+  if (videoW !== videoNaturalSize.value.width || videoH !== videoNaturalSize.value.height) {
+    videoNaturalSize.value = { width: videoW, height: videoH }
+  }
   emit('recommend-layout', { isLandscape: landscape, ratio: ratio })
 }
 
 // 旋转坐标转换
 function rotateCoords(clientX, clientY) {
   if (!needRotateCoords.value) return { x: clientX, y: clientY }
-  
-  const activeMedia = (isCanvasRendering.value && canvasElement.value) ? canvasElement.value : videoElement.value
-  if (!activeMedia) return { x: clientX, y: clientY }
-  
-  const screenW = window.innerWidth
-  const screenH = window.innerHeight
-  const videoW = activeMedia.videoWidth || activeMedia.width || videoNaturalSize.value.width
-  const videoH = activeMedia.videoHeight || activeMedia.height || videoNaturalSize.value.height
-  
-  if (!videoW || !videoH) return { x: clientX, y: clientY }
-  
-  const rotatedRatio = videoH / videoW
-  const screenRatio = screenW / screenH
-  
-  let normInVideoX, normInVideoY
-  
-  if (screenRatio > rotatedRatio) {
-    const videoDisplayW = screenH * rotatedRatio
-    const offsetX = (screenW - videoDisplayW) / 2
-    const videoX = clientX - offsetX
-    normInVideoX = videoX / videoDisplayW
-    normInVideoY = clientY / screenH
-  } else {
-    const videoDisplayH = screenW / rotatedRatio
-    const offsetY = (screenH - videoDisplayH) / 2
-    const videoY = clientY - offsetY
-    normInVideoX = clientX / screenW
-    normInVideoY = videoY / videoDisplayH
+  const { width, height } = videoNaturalSize.value
+  const rect = getRenderedVideoRect(activeMedia.value, width, height, true)
+  if (!rect) return { x: clientX, y: clientY }
+  return {
+    x: (clientY - rect.top) / rect.height * width,
+    y: (1 - (clientX - rect.left) / rect.width) * height,
+    isRotated: true
   }
-  
-  const origNormX = normInVideoY
-  const origNormY = 1 - normInVideoX
-  const origX = origNormX * videoW
-  const origY = origNormY * videoH
-  
-  return { x: origX, y: origY, isRotated: true }
 }
 
 function retry() {
-  webrtc.disconnect()
+  disconnectStream()
   webrtc.connect()
 }
 
@@ -2847,20 +2748,14 @@ const CONTROL_KEY_MAP = {
 function onKeyboardKeyDown(e) {
   debugLog('[Keyboard] KeyDown:', e.key, e.code, 'isComposing:', e.isComposing)
   if (e.isComposing) return
-  if (keymapStore.isEditMode) return
+  if (!props.inputEnabled || !effectiveFocused.value || isKeymapEditing.value) return
   if (!videoNaturalSize.value.width) return
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
     return
   }
 
-  // 1. 尝试触发按键映射 (Keymapping)
-  if (keymapEngine.handleKeyEvent(e, true, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
-    debugLog('[Keyboard] Blocked by Keymapping:', e.key)
-    e.preventDefault()
-    e.stopPropagation()
-    return
-  }
+  if (handleMappedKeyDown(e)) return
 
   // 2. 处理控制键 (Inject Keycode)
   const androidCode = CONTROL_KEY_MAP[e.key]
@@ -2875,14 +2770,8 @@ function onKeyboardKeyDown(e) {
 function onKeyboardKeyUp(e) {
   debugLog('[Keyboard] KeyUp:', e.key, e.code, 'isComposing:', e.isComposing)
   if (e.isComposing) return
-  if (keymapStore.isEditMode) return
+  if (!props.inputEnabled || !effectiveFocused.value || isKeymapEditing.value) return
   if (!videoNaturalSize.value.width) return
-
-  if (keymapEngine.handleKeyEvent(e, false, videoNaturalSize.value.width, videoNaturalSize.value.height)) {
-    e.preventDefault()
-    e.stopPropagation()
-    return
-  }
 
   const androidCode = CONTROL_KEY_MAP[e.key]
   if (androidCode !== undefined) {
@@ -2926,7 +2815,7 @@ function onKeyboardInput(e) {
 }
 
 function onKeyboardPaste(e) {
-  if (keymapStore.isEditMode) return
+  if (isKeymapEditing.value) return
   if (!videoNaturalSize.value.width) return
   const text = e.clipboardData?.getData('text')
   if (!text) return
@@ -3022,27 +2911,38 @@ function onMouseLeave(e) {
 
 function onTouchStart(e) {
   onFsUiActivity()
-  if (isCameraMode.value) return
-  for (let i = 0; i < e.changedTouches.length; i++) {
-    const touch = e.changedTouches[i]
-    const coord = rotateCoords(touch.clientX, touch.clientY)
-    webrtc.sendTouch(0, touch.clientX, touch.clientY, touch.identifier, coord)
+  if (isCameraMode.value || isKeymapEditing.value) return
+  deviceStore.focusDevice(currentId.value)
+  for (const { identifier, clientX, clientY } of e.changedTouches) {
+    if (activeScreenTouches.has(identifier)) continue
+    const [id] = touchSlots.acquire() ?? []
+    if (id === undefined) continue
+    activeScreenTouches.set(identifier, { id, x: clientX, y: clientY })
+    webrtc.sendTouch(0, clientX, clientY, id, rotateCoords(clientX, clientY))
   }
 }
+
 function onTouchMove(e) {
-  if (isCameraMode.value) return
-  for (let i = 0; i < e.changedTouches.length; i++) {
-    const touch = e.changedTouches[i]
-    const coord = rotateCoords(touch.clientX, touch.clientY)
-    webrtc.sendTouch(2, touch.clientX, touch.clientY, touch.identifier, coord)
+  for (const { identifier, clientX, clientY } of e.changedTouches) {
+    const touch = activeScreenTouches.get(identifier)
+    if (!touch) continue
+    touch.x = clientX
+    touch.y = clientY
+    webrtc.sendTouch(2, clientX, clientY, touch.id, rotateCoords(clientX, clientY))
   }
 }
+
+function finishScreenTouch(identifier, x, y) {
+  const touch = activeScreenTouches.get(identifier)
+  if (!touch) return
+  webrtc.sendTouch(1, x, y, touch.id, rotateCoords(x, y))
+  touchSlots.release(touch.id)
+  activeScreenTouches.delete(identifier)
+}
+
 function onTouchEnd(e) {
-  if (isCameraMode.value) return
-  for (let i = 0; i < e.changedTouches.length; i++) {
-    const touch = e.changedTouches[i]
-    const coord = rotateCoords(touch.clientX, touch.clientY)
-    webrtc.sendTouch(1, touch.clientX, touch.clientY, touch.identifier, coord)
+  for (const { identifier, clientX, clientY } of e.changedTouches) {
+    finishScreenTouch(identifier, clientX, clientY)
   }
 }
 
@@ -3206,27 +3106,74 @@ defineExpose({
   background: #000 !important;
 }
 
-/* 全屏时右侧工具栏改为悬浮覆盖层，鼠标静止自动淡出，画面保持居中且不被挤压 */
+/* 全屏时右侧工具栏改为悬浮覆盖层，限制高度居中，避免与右上角退出全屏按键重叠 */
 .device-panel-view.is-web-fullscreen .control-sidebar {
   position: absolute !important;
   right: 0 !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
   width: 64px !important;
-  max-height: 92vh !important;
-  background: rgba(17, 17, 17, 0.72) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  max-height: 80vh !important;
+  background: rgba(17, 17, 17, 0.82) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
   border-right: none !important;
   border-radius: 12px 0 0 12px !important;
   z-index: 120 !important;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease !important;
 }
+
 .device-panel-view.is-web-fullscreen .control-sidebar.fs-ui-visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 网页全屏下侧边栏折叠收起状态：向右移出视口，完全不遮挡触控 */
+.device-panel-view.is-web-fullscreen .control-sidebar.is-collapsed {
+  transform: translateY(-50%) translateX(100%) !important;
+  pointer-events: none !important;
+}
+
+/* 侧边栏折叠/展开小把手（悬浮在侧边栏左外侧） */
+.fs-sidebar-toggle-btn {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  background: rgba(22, 27, 34, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 125;
+  pointer-events: auto !important;
+  transition: all 0.2s ease;
+  box-shadow: -3px 0 12px rgba(0, 0, 0, 0.4);
+  padding: 0;
+}
+
+.fs-sidebar-toggle-btn:hover {
+  background: rgba(30, 41, 59, 0.98);
+  color: #fff;
+  border-color: rgba(56, 189, 248, 0.6);
+  width: 26px;
+  left: -26px;
+}
+
+.fs-sidebar-toggle-btn .toggle-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .device-panel-view.is-web-fullscreen .webfullscreen-fab {
@@ -3369,7 +3316,9 @@ defineExpose({
 }
 
 .overlay-box { text-align: center; padding: 24px; }
-.conn-meta { font-size: 12px; color: #8b949e; margin-bottom: 12px; }
+.conn-meta { font-size: 12px; color: #8b949e; margin-bottom: 14px; }
+.conn-logo { margin: 0 auto 16px; }
+.loading-label { font-size: 14px; font-weight: 500; color: #f1f5f9; letter-spacing: 0.2px; }
 .mini-spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -4387,39 +4336,6 @@ defineExpose({
   z-index: 2000;
   pointer-events: none;
   user-select: none;
-  transition: all 0.25s ease;
-}
-
-.quick-text-toast.success {
-  background: rgba(16, 185, 129, 0.95);
-  border: 1px solid rgba(110, 231, 183, 0.5);
-  color: #ffffff;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(16, 185, 129, 0.4);
-}
-
-.quick-text-toast.error {
-  background: rgba(239, 68, 68, 0.95);
-  border: 1px solid rgba(252, 165, 165, 0.5);
-  color: #ffffff;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(239, 68, 68, 0.4);
-}
-
-/* 蜂窝反代侧边栏按钮样式 */
-.sidebar-btn.proxy-btn.active {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
-}
-
-.sidebar-btn.proxy-btn.loading {
-  opacity: 0.8;
-  cursor: wait;
-}
-
-.fab-item.active {
-  color: #10b981 !important;
-  font-weight: bold;
 }
 
 /* 画中画激活状态主视窗提示遮罩 */

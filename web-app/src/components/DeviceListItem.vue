@@ -43,7 +43,7 @@
     <!-- 列 3：设备标识与型号 -->
     <div class="cell col-device">
       <div class="device-primary">
-        <span class="device-id-text" :title="`${device.displayName || device.id} · ${device.id}`">{{ device.displayName || device.id }}</span>
+        <span class="device-id-text" @dblclick.stop="onRenameAlias" :title="`${device.displayName || device.id} · ${device.id} (${$t('deviceCard.setAlias')})`">{{ device.displayName || device.id }}</span>
         <span v-if="isCameraMode" class="item-camera-mode-badge" :title="$t('deviceCard.cameraModeTitle')">{{ $t('deviceCard.cameraMonitoring') }}</span>
         <span v-else-if="isWebSocketMode" class="item-ws-mode-badge" :title="$t('deviceCard.wsModeTitle')">{{ $t('deviceCard.wsStreaming') }}</span>
       </div>
@@ -169,6 +169,10 @@
       <button class="menu-item" @click.stop="onShareDevice" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
         {{ $t('deviceCard.shareDevice') }}
+      </button>
+      <button class="menu-item" @click.stop="onRenameAlias">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        {{ $t('deviceCard.setAlias') }}
       </button>
       <button class="menu-item" @click="onEditTags">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
@@ -340,6 +344,18 @@ function onShareDevice() {
 function onEditTags() {
   showMenu.value = false
   emit('edit-tags', props.device.id)
+}
+
+async function onRenameAlias() {
+  showMenu.value = false
+  const current = props.device.displayName || ''
+  const newAlias = prompt(t('deviceCard.promptAlias'), current)
+  if (newAlias === null) return
+  try {
+    await deviceStore.updateDeviceAlias(props.device.id, newAlias)
+  } catch (err) {
+    alert(err.message || t('deviceCard.aliasUpdateFailed'))
+  }
 }
 
 function tagStyle(tag) {

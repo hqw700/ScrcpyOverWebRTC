@@ -6,7 +6,7 @@
     <main class="share-main">
       <!-- 1. 加载中状态 -->
       <div v-if="loading" class="state-container">
-        <div class="loading-spinner"></div>
+        <ConnectionLogo :size="110" class="conn-logo" />
         <p class="loading-text">{{ $t('share.verifyingCredentials') }}</p>
       </div>
 
@@ -75,6 +75,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ShareVideo from '@/components/ShareVideo.vue'
 import CardConnectModal from '@/components/CardConnectModal.vue'
+import ConnectionLogo from '@/components/ConnectionLogo.vue'
 
 const route = useRoute()
 const loading = ref(true)
@@ -266,6 +267,10 @@ onUnmounted(() => {
   border-radius: 50%;
   animation: spin 1s infinite linear;
   margin-bottom: 16px;
+}
+
+.conn-logo {
+  margin-bottom: 18px;
 }
 
 @keyframes spin {

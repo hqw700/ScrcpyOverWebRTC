@@ -51,7 +51,7 @@
     <!-- 连接中 / 等待信令 -->
     <div v-if="showConnecting" class="state-overlay">
       <div v-if="connMetaText" class="conn-meta">{{ connMetaText }}</div>
-      <div class="loading-spinner"></div>
+      <ConnectionLogo class="conn-logo" />
       <p class="state-text">{{ statusText }}</p>
     </div>
 
@@ -187,6 +187,7 @@ import { useI18n } from 'vue-i18n'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { defaultSettings } from '@/utils/settings'
 import SettingsModal from '@/components/SettingsModal.vue'
+import ConnectionLogo from '@/components/ConnectionLogo.vue'
 
 const { t } = useI18n()
 
@@ -398,12 +399,13 @@ function togglePageMute() {
 
 const isConnected = computed(() => status.value === 'connected')
 const showConnecting = computed(() =>
-  !error.value && ['connecting', 'signaling', 'waiting_offer', 'connecting_webrtc'].includes(status.value)
+  !error.value && ['connecting', 'signaling', 'waiting_offer', 'waiting_projection', 'connecting_webrtc'].includes(status.value)
 )
 const showError = computed(() => !!error.value || status.value === 'error' || status.value === 'disconnected')
 const statusText = computed(() => {
   switch (status.value) {
     case 'signaling': return t('share.signalingDesc')
+    case 'waiting_projection': return t('deviceClient.projectionWaiting')
     case 'waiting_offer': return t('share.waitingOffer')
     case 'connecting_webrtc': return t('share.connectingWebrtc')
     default: return t('share.connectingDevice')
@@ -909,6 +911,10 @@ onUnmounted(() => {
   border-radius: 50%;
   animation: spin 1s infinite linear;
   margin-bottom: 14px;
+}
+
+.conn-logo {
+  margin-bottom: 16px;
 }
 
 .conn-meta {

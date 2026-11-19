@@ -32,6 +32,8 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 1. Core Features
 
+- **v0.4.5 Update**: Added a remote UI layout inspector and online assistance, device renaming, card orientation settings, collapsible sidebars, a redesigned key mapping editor, and desktop clients. Enhanced TURNS/TLS connectivity, ICE configuration synchronization, and agent resilience.
+
 - **Multi-Device Floating Windows & Device Drawer (v0.4.4)**: Refactored multi-device direct control with desktop-grade floating windows supporting free dragging, 8-directional resizing, individual sidebars, and dock minimization. Added a secondary flyout/pinned device drawer in the sidebar with real-time search, status filters, WebRTC direct connection, and one-click WebSocket mirror shortcut.
 - **Stream Lifecycle Optimization & Deadlock Fix (v0.4.4)**: Improved stream lifecycle management with on-demand tear-down, resolving disconnect deadlocks and ensuring matrix thumbnails resume updating reliably. Added graceful Opus codec fallback to video-only streaming, preventing crashes on devices lacking hardware Opus encoders.
 - **PVE Orchestrator VPC Egress Gateway & Dual-NIC (v0.4.4)**: Introduced an enterprise VPC egress gateway system supporting isolated subnets, automated gateway provisioning, and multi-protocol outbound proxies (Trojan/Vmess/Socks5/HTTP). Added cellular dual-NIC (`rmnet0`) and wireless WiFi (`wlan0`) pass-through.

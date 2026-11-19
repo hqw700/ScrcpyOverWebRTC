@@ -148,7 +148,7 @@
           </div>
         </div>
         <!-- 宫格列数（面板右对齐防溢出） -->
-        <div class="mh-dropdown drop-right">
+        <div class="mh-dropdown drop-right" v-if="viewMode === 'grid'">
           <button class="mh-filter-btn" @click.stop="toggleMobileMenu('cols')">{{ $t('deviceList.gridDropdown') }}</button>
           <div v-if="mobileOpenMenu === 'cols'" class="mh-panel" @click.stop>
             <button
@@ -158,6 +158,27 @@
               :class="{ active: mobileCols === n }"
               @click="setMobileCols(n)"
             >{{ n === 1 ? $t('deviceList.singleCol') : $t('deviceList.cols', { n }) }}</button>
+          </div>
+        </div>
+        <!-- 卡片方向（面板右对齐防溢出） -->
+        <div class="mh-dropdown drop-right" v-if="viewMode === 'grid'">
+          <button class="mh-filter-btn" @click.stop="toggleMobileMenu('orientation')">{{ $t('deviceList.orientationDropdown') }}</button>
+          <div v-if="mobileOpenMenu === 'orientation'" class="mh-panel" @click.stop>
+            <button
+              class="mh-panel-item"
+              :class="{ active: deviceStore.cardOrientation === 'auto' }"
+              @click="deviceStore.setCardOrientation('auto'); closeMobileMenus()"
+            >{{ $t('topBar.orientationAuto') }}</button>
+            <button
+              class="mh-panel-item"
+              :class="{ active: deviceStore.cardOrientation === 'landscape' }"
+              @click="deviceStore.setCardOrientation('landscape'); closeMobileMenus()"
+            >{{ $t('topBar.orientationLandscape') }}</button>
+            <button
+              class="mh-panel-item"
+              :class="{ active: deviceStore.cardOrientation === 'portrait' }"
+              @click="deviceStore.setCardOrientation('portrait'); closeMobileMenus()"
+            >{{ $t('topBar.orientationPortrait') }}</button>
           </div>
         </div>
         <!-- 账号剩余时间（仅账号设有有效期时显示） -->
@@ -903,7 +924,7 @@ const gridColumnsStyle = computed(() => {
 })
 
 // 移动端页头交互状态：展开的下拉（'' = 全部收起）与搜索展开态
-const mobileOpenMenu = ref('') // '' | 'batch' | 'tag' | 'sort' | 'cols'
+const mobileOpenMenu = ref('') // '' | 'batch' | 'tag' | 'sort' | 'cols' | 'orientation'
 const showMobileSearch = ref(false)
 const mobileSearchInput = ref(null)
 
@@ -2439,7 +2460,7 @@ function connectDevice(deviceId) {
   .device-grid > * {
     min-width: 0;
     height: auto;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: var(--aspect-ratio, 3 / 4);
   }
 
   .device-list-view {

@@ -260,17 +260,16 @@ function toggleMinimizeAll() {
 }
 
 // 关闭单台设备
-function closeDevice(id) {
+async function closeDevice(id) {
+  if (!(await deviceStore.requestCloseDevice(id))) return
   const idx = minimizedIds.value.indexOf(id)
   if (idx > -1) minimizedIds.value.splice(idx, 1)
   delete windowStates[id]
-  deviceStore.closeDevice(id)
 }
 
 // 全部关闭
-function closeAllDevices() {
-  minimizedIds.value = []
-  deviceStore.closeAllDevices()
+async function closeAllDevices() {
+  if (await deviceStore.requestCloseAllDevices()) minimizedIds.value = []
 }
 
 // --- 快捷布局整理算法 ---

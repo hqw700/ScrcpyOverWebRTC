@@ -549,14 +549,13 @@ export function useWebSocketStream(deviceId, options = {}) {
     if (!coords) return false
 
     const payload = {
-      type: 'scroll',
-      action: 0,
+      type: 'inject_scroll',
       x: coords.x,
       y: coords.y,
       w: coords.w,
       h: coords.h,
-      scrollH,
-      scrollV
+      scroll_h: scrollH,
+      scroll_v: scrollV
     }
     deviceStore.sendGroupControlEvent([deviceId], payload)
     return true

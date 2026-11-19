@@ -11,8 +11,23 @@ const t = (key, params) => {
   return key
 }
 
+const projectionKeys = new Map()
+
+function getProjectionResumeKey(deviceId) {
+  const storageKey = `cloudphone_projection_resume:${deviceId}`
+  let key = projectionKeys.get(deviceId)
+  try { key ||= sessionStorage.getItem(storageKey) } catch {}
+  if (!key && globalThis.crypto?.getRandomValues) {
+    key = Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join('')
+  }
+  if (!key) return ''
+  projectionKeys.set(deviceId, key)
+  try { sessionStorage.setItem(storageKey, key) } catch {}
+  return key
+}
+
 export function useWebRTC(deviceId, options = {}) {
-  const deviceStore = useDeviceStore()
+  const deviceStore = options.deviceStore ?? useDeviceStore()
   const status = ref('disconnected')
   const error = ref(null)
   const audioMuted = ref(false)
@@ -56,6 +71,27 @@ export function useWebRTC(deviceId, options = {}) {
   let aiCommandChannel = null
   const aiCommandPromises = new Map()
 
+  const layoutDisplayRevision = ref(0)
+  let layoutFrameSize = ''
+  let layoutVideoElement = null
+
+  function updateLayoutFrameSize(width, height) {
+    if (!width || !height) return
+    const size = width + 'x' + height
+    if (size !== layoutFrameSize) {
+      layoutFrameSize = size
+      layoutDisplayRevision.value++
+    }
+  }
+
+  function onLayoutVideoResize(event) {
+    updateLayoutFrameSize(event.currentTarget.videoWidth, event.currentTarget.videoHeight)
+  }
+
+  let uiLayoutChannel = null
+  const pendingLayoutSnapshots = new Map()
+  let activeLayoutReceiver = null
+
   function getOption(key, def) {
     try {
       const devStored = localStorage.getItem(`cloudphone_settings_${deviceId}`)
@@ -73,6 +109,9 @@ export function useWebRTC(deviceId, options = {}) {
   }
 
   let isDisposed = false
+  let projectionOnDemand = false
+  let projectionResumeKey = ''
+  let projectionAuthorized = false
 
   function connect(shareTokenParam = null, sharePwdParam = '') {
     isDisposed = false
@@ -86,20 +125,23 @@ export function useWebRTC(deviceId, options = {}) {
       return
     }
 
-    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const token = localStorage.getItem('auth_token') || ''
-    let wsUrl = `${wsProtocol}//${location.host}/connect_client?token=${encodeURIComponent(token)}`
+    const endpoint = new URL(options.serverURL || location.origin)
+    const wsProtocol = endpoint.protocol === 'https:' ? 'wss:' : 'ws:'
+    const token = options.getToken ? options.getToken() : (localStorage.getItem('auth_token') || '')
+    let wsUrl = `${wsProtocol}//${endpoint.host}/connect_client?token=${encodeURIComponent(token)}`
     if (shareTokenParam) {
-      wsUrl = `${wsProtocol}//${location.host}/connect_client?share_token=${encodeURIComponent(shareTokenParam)}`
+      wsUrl = `${wsProtocol}//${endpoint.host}/connect_client?share_token=${encodeURIComponent(shareTokenParam)}`
       if (sharePwdParam) {
         wsUrl += `&share_pwd=${encodeURIComponent(sharePwdParam)}`
       }
     }
     
     debugLog('[Signaling] Connecting to:', wsUrl)
-    ws = new WebSocket(wsUrl)
+    const connection = new WebSocket(options.signalingURL || wsUrl)
+    ws = connection
 
-    ws.onopen = () => {
+    connection.onopen = () => {
+      if (ws !== connection) return
       debugLog('[Signaling] WebSocket connected')
       status.value = 'signaling'
       ws.send(JSON.stringify({
@@ -119,7 +161,8 @@ export function useWebRTC(deviceId, options = {}) {
       }, 20000)
     }
 
-    ws.onmessage = (evt) => {
+    connection.onmessage = (evt) => {
+      if (ws !== connection) return
       if (typeof evt.data !== 'string') return
       try {
         const msg = JSON.parse(evt.data)
@@ -131,7 +174,8 @@ export function useWebRTC(deviceId, options = {}) {
       }
     }
 
-    ws.onerror = (e) => {
+    connection.onerror = (e) => {
+      if (ws !== connection) return
       if (!error.value) {
         error.value = t('share.signalingError')
       }
@@ -139,13 +183,14 @@ export function useWebRTC(deviceId, options = {}) {
       console.error('[Signaling] WebSocket error:', e)
     }
 
-    ws.onclose = () => {
+    connection.onclose = () => {
+      if (ws !== connection) return
       if (wsHeartbeatTimer) {
         clearInterval(wsHeartbeatTimer)
         wsHeartbeatTimer = null
       }
       debugLog('[Signaling] WebSocket closed')
-      if (status.value !== 'disconnected') {
+      if (status.value !== 'disconnected' && status.value !== 'error') {
         status.value = 'disconnected'
       }
     }
@@ -166,8 +211,11 @@ export function useWebRTC(deviceId, options = {}) {
           ip_preference: getOption('ipPreference', 'auto')
         }
         if (Object.keys(options).length > 0) {
-          offerPayload.scrcpy_options = options
+          const { serverURL, signalingURL, getToken, deviceStore, ...scrcpyOptions } = options
+          offerPayload.scrcpy_options = scrcpyOptions
         }
+        projectionResumeKey ||= getProjectionResumeKey(deviceId)
+        if (projectionResumeKey) offerPayload.projection_resume_key = projectionResumeKey
         sendForward(offerPayload)
         break
       case 'device_info':
@@ -192,6 +240,7 @@ export function useWebRTC(deviceId, options = {}) {
 
   function handleDeviceInfo(info) {
     if (info) {
+      projectionOnDemand = info.projection_on_demand === true
       if (info.app_version) {
         agentVersion.value = info.app_version
       }
@@ -207,7 +256,31 @@ function handleDeviceMessage(payload) {
   if (!payload || !payload.type) return
 
   switch (payload.type) {
+    case 'projection_status': {
+      const state = payload.state
+      if (state === 'waiting') {
+        status.value = 'waiting_projection'
+        break
+      }
+      const errors = {
+        rejected: 'deviceClient.projectionRejected',
+        expired: 'deviceClient.projectionExpired',
+        busy: 'deviceClient.projectionBusy',
+        unattended_denied: 'deviceClient.projectionUnattendedDenied',
+        ended: 'deviceClient.projectionEnded',
+        failed: 'deviceClient.projectionFailed'
+      }
+      if (Object.prototype.hasOwnProperty.call(errors, state)) {
+        if (state !== 'failed') projectionAuthorized = false
+        disconnect()
+        error.value = t(errors[state])
+        status.value = 'error'
+      }
+      break
+    }
+
     case 'offer':
+      projectionAuthorized = projectionOnDemand
       debugLog('[WebRTC] Received offer, length:', payload.sdp.length)
       cameraSupport.value = payload.camera_support !== false
       if (!cameraSupport.value) {
@@ -226,7 +299,8 @@ function handleDeviceMessage(payload) {
           if (/m=video 0/i.test(sdp)) {
             debugWarn('[WebRTC] 浏览器拒收了视频媒体流 (m=video 0)，可能因当前环境不支持该编解码器规格。建议改用 WebSocket 投屏。')
             error.value = '浏览器拒收了视频流，建议改用 WebSocket 投屏模式'
-          } else {
+          } else if (!projectionOnDemand) {
+            // 录屏发送端使用信令下发的码率，避免应答中的固定起始码率提示干扰。
             // 仅对有效视频行 (端口 > 0) 注入带宽 AS 20000 (20Mbps)
             sdp = sdp.replace(/m=video ([1-9]\d* .*)\r\n/g, 'm=video $1\r\nb=AS:20000\r\n');
             // 针对任意协商选中的 H.264 profile (102, 104, 106, 108, 110, 112, 96 等) 注入 google 码率参数 (bps)
@@ -306,6 +380,14 @@ function handleDeviceMessage(payload) {
   const commandPromises = new Map()
 
   function sendCommand(command) {
+    if (projectionOnDemand) {
+      const navigation = { 'input keyevent 3': 3, 'input keyevent 4': 4, 'input keyevent 187': 187 }
+      if (Object.prototype.hasOwnProperty.call(navigation, command)) {
+        sendInjectKeycode(0, navigation[command])
+        sendInjectKeycode(1, navigation[command])
+        return null
+      }
+    }
     const requestId = Math.random().toString(36).substring(7)
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -405,6 +487,141 @@ function handleDeviceMessage(payload) {
         aiCommandPromises.delete(requestId)
         console.warn('[AI-Command] Failed to send via P2P channel, falling back', e)
         resolve(executeCommand(command, timeoutMs))
+      }
+    })
+  }
+
+  function createUiLayoutChannel() {
+    if (!pc) return null
+    if (uiLayoutChannel && ['open', 'connecting'].includes(uiLayoutChannel.readyState)) {
+      return uiLayoutChannel
+    }
+
+    const channel = pc.createDataChannel('ui-layout-channel', { ordered: true })
+    uiLayoutChannel = channel
+    channel.binaryType = 'arraybuffer'
+
+    channel.onclose = () => {
+      if (uiLayoutChannel !== channel) return
+      activeLayoutReceiver = null
+      for (const item of pendingLayoutSnapshots.values()) {
+        item.reject(new Error('layout_channel_closed'))
+      }
+    }
+
+    channel.onmessage = ({ data }) => {
+      if (uiLayoutChannel !== channel) return
+      try {
+        if (data instanceof ArrayBuffer) {
+          const receiver = activeLayoutReceiver
+          if (!receiver || !data.byteLength || data.byteLength > 16384 ||
+              receiver.chunks.length >= receiver.expectedChunks ||
+              receiver.receivedBytes + data.byteLength > receiver.expectedBytes) {
+            throw new Error('invalid_dump')
+          }
+          receiver.chunks.push(new Uint8Array(data))
+          receiver.receivedBytes += data.byteLength
+          return
+        }
+
+        const msg = JSON.parse(data)
+        const item = pendingLayoutSnapshots.get(msg.requestId)
+        if (!item) throw new Error('invalid_dump')
+        if (msg.type === 'layout.error') {
+          item.reject(Object.assign(new Error(msg.code), { code: msg.code }))
+          return
+        }
+        if (msg.type === 'layout.begin') {
+          if (activeLayoutReceiver || msg.encoding !== 'json-utf8' ||
+              !Number.isInteger(msg.bytes) || msg.bytes < 1 || msg.bytes > 1048576 ||
+              msg.chunks !== Math.ceil(msg.bytes / 16384) || typeof msg.snapshotId !== 'string') {
+            throw new Error('invalid_dump')
+          }
+          activeLayoutReceiver = {
+            requestId: msg.requestId,
+            snapshotId: msg.snapshotId,
+            expectedBytes: msg.bytes,
+            expectedChunks: msg.chunks,
+            receivedBytes: 0,
+            chunks: []
+          }
+          return
+        }
+        const receiver = activeLayoutReceiver
+        if (msg.type !== 'layout.end' || !receiver || receiver.requestId !== msg.requestId ||
+            receiver.snapshotId !== msg.snapshotId || receiver.receivedBytes !== receiver.expectedBytes ||
+            receiver.chunks.length !== receiver.expectedChunks) {
+          throw new Error('invalid_dump')
+        }
+        const combined = new Uint8Array(receiver.expectedBytes)
+        let offset = 0
+        for (const chunk of receiver.chunks) {
+          combined.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        const snapshot = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(combined))
+        const { width, height, rotation } = snapshot.display ?? {}
+        if (snapshot.v !== 1 || snapshot.snapshotId !== msg.snapshotId ||
+            !Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1 ||
+            ![0, 90, 180, 270].includes(rotation) || !Array.isArray(snapshot.nodes) || snapshot.nodes.length > 4000 ||
+            snapshot.nodes.some(node => !Array.isArray(node?.bounds) || node.bounds.length !== 4 ||
+              !node.bounds.every(Number.isSafeInteger))) {
+          throw new Error('invalid_dump')
+        }
+        item.resolve(snapshot)
+      } catch {
+        for (const item of pendingLayoutSnapshots.values()) {
+          item.reject(new Error('invalid_dump'))
+        }
+        channel.close()
+      }
+    }
+    return channel
+  }
+
+  function requestLayoutSnapshot(timeoutMs = 15000, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted || pendingLayoutSnapshots.size) {
+        reject(new Error(signal?.aborted ? 'layout_cancelled' : 'layout_busy'))
+        return
+      }
+      const channel = createUiLayoutChannel()
+      if (!channel) {
+        reject(new Error('peer_connection_not_ready'))
+        return
+      }
+      const reqId = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
+      const finish = (callback, value) => {
+        clearTimeout(timer)
+        channel.removeEventListener('open', sendRequest)
+        signal?.removeEventListener('abort', abort)
+        pendingLayoutSnapshots.delete(reqId)
+        activeLayoutReceiver = null
+        callback(value)
+      }
+      const fail = error => finish(reject, error)
+      const abort = () => {
+        fail(new Error('layout_cancelled'))
+        channel.close()
+      }
+      const sendRequest = () => {
+        try {
+          channel.send(JSON.stringify({ type: 'layout.request', v: 1, requestId: reqId }))
+        } catch (error) {
+          fail(error)
+          channel.close()
+        }
+      }
+      const timer = setTimeout(() => {
+        fail(new Error('capture_timeout'))
+        channel.close()
+      }, timeoutMs)
+      pendingLayoutSnapshots.set(reqId, { resolve: snapshot => finish(resolve, snapshot), reject: fail })
+      signal?.addEventListener('abort', abort, { once: true })
+      if (channel.readyState === 'open') {
+        sendRequest()
+      } else {
+        channel.addEventListener('open', sendRequest, { once: true })
       }
     })
   }
@@ -660,6 +877,7 @@ function handleDeviceMessage(payload) {
         }
         webcodecsRenderer = new WebCodecsRenderer(canvas, {
           onFrameSizeChange: (w, h) => {
+            updateLayoutFrameSize(w, h)
             if (!DEVICE_W.value || !DEVICE_H.value) {
               DEVICE_W.value = w
               DEVICE_H.value = h
@@ -678,6 +896,14 @@ function handleDeviceMessage(payload) {
 
       // 回退至 HTML5 <video> 传统渲染模式
       isWebCodecsActive.value = false
+      if (projectionOnDemand && evt.receiver && 'jitterBufferTarget' in evt.receiver) {
+        try {
+          // 远程操作优先显示新画面，实际缓冲仍由浏览器按网络状况调整。
+          evt.receiver.jitterBufferTarget = 0
+        } catch (e) {
+          debugLog('[WebRTC] Could not set projection jitter buffer target:', e)
+        }
+      }
       if (enableInsertable && evt.receiver && evt.receiver.createEncodedStreams) {
         try {
           const { readable, writable } = evt.receiver.createEncodedStreams()
@@ -696,6 +922,9 @@ function handleDeviceMessage(payload) {
         }
         video.muted = true
         video.playsInline = true
+        layoutVideoElement?.removeEventListener('resize', onLayoutVideoResize)
+        layoutVideoElement = video
+        video.addEventListener('resize', onLayoutVideoResize)
         video.srcObject = videoStream
         debugLog('[WebRTC] Set srcObject to video element')
         // 强制播放
@@ -861,6 +1090,7 @@ function handleDeviceMessage(payload) {
 
   // --- 统计监控逻辑 ---
   let prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0, framesReceived: 0, framesPresented: 0 }
+  let previousJitterBuffer = null
   let pauseCount = 0
   let wasPaused = false
 
@@ -936,6 +1166,8 @@ function handleDeviceMessage(payload) {
           let framesDecodedVal = report.framesDecoded || 0
           let decodeTimeNum = 0
           let jbDelayNum = 0
+          let jbTargetMs = null
+          let jbMinimumMs = null
 
           if (isWebCodecsActive.value && webcodecsRenderer) {
             fps = webcodecsRenderer.currentFps.toFixed(0)
@@ -945,7 +1177,30 @@ function handleDeviceMessage(payload) {
           } else {
             const newFrames = framesDecodedVal - (prevStats.framesDecoded || 0)
             fps = dt > 0 ? (newFrames / dt).toFixed(0) : 0
-            jbDelayNum = (report.jitterBufferDelay / (report.jitterBufferEmittedCount || 1) * 1000) || 0
+            const count = report.jitterBufferEmittedCount || 0
+            const previous = previousJitterBuffer?.id === report.id &&
+              count >= previousJitterBuffer.count ? previousJitterBuffer : null
+            const emitted = count - (previous?.count ?? 0)
+            if (emitted > 0) {
+              const average = (total, baseline) => Number.isFinite(total)
+                ? Math.max(0, total - (baseline ?? 0)) * 1000 / emitted
+                : null
+              jbDelayNum = average(report.jitterBufferDelay, previous?.delay) ?? 0
+              jbTargetMs = average(report.jitterBufferTargetDelay, previous?.target)
+              jbMinimumMs = average(report.jitterBufferMinimumDelay, previous?.minimum)
+            } else if (previous) {
+              // 静止画面没有新帧时，保留最近一次有画面的采样。
+              jbDelayNum = previous.delayMs
+              jbTargetMs = previous.targetMs
+              jbMinimumMs = previous.minimumMs
+            }
+            previousJitterBuffer = {
+              id: report.id, count,
+              delay: report.jitterBufferDelay,
+              target: report.jitterBufferTargetDelay,
+              minimum: report.jitterBufferMinimumDelay,
+              delayMs: jbDelayNum, targetMs: jbTargetMs, minimumMs: jbMinimumMs
+            }
             decodeTimeNum = (report.totalDecodeTime / (framesDecodedVal || 1) * 1000) || 0
 
             // 静音抑制 decode-pause 刷屏，仅记录状态与 pauseCount，避免静止画面持续污染控制台
@@ -987,6 +1242,8 @@ function handleDeviceMessage(payload) {
             fpsLabel: fLbl,
             bitrateKbps: Number(bitrate),
             avgJitterBufferMs: Number(jbDelay),
+            jitterBufferTargetMs: jbTargetMs,
+            jitterBufferMinimumMs: jbMinimumMs,
             avgDecodeMs: Math.round(decodeTimeNum * 10) / 10,
             rttMs: Number(currentRtt.toFixed(0)),
             packetLossTotal: lostCount,
@@ -1029,6 +1286,7 @@ function handleDeviceMessage(payload) {
 
   function resetStats() {
     prevStats = { timestamp: 0, bytesReceived: 0, framesDecoded: 0, framesReceived: 0, framesPresented: 0 }
+    previousJitterBuffer = null
     pauseCount = 0
     wasPaused = false
   }
@@ -1160,6 +1418,68 @@ function handleDeviceMessage(payload) {
         bufferedBefore,
         bufferedAfter
       })
+    }
+  }
+
+  function sendTouchDirect(action, x, y, w, h, id = 0) {
+    if (viewOnly) return
+    if (!inputChannel || inputChannel.readyState !== 'open') return
+    const targetW = w || DEVICE_W.value || 1080
+    const targetH = h || DEVICE_H.value || 1920
+    const seq = ++touchSeq
+    const clientTsMs = Date.now()
+
+    const finalX = Math.max(0, Math.min(targetW - 1, Math.round(x)))
+    const finalY = Math.max(0, Math.min(targetH - 1, Math.round(y)))
+
+    const msg = JSON.stringify({
+      type: 'touch',
+      id,
+      seq,
+      client_ts_ms: clientTsMs,
+      action,
+      x: finalX,
+      y: finalY,
+      w: targetW,
+      h: targetH
+    })
+
+    try {
+      inputChannel.send(msg)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function sendScrollDirect(x, y, scrollH, scrollV, w, h) {
+    if (viewOnly) return
+    if (!inputChannel || inputChannel.readyState !== 'open') return
+    const targetW = w || DEVICE_W.value || 1080
+    const targetH = h || DEVICE_H.value || 1920
+    const seq = ++touchSeq
+    const clientTsMs = Date.now()
+
+    const finalX = Math.max(0, Math.min(targetW - 1, Math.round(x)))
+    const finalY = Math.max(0, Math.min(targetH - 1, Math.round(y)))
+
+    const msg = JSON.stringify({
+      type: 'inject_scroll',
+      seq,
+      client_ts_ms: clientTsMs,
+      x: finalX,
+      y: finalY,
+      w: targetW,
+      h: targetH,
+      scroll_h: scrollH,
+      scroll_v: scrollV
+    })
+
+    try {
+      inputChannel.send(msg)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -1599,9 +1919,28 @@ function handleDeviceMessage(payload) {
     debugLog('[WebRTC] Camera streaming stopped and tracks released')
   }
 
+  function hasProjectionSession() {
+    return projectionOnDemand && (projectionAuthorized || status.value === 'waiting_projection')
+  }
+
+  function canResumeProjection() {
+    return projectionOnDemand && projectionAuthorized && Boolean(projectionResumeKey)
+  }
+
+  function endProjection() {
+    if (!projectionOnDemand) return
+    sendForward({ type: 'projection-end', projection_resume_key: projectionResumeKey })
+    projectionAuthorized = false
+    projectionKeys.delete(deviceId)
+    try { sessionStorage.removeItem(`cloudphone_projection_resume:${deviceId}`) } catch {}
+    projectionResumeKey = ''
+  }
+
   function disconnect() {
     if (isDisposed) return
     isDisposed = true
+    layoutVideoElement?.removeEventListener('resize', onLayoutVideoResize)
+    layoutVideoElement = null
     stopCameraStreaming()
     if (webcodecsRenderer) {
       webcodecsRenderer.stop()
@@ -1635,6 +1974,16 @@ function handleDeviceMessage(payload) {
       try { aiCommandChannel.close() } catch(e) {}
       aiCommandChannel = null
     }
+    if (uiLayoutChannel) {
+      try { uiLayoutChannel.close() } catch(e) {}
+      uiLayoutChannel = null
+    }
+    activeLayoutReceiver = null
+    for (const [, item] of pendingLayoutSnapshots.entries()) {
+      clearTimeout(item.timer)
+      item.reject(new Error('disconnected'))
+    }
+    pendingLayoutSnapshots.clear()
     if (unwatchWsClipboard) {
       unwatchWsClipboard()
       unwatchWsClipboard = null
@@ -1727,14 +2076,22 @@ function handleDeviceMessage(payload) {
     setCanvasGetter,
     connect,
     disconnect,
+    hasProjectionSession,
+    canResumeProjection,
+    endProjection,
     sendTouch,
+    sendTouchDirect,
     sendScroll,
+    sendScrollDirect,
     requestScreenshot,
     onScreenshot,
     sendCommand,
     executeCommand,
     executeCommandP2P,
     createAiCommandChannel,
+    createUiLayoutChannel,
+    requestLayoutSnapshot,
+    layoutDisplayRevision,
     onCommandResult,
     sendInjectData,
     createAdbSessionChannel,

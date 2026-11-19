@@ -11,12 +11,22 @@
     :style="{ '--aspect-ratio': dynamicAspectRatio }"
     @click="onCardClick"
   >
-    <div class="preview-area" :class="{ 'is-landscape': isLandscape }">
+    <div 
+      class="preview-area" 
+      :class="{ 
+        'is-landscape': isLandscape,
+        'is-rotated-app': shouldRotateLandscapeApp
+      }"
+      :style="rotatedImgStyle"
+    >
       <!-- 微光背景（填补异形屏边缘，消除黑边突兀感） -->
       <div v-if="currentSnapshot" class="ambient-glow-bg" :style="ambientBgStyle"></div>
 
       <!-- 展示快照或占位图 -->
-      <img v-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" @error="onImageError" />
+      <div v-if="device.info?.projection_on_demand" class="snapshot-placeholder projection-placeholder">
+        <span>{{ $t('deviceCard.projectionPlaceholder') }}</span>
+      </div>
+      <img v-else-if="currentSnapshot && !isPreviewActive" :src="currentSnapshot" class="snapshot-img" @load="onImageLoad" @error="onImageError" />
       <div v-else-if="!currentSnapshot && !isPreviewActive" class="snapshot-placeholder">
         <span class="vm-icon">💻</span>
       </div>
@@ -75,7 +85,7 @@
 
       <!-- Hover 点击进入控制提示 -->
       <div class="hover-action-overlay" v-if="!isInteractiveActive && device.status === 'online'">
-        <span class="play-hint">{{ $t('deviceCard.clickToControl') }}</span>
+        <span class="play-hint">{{ $t(device.info?.projection_on_demand ? 'deviceCard.requestProjection' : 'deviceCard.clickToControl') }}</span>
       </div>
       <div class="hover-action-overlay offline" v-else-if="device.status !== 'online'">
         <span class="play-hint offline-hint">{{ $t('deviceCard.offline') }}</span>
@@ -114,7 +124,7 @@
       <div class="card-bottom-bar" @click.stop>
         <div class="bottom-left-info">
           <span class="status-dot" :class="statusClass"></span>
-          <span class="device-name" :title="`${device.displayName || device.id} · ${device.id}`">{{ device.displayName || device.id }}</span>
+          <span class="device-name" @dblclick.stop="onRenameAlias" :title="`${device.displayName || device.id} · ${device.id} (${$t('deviceCard.setAlias')})`">{{ device.displayName || device.id }}</span>
           <span v-if="isCameraMode" class="camera-mode-badge" :title="$t('deviceCard.cameraModeTitle')">{{ $t('deviceCard.cameraMonitoring') }}</span>
           <span v-else-if="isWebSocketMode" class="ws-mode-badge" :title="$t('deviceCard.wsModeTitle')">{{ $t('deviceCard.wsStreaming') }}</span>
           <span v-if="device.screenState === 'off' && device.status === 'online'" class="screen-off-pill">🌙 {{ $t('deviceCard.screenOff') }}</span>
@@ -160,6 +170,10 @@
       <button class="menu-item" @click.stop="onShareDevice" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
         {{ $t('deviceCard.shareDevice') }}
+      </button>
+      <button class="menu-item" @click.stop="onRenameAlias">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        {{ $t('deviceCard.setAlias') }}
       </button>
       <button class="menu-item" @click.stop="onEditTags" v-if="authStore.isAdmin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12v7a1 1 0 0 1-1 1h-7L4 12V5a1 1 0 0 1 1-1h7l8 8z"></path><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
@@ -299,7 +313,7 @@ function updateSnapshotDimensions(url) {
   img.src = url
 }
 
-const isLandscape = computed(() => {
+const nativeIsLandscape = computed(() => {
   const canvas = previewCanvas.value
   // 只有当高频预览处于活动状态，并且首帧已经成功渲染时，才采用 Canvas 的高宽判断
   if (isPreviewActive.value && isFirstFrameRendered.value && canvas && canvas.width && canvas.height) {
@@ -317,7 +331,7 @@ const isLandscape = computed(() => {
   return false
 })
 
-const dynamicAspectRatio = computed(() => {
+const nativeAspectRatio = computed(() => {
   const canvas = previewCanvas.value
   if (isPreviewActive.value && isFirstFrameRendered.value && canvas && canvas.width && canvas.height) {
     return `${canvas.width} / ${canvas.height}`
@@ -329,7 +343,57 @@ const dynamicAspectRatio = computed(() => {
   if (display && display.x_res && display.y_res) {
     return `${display.x_res} / ${display.y_res}`
   }
-  return isLandscape.value ? '16 / 9' : '9 / 16'
+  return nativeIsLandscape.value ? '16 / 9' : '9 / 16'
+})
+
+const defaultPortraitRatio = computed(() => {
+  const display = props.device.info?.displays?.[0]
+  if (display && display.x_res && display.y_res) {
+    const minRes = Math.min(display.x_res, display.y_res)
+    const maxRes = Math.max(display.x_res, display.y_res)
+    return `${minRes} / ${maxRes}`
+  }
+  return '9 / 16'
+})
+
+const shouldRotateLandscapeApp = computed(() => {
+  const orientation = deviceStore.cardOrientation || 'auto'
+  return orientation === 'portrait' && nativeIsLandscape.value
+})
+
+const isLandscape = computed(() => {
+  const orientation = deviceStore.cardOrientation || 'auto'
+  if (orientation === 'landscape') return true
+  if (orientation === 'portrait') return false
+  return nativeIsLandscape.value
+})
+
+const dynamicAspectRatio = computed(() => {
+  const orientation = deviceStore.cardOrientation || 'auto'
+  if (orientation === 'landscape') {
+    return nativeIsLandscape.value ? nativeAspectRatio.value : '16 / 9'
+  }
+  if (orientation === 'portrait') {
+    // 强制竖屏模式：卡片大小不变，固定为标准竖屏外框尺寸
+    return defaultPortraitRatio.value
+  }
+  return nativeAspectRatio.value
+})
+
+const rotatedImgStyle = computed(() => {
+  if (!shouldRotateLandscapeApp.value) return {}
+  const display = props.device.info?.displays?.[0]
+  let factor = 16 / 9
+  if (display && display.x_res && display.y_res) {
+    const minRes = Math.min(display.x_res, display.y_res)
+    const maxRes = Math.max(display.x_res, display.y_res)
+    factor = maxRes / minRes
+  } else if (snapshotWidth.value > 0 && snapshotHeight.value > 0) {
+    factor = Math.max(snapshotWidth.value, snapshotHeight.value) / Math.min(snapshotWidth.value, snapshotHeight.value)
+  }
+  return {
+    '--rotated-img-w': `${(factor * 100).toFixed(2)}%`
+  }
 })
 
 const ambientBgStyle = computed(() => {
@@ -488,6 +552,18 @@ function onSettings() {
 function onEditTags() {
   showMenu.value = false
   emit('edit-tags', props.device.id)
+}
+
+async function onRenameAlias() {
+  showMenu.value = false
+  const current = props.device.displayName || ''
+  const newAlias = prompt(t('deviceCard.promptAlias'), current)
+  if (newAlias === null) return
+  try {
+    await deviceStore.updateDeviceAlias(props.device.id, newAlias)
+  } catch (err) {
+    alert(err.message || t('deviceCard.aliasUpdateFailed'))
+  }
 }
 
 function tagStyle(tag) {
@@ -1064,6 +1140,37 @@ const THROTTLE_INTERVAL_MS = 25
 const MOVE_DISTANCE_THRESHOLD_SQ = 16 // 4px^2
 
 const getAbsoluteCoords = (e) => {
+  if (shouldRotateLandscapeApp.value) {
+    const overlay = e.currentTarget
+    const overlayRect = overlay.getBoundingClientRect()
+    const clickX = e.clientX - overlayRect.left
+    const clickY = e.clientY - overlayRect.top
+    const clickNormX = Math.max(0, Math.min(1, clickX / overlayRect.width))
+    const clickNormY = Math.max(0, Math.min(1, clickY / overlayRect.height))
+
+    // 旋转 90度（顺时针）映射：
+    // 视觉左上角 (0, 0) -> 原始 (0, 1) 左下
+    // 视觉右上角 (1, 0) -> 原始 (0, 0) 左上
+    // 视觉右下角 (1, 1) -> 原始 (1, 0) 右上
+    // 视觉左下角 (0, 1) -> 原始 (1, 1) 右下
+    const origNormX = clickNormY
+    const origNormY = 1 - clickNormX
+
+    const displayInfo = props.device.info?.displays?.[0]
+    const devW = displayInfo?.x_res || 1080
+    const devH = displayInfo?.y_res || 1920
+    const targetW = Math.max(devW, devH)
+    const targetH = Math.min(devW, devH)
+
+    return {
+      x: Math.round(origNormX * targetW),
+      y: Math.round(origNormY * targetH),
+      w: targetW,
+      h: targetH,
+      isRotated: true
+    }
+  }
+
   const canvas = previewCanvas.value
   const img = cardElement.value?.querySelector('.snapshot-img')
   const target = (canvas && isPreviewActive.value) ? canvas : (img || e.currentTarget)
@@ -1320,6 +1427,13 @@ const sendKey = (keycode) => {
   transform: scale(1.1);
 }
 
+.projection-placeholder {
+  padding: 12px;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 13px;
+}
+
 .snapshot-placeholder {
   width: 100%;
   height: 100%;
@@ -1338,6 +1452,21 @@ const sendKey = (keycode) => {
   display: block;
   z-index: 1;
   transition: transform 0.2s ease;
+}
+
+/* 强制竖屏模式下，横屏应用默认旋转 90度 铺满竖屏卡片 */
+.preview-area.is-rotated-app .snapshot-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--rotated-img-w, 177.78%);
+  height: 100%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  object-fit: contain;
+}
+
+.preview-area.is-rotated-app .ambient-glow-bg {
+  transform: scale(1.1) rotate(90deg);
 }
 
 .vm-icon {

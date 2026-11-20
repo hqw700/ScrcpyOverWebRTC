@@ -52,6 +52,24 @@
 - **全站深度国际化 (i18n)**: 管理大盘、设备直控、安防监控、文件中心与终端工具 100% 支持中英文（English / 简体中文）无缝切换与本地记忆。
 
 ## 2. 快速开始
+
+### 桌面客户端 v0.1.0（Windows / macOS）
+
+桌面端集成设备管理、独立投屏窗口、群控、文件管理、内置信令服务与本机 ADB 接入，可连接已有服务器，也可在电脑上启动本地服务。
+
+| 系统 | 下载 |
+| --- | --- |
+| Windows x64（AMD64） | [Cloudphone-v0.1.0-windows-amd64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/Cloudphone-v0.1.0-windows-amd64.zip) |
+| macOS Apple Silicon（ARM64） | [Cloudphone-v0.1.0-macos-arm64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/Cloudphone-v0.1.0-macos-arm64.zip) |
+
+也可从[夸克网盘统一产物文件夹](https://pan.quark.cn/s/e5ace62c9003)下载。桌面端版本为 **v0.1.0**，随平台 **v0.4.5** Release 分发。
+
+1. **启动客户端**：Windows 完整解压后运行 `cloudphone.exe`，保留同级的 `bin`、`web-assets`、`agent-assets` 和 `platform-tools` 目录；如提示缺少 WebView2，按客户端提示安装微软运行时。macOS 解压后打开 `Cloudphone.app`，可移入“应用程序”目录；当前包采用 ad-hoc 签名，尚未完成 Apple 公证。
+2. **连接服务器**：输入已有服务器的 HTTPS 地址及账号密码登录；也可在登录页启动内置信令服务。首次启动本地服务使用 `admin` / `admin123`，登录后修改默认密码。内置信令默认允许局域网访问，仅本机使用时可在启动前取消勾选。
+3. **接入手机**：在“本机设备”中连接已开启 USB 调试并授权的手机，或使用无线调试配对与连接。客户端随包提供 ADB；部署 Agent 时选择设备要注册的服务器地址，手机必须能访问该地址。
+4. **开始投屏**：设备上线后点击缩略图打开独立控制窗口，按需使用群控、文件管理和设备终端。退出客户端会停止由它管理的内置信令服务。
+
+
 ### 🔑 默认连接地址与账户凭证
 服务拉起成功后，在同局域网的电脑/手机浏览器中即可打开管理仪表盘大盘：
 * **访问地址**：`https://<您的宿主机IP>:8443` (信令与 Web 默认以 HTTPS 模式运行)

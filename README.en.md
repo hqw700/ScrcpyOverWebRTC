@@ -53,16 +53,16 @@ It adopts a **Fat Agent (Direct Connection)** architecture, combined with **Hard
 
 ## 2. Quick Start
 
-### Desktop client v0.1.0 (Windows / macOS)
+### Desktop client v0.1.1 (Windows / macOS)
 
 The desktop client provides device management, independent control windows, group control, file management, built-in signaling, and local ADB access. Connect to an existing server or start a local server on your computer.
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 (AMD64) | [Cloudphone-v0.1.0-windows-amd64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/Cloudphone-v0.1.0-windows-amd64.zip) |
-| macOS Apple Silicon (ARM64) | [Cloudphone-v0.1.0-macos-arm64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/Cloudphone-v0.1.0-macos-arm64.zip) |
+| Windows x64 (AMD64) | [cloudphone-v0.1.1-windows-amd64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/cloudphone-v0.1.1-windows-amd64.zip) |
+| macOS Apple Silicon (ARM64) | [cloudphone-v0.1.1-macos-arm64.zip](https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/v0.4.5/cloudphone-v0.1.1-macos-arm64.zip) |
 
-A [shared Quark download folder](https://pan.quark.cn/s/e5ace62c9003) is also available. Desktop **v0.1.0** is distributed with the platform **v0.4.5** release.
+A [shared Quark download folder](https://pan.quark.cn/s/e5ace62c9003) is also available. Desktop **v0.1.1** is distributed with the platform **v0.4.5** release.
 
 1. **Launch the client**: On Windows, extract the entire ZIP and run `cloudphone.exe`. Keep the adjacent `bin`, `web-assets`, `agent-assets`, and `platform-tools` directories. If WebView2 is missing, follow the app prompt to install Microsoft's runtime. On macOS, extract and open `Cloudphone.app`; you can move it to Applications. The current package is ad-hoc signed and has not been notarized by Apple.
 2. **Connect to a server**: Enter your existing server's HTTPS address and credentials, or start the built-in signaling server from the login page. A new local server uses `admin` / `admin123`; change the default password after login. LAN access is enabled by default; disable it before starting the server if you only need local access.
